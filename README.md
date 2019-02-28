@@ -1,6 +1,6 @@
 # How to deploy
 
-## Installation steps
+## Installation
 
 1. *Install clasp*. Open a terminal anywhere, and run:
 
@@ -10,38 +10,53 @@
 
        clasp login
 
-## Integrate Sketch-n-Script in your doc for testing
+## Integrate Sketch-n-Script in a Doc for testing
 
-1. Make sure you have a fresh cloned version of Sketch-n-Script:
-   https://github.com/MikaelMayer/Sketch-n-Script
-
-2. Create a google docs. Open Tools > Script editor.
-   Save the project and give it a name. You are going to override it
+1. Create a Google Doc. Open `Tools > Script editor`.
+   Give the project a `NAME` and save it.
+   The files in this project template will soon be overriden.
    
-3. In File > Project properties, copy the Script ID's value.
+1. Open `File > Project properties` and copy the Script ID value.
 
-4. In the cloned folder, create a file `.clasp.json`. Inside this file, write
+1. Pull a fresh clone of
+   [Sketch-n-Script](https://github.com/MikaelMayer/Sketch-n-Script)
+   and then `cd Sketch-n-Script`.
+
+1. Run `clasp clone NAME`.
+
+1. The last step will create a starter skeleton `Code.js` file.
+   Run `git checkout Code.js` to revert to the version from
+   `Sketch-n-Script`.
+
+1. Create a file `.clasp.json` that contains the the following:
 
        {"scriptId":"XXX"}
 
-   Replace XXX by your script ID obtained at step 3.
+   Replace `XXX` by the Script ID obtained above.
 
-5. On the command line, run this command to override all the files in Script.:
+1. Try making a change to `Code.js`
+   (e.g. change the string argument to `.setSetTile').
+   Then run `clasp push`.
 
-       clasp push
+   If asked for confirmation, enter `y` for Yes.
 
-   If asked for confirmation, enter y for yes.
-   You might have to go to https://script.google.com/home/usersettings to activate the Script API and re-run this command again.
+   You might have to go to https://script.google.com/home/usersettings to activate
+   the Script API (change it from Off to On), and then re-run `clasp push`.
 
-6. Refresh your script page, or run `clasp open` to view the script online:
+1. Refresh your script page from the browser,
+   or run `clasp open` to open the script in a new browser window.
 
-7. Go to Execute > Execute function > onOpen.
+1. Go to `Run > Run function > onOpen`.
    Accept the permissions.
-   A menu appears under the "Add-on" menu, click it, then Start to open the side bar.
+   A menu appears under the `Add-on` menu, click it, then `Start` to open the side bar.
+
+1. (I had trouble with the previous step: Instead, I:)
+   Open `Run > Test as add-on...` and then picke a Doc on which to test `NAME`.
+   Then, from inside that Doc, go to `Add-ons > NAME > Start` to launch the add-on.
 
 Now the add-on is working for this script.
 
-## Developing the add-on
+## Developing the Sketch-n-Script add-on
 
 You can develop the add-on locally or in the online script editor.
 To push changes made locally, run
