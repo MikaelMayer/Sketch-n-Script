@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
+    <!-- The CSS package above applies Google styling to buttons and other elements. -->
+    <style>
+      .doclike {
+        font-family: Arial;
+        font-size: 16px;
+        white-space: pre-wrap;
+        margin-top: 5px;
+        margin-bottom: 5px;
+        margin-left: 10px;
+      }
+      .cheatsheetseparator {
+       margin-bottom: 10px;
+      }
+      span.hint {
+        color: #AAA;
+      }
+      button.inputbutton {
+        max-width: 40%;
+      }
+      input.inputbutton {
+        max-width: 40%;
+      }
+      div.section {
+        margin-top: 10px;
+      }
+      input[disabled] {
+        color: #AAA;
+      }
+      #cheatsheet.hidden {
+        display: none;
+      }
+      div.sidebar.bottom {
+        position: fixed;
+        background: rgba(255, 255, 255, 0.8);
+      }
+      div#finaldummy {
+        height: 4em;
+      }
+      textarea#sidebarEnv {
+        width: 100%;
+        min-height: 2em;
+      }
+      div.righttitle {
+        right: 1em;
+        position: absolute;
+        font-size: 1.1em;
+        color: rgba(0, 0, 0, 0.18);
+      }
+      div.righttitle#buttoncheatsheet {
+        cursor: pointer;
+      }
+      div.righttitle#buttoncheatsheet:not(.currentlyvisible) {
+        text-decoration: line-through;
+      }
+      div.righttitle#buttoncheatsheet:hover {
+        color: blue;
+      }
+      input.changevalue{
+        background-color: #c6f6f9;
+        font-family: "Arial";
+      }
+      span.hint[highlight]{
+        text-decoration: underline;
+        cursor: pointer;
+        color: black;
+      }
+      span.hint:hover {
+        color: blue;
+      }
+      .highlighthint {
+        outline: 0px solid blue;
+        animation: myanim 3s infinite;
+        z-index: 1000;
+      }
+      @keyframes myanim {
+        50% {
+          outline: 10px solid blue;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sidebar branding-below">
+      <!--span class="hint">Optionally select text, and then:</span-->
+      <form onsubmit="return mySubmitFunction(event)">
+        <div class="block" id="button-bar">
+          <div>
+            <div class="righttitle">Doc</div>
+            <button class="blue" id="evaluate-formulas" title="Replaces =XYZ by the result of evaluating XYZ"
+              >Display values</button>
+            <button id="reveal-formulas" title="Replaces results by their original formulas"
+              >Display formulas</button>
+          </div>
+          <div class="section">
+            <textarea id="sidebarEnv" name="docProperties" placeholder="Write further name definitions here" title="'x = Raw Text' or : 'x = (JavaScript)'"></textarea>
+          </div>
+          <hr>
+          <div class="section">
+            <div class="righttitle">Helpers</div>
+              <input  id="nameToGive" placeholder="name to give" class="inputbutton" type="text" name="userProperties"
+                      title="Select text in doc, enter name here, and click on 'Name selection'">
+              <button id="make-selection-formula" class="inputbutton" title="Assigns the name to the selection"
+              >Name selection</button>
+              <div id="predefined-names"></div>
+          </div>
+          <hr>
+            <div id="show-error" class="error"></div>
+            <div id="show-feedback"></div>
+          <hr>
+          <div>
+            <div class="righttitle">Options</div>
+            <input type="checkbox" name="userProperties" id="highlightValues" value="" checked="checked">
+            <label for="highlightValues"
+              >Highlight values</label>
+          </div>
+          <div>
+            <input type="checkbox" name="userProperties" id="highlightFormulas" value="" checked="checked">
+            <label for="highlightFormulas"
+              >Highlight formulas</label>
+          </div>
+          <div>
+            <input type="checkbox" name="userProperties" id="refreshImages" value="" checked="checked">
+            <label for="refreshImages"
+              >Refresh images</label>
+          </div>
+        </div>
+      </form>
+      <hr>
+      <div class="righttitle" id="buttoncheatsheet">Cheat sheet</div>
+      <div id="cheatsheet" class="hidden">
+        Define variables in doc or <span class="hint" highlight="#sidebarEnv">above</span>:
+        <div class="doclike">name = some text</div>
+        <div class="doclike">upper = (function(x) { return x.toUpperCase() })</div>
+        In parentheses, you can write any javascript<br><br>.
+        Write formulas:
+        <div class="doclike">This is =name and I can also make it big: =(upper(name)).</div>
+        In parentheses, you can write any javascript<br><br>.
+        <!--Render formulas:
+        <div class="doclike">This is some text and I can also make it big: SOME TEXT.</div-->
+        Name formulas:
+        <div class="doclike">=(/*adj=*/"great"), =adj, =(upper(adj))</div>
+        Alternatively, select some text, <span class="hint" highlight="#nameToGive">write a name</span>
+        and <span class="hint" highlight="#make-selection-formula">name the selection</span>.<br>
+        <br>
+        Rich text formulas:
+        <div class="doclike">=["emphasized", {italic: true, link: "www.google.com"}]</div>
+        <br>
+        Inline Images:
+        <div class="doclike">=["img", {src: "http://www.texrendr.com/cgi-bin/mathtex.cgi?\\sqrt{z}"}, []]</div>
+      </div>
+      <div id="finaldummy">&nbsp;
+      </div>
+    </div>
+
+    <div class="sidebar bottom">
+      <span class="gray branding-text">Formulas by 
+      <span children-are-ghosts="true" id="twitterlink"></span>
+      <script>
+      var t = document.querySelector("#twitterlink");
+      t.innerHTML = `<a href="https://twitter.com/intent/tweet?screen_name=MikaelMayer&ref_src=twsrc%5Etfw" class="twitter-mention-button" data-size="large" data-text="Simple but amazing idea: add formulas to google docs. I can&#39;t wait for ..." data-show-count="false">@MikaelMayer</a>`
+      </script>
+      <script async="" src="https://platform.twitter.com/widgets.js" charset="utf-8"></script><br><br>
+      </span>
+    </div>
+
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+    <script>
+      function mySubmitFunction(e) {
+        e.preventDefault();
+        return false;
+      }
+    
+      var hideFeedbackTimer = undefined;
+      /**
+       * On document load, assign click handlers to each button and try to load the
+       * user's origin and destination language preferences if previously set.
+       */
+      $(function() {
+        $("#buttoncheatsheet").click(function() {
+          $("#cheatsheet").toggleClass("hidden");
+          $("#buttoncheatsheet").toggleClass("currentlyvisible");
+        });
+        $('#evaluate-formulas').click(launch("evaluateFormulas", "Computing formulas...", handleScriptFeedback));
+        $('#reveal-formulas').click(launch("revealFormulas", "Revealing formulas...", handleScriptFeedback));
+        $("[name=userProperties]").change(saveUserProperty);
+        $("[name=docProperties]").change(saveDocProperty);
+        $("#make-selection-formula").click(launch("nameSelection", "Naming selection...", handleScriptFeedback));
+        $("#show-feedback").mouseenter(function() {
+          if(typeof hideFeedbackTimer !== "undefined") {
+            clearTimeout(hideFeedbackTimer);
+          }
+        });
+        $("#nameToGive").keyup(refreshInterface);
+      
+        google.script.run.withSuccessHandler(loadUserPreferences)
+            .withFailureHandler(showError).getUserPreferences();
+       
+        google.script.run.withSuccessHandler(loadDocProperties)
+            .withFailureHandler(showError).getDocProperties();
+
+        google.script.run.withSuccessHandler(handleScriptFeedback)
+          .withFailureHandler(showError).evaluateFormulas({firstlaunch: true});
+        
+        $("span.hint").click(function() {
+          var selector = this.getAttribute("highlight");
+          document.body.parentElement.scrollTop = 0; // Scroll to top
+          $(selector).addClass("highlighthint");
+          setTimeout(function() {
+            $(selector).removeClass("highlighthint");
+          }, 2000);
+        })
+      });
+      
+      function refreshInterface() {
+        if(usedNames[$("#nameToGive").val()]) {
+          $("#make-selection-formula").attr("title", "The name '" + $("#nameToGive").val() + "' is already used. Enter another one.");
+          $("#make-selection-formula").prop('disabled', true);
+        } else if($("#nameToGive").val() == "") {
+          $("#make-selection-formula").attr("title", "Enter a name on the input on the left.");
+          $("#make-selection-formula").prop('disabled', true);
+        } else {
+          $("#make-selection-formula").attr("title", "Assigns the name '" + $("#nameToGive").val() + "' to the selection");
+          $("#make-selection-formula").prop('disabled', false);
+        }
+      }
+      
+      function insertFormulaAtCursor(formula, strvalue) {
+        google.script.run
+          .withFailureHandler(showError)
+          .withSuccessHandler(displayFeedback)
+          .insertFormulaAtCursor(options, docProperties, {formula: formula, strvalue: strvalue});
+      }
+      
+      function handleScriptFeedback(result) {
+        if(!result) return;
+        if(result.newSidebarEnv) {
+          if(result.newSidebarEnv != docProperties.sidebarEnv) {
+            $("#sidebarEnv").val(result.newSidebarEnv);
+            docProperties.sidebarEnv = result.newSidebarEnv;
+            //saveDocProperty.bind($("#sidebarEnv")[0])();
+          }
+        }
+        if(result.nameValues) refreshVariables(result.nameValues);
+        if(result.feedback) displayFeedback(result.feedback);
+      }
+      
+      var usedNames = {};
+      
+      function valueChanger() {
+        var name = this.getAttribute("name");
+        var oldValue, newValue;
+        this.disabled = true;
+        if(this.getAttribute("type") == "checkbox") {
+          oldValue = this.getAttribute("value") == "true";
+          newValue = this.checked ? true  : false;
+        } else if(this.getAttribute("type") == "number") {
+          oldValue = parseInt(this.getAttribute("value"));
+          newValue = parseInt(this.value);
+        } else if(this.getAttribute("type") == "text") {
+          oldValue= this.getAttribute("value");
+          newValue = this.value;
+        } else {
+          console.log("Unrecognized type:" + this.getAttribute("type"));
+          return;
+        }
+        options.freezeUI = true;
+        google.script.run
+          .withFailureHandler(function(msg, element) {
+            element.disabled = false;
+            options.freezeUI = false;
+            showError(msg)})
+          .withSuccessHandler(function(result, element) {
+            showError("");
+            element.disabled = false;
+            options.freezeUI = false;
+            handleScriptFeedback(result);
+            displayFeedback(name + " correctly modified from '" + oldValue + "' to '" + newValue + "'");
+            })
+          .withUserObject(this)
+          .modifyName(options, docProperties, name, oldValue, newValue);
+      }
+      
+      function refreshVariables(nameValues) {
+        $("#predefined-names").empty();
+        var feedback = "";
+        usedNames = {};
+        for(k in nameValues) {
+          var nameValue = nameValues[k];
+          var name = nameValue[0];
+          usedNames[name] = true;
+          var strvalue = nameValue[1]; // A string representing the Javascript value.
+          var frozen = nameValue[2] ? nameValue[2].frozen : false;
+          if(frozen) continue; // For now, remove built-in variables.
+          var value = eval(strvalue);
+          var insertVariableButton =
+            $("<span class='button nameButton' name='"+name+"' value='"+strvalue+"' title='Insert ="+name+" in the document'>" + name + "</span>"); 
+          
+          var insertVariable =
+            $('<div class="insertVariable"></div>').append(insertVariableButton);
+
+          insertVariableButton.click(
+              function() {
+                var name = this.getAttribute("name");
+                var strvalue = this.getAttribute("value");
+                insertFormulaAtCursor("=" + name, strvalue);
+              });
+          
+          var disabledBecauseFrozen = frozen ? " disabled" : "";
+          if(typeof value == "string") {
+            var inputName =
+              $("<input class='changevalue' type='text' title='Change the computed string value of "+name+"' name='"+name+"' value='"+value+"'" + disabledBecauseFrozen + ">");
+            inputName.change(valueChanger);
+            insertVariable.append(inputName);
+          } else if(typeof value == "boolean") {
+            var inputName =
+              $("<input class='changevalue' type='checkbox' title='Change the computed truth value of "+name+"' name='"+name+"' value='"+value+"'"+(value ? " checked" : "")+ disabledBecauseFrozen + " title='"+strvalue+"'>");
+            inputName.change(valueChanger);
+            insertVariable.append(inputName);
+          } else if(typeof value == "number") {
+            var inputName =
+              $("<input class='changevalue' type='number' title='Change the computed numeric value of "+name+"' name='"+name+"' value='"+value+"'" + disabledBecauseFrozen + ">");
+            inputName.change(valueChanger);
+            insertVariable.append(inputName);
+          } else {
+            //feedback = feedback + strvalue + " is a " + typeof value + ",";
+          }
+
+          $("#predefined-names").append(insertVariable);
+        }
+        if(feedback != "") {
+          displayFeedback(feedback);
+        }
+        refreshInterface();
+      };
+      
+      var options = {
+        highlightFormulas: "true",
+        highlightValues: "false",
+        nameToGive: "",
+        refreshImages: "true",
+        evaluateAfterInsert: "true" };
+        
+      var docProperties = {
+        sidebarEnv: ""
+      };
+      
+      /**
+       * Callback function that populates the origin and destination selection
+       * boxes with user preferences from the server.
+       *
+       * @param {Object} languagePrefs The saved origin and destination languages.
+       */
+      function loadUserPreferences(prefs) {
+        for(var k in prefs) {
+          var c = document.getElementById(k);
+          if(c && c.getAttribute) {
+            if(c.getAttribute("type") == "checkbox") {
+              c.checked = prefs[k] != "false";
+            } else if(c.getAttribute("type") == "text") {
+              c.value = prefs[k];
+            }
+          }
+          if(typeof options[k] !== "undefined") {
+            options[k] = prefs[k];
+          }
+        }
+        refreshInterface();
+      }
+      
+      function loadDocProperties(prefs) {
+        for(var k in prefs) {
+          var c = document.getElementById(k);
+          if(c && c.getAttribute) {
+            if(c.getAttribute("type") == "checkbox") {
+              c.checked = prefs[k] != "false";
+            } else if(c.getAttribute("type") == "text" || c.tagName == "TEXTAREA") {
+              c.value = prefs[k];
+            }
+          }
+          if(typeof docProperties[k] !== "undefined") {
+            docProperties[k] = prefs[k];
+          }
+        }
+        refreshInterface();
+      }
+
+      function saveUserProperty() {
+        var name = this.getAttribute("id"); 
+        var value = undefined;
+        if(this.getAttribute && this.getAttribute("type") == "checkbox") {
+          value = "" + this.checked;
+        } else { //if(this.getAttribute && this.getAttribute("type") == "text") {
+          value = this.value;
+        }
+        if(typeof options[name] !== "undefined") {
+          options[name] = value;
+        }
+        
+        google.script.run.withSuccessHandler(function() { 
+              displayFeedback(name + " set to '" + value + "'"); })
+          .withFailureHandler(showError).setUserPreference(name, value);
+      }
+      
+      function saveDocProperty() {
+        var name = this.getAttribute("id"); 
+        var value = undefined;
+        var self = this;
+        
+        if(this.getAttribute("type") == "checkbox") {
+          value = "" + this.checked;
+        } else if(this.getAttribute("type") == "text" || this.tagName == "TEXTAREA") {
+          value = this.value;
+        }
+        var oldValue = docProperties[name];
+        if(typeof docProperties[name] !== "undefined") {
+          docProperties[name] = value;
+        }
+        
+        google.script.run.withSuccessHandler(
+          function(newValue) {
+            if(newValue == value) {
+              displayFeedback(name + " saved");
+            } else {
+              displayFeedback("Conflict while saving " + name + ". Please resolve merge issues")
+              self.value = newValue;//Does not trigger any event
+              docProperties[name] = newValue; // This value has been stored.
+            }
+          })
+          .withFailureHandler(showError).setDocProperty(name, value, oldValue);
+      }
+
+      function launch(name, hint, callback) {
+        return function() {
+          if(options.freezeUI) { // Wait for the operation to finish
+            displayFeedback("Please wait until current action finishes...");
+            return;
+          }
+          displayFeedback(hint);
+          options.freezeUI = true;
+          this.disabled = true;
+          showError("");
+          google.script.run
+            .withSuccessHandler(
+              function(result, element) {
+                showError("");
+                options.freezeUI = false;
+                element.disabled = false;
+                if(callback) callback(result);
+              })
+            .withFailureHandler(
+              function(msg, element) {
+                showError(msg);
+                options.freezeUI = false;
+                element.disabled = false;
+              })
+            .withUserObject(this)[name](options, docProperties);
+        }
+      }
+
+      /**
+       * Inserts a div that contains an error message after a given element.
+       *
+       * @param {string} msg The error message to display.
+       * @param {DOMElement} element The element after which to display the error.
+       */
+      function showError(msg) {
+        //options.freezeUI = false;
+        $("#show-error").text(msg);
+      }
+      
+      
+      function displayFeedback(msg) {
+        if(typeof msg == "undefined") msg = "";
+        showError("");
+        $("#show-feedback").text(msg);
+        if(msg != "") {
+          if(typeof hideFeedbackTimer != "undefined") clearTimeout(hideFeedbackTimer);
+          hideFeedbackTimer = setTimeout(function() {
+            hideFeedbackTimer = undefined;
+            $("#show-feedback").text("");
+          }, 2000);
+        }
+      }
+    </script>
+  </body>
+</html>
