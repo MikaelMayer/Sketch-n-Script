@@ -52,7 +52,7 @@ To pull changes made online, run
 
     clasp pull
 
-/!\ Be careful if you make changes locally AND online.
+**/!\ Be careful if you make changes locally AND online.**
 The last two commands will overwrite each other's file.
 
 If you made changes both locally and online, do the following.  
@@ -65,6 +65,8 @@ Run locally:
 
 So that now the changes have been merged and are in sync.
 Remember to commit any meaningful changes.
+
+**/!\ Always pull your online changes locally before merging other branches locally.**
 
 ## Publishing the add-on (for authors only)
 
