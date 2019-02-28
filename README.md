@@ -68,6 +68,14 @@ Remember to commit any meaningful changes.
 
 **/!\ Always pull your online changes locally before merging other branches locally.**
 
+## Ignore files
+
+If you don't want that clasp push some files or folders, note that `clasp` ignores files
+
+* That start with a .
+* That don't have an accepted file extension
+* That are ignored (filename matches a glob pattern in the `.claspignore` file)
+
 ## Publishing the add-on (for authors only)
 
 * Make sure all changes are pushed online.
