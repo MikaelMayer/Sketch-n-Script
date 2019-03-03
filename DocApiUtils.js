@@ -13,9 +13,60 @@ function rangeFromPositions(doc, positions) {
   return rangeBuilder.build();
 }
 
+var shortenedPrefix = "@" + "3E5EBC06C2916285F48931ACC5D334AC" + "@" // MD5 of "pbneozrn mkjgspv rmaz!embrmkjlw j!mkfv! ekzijm :,df ep"
+
+// Store the name somewhehre
+function storeLongName(longName) {
+  var firstChar = longName.length && longName[0] == "=" ? "=" : "";
+  var p = PropertiesService.getDocumentProperties();
+  var key = firstChar + shortenedPrefix + Date.now() + longName;
+  key = key.substring(0, 200) + "...";
+  p.setProperty(key, longName);
+  return key;
+}
+
+// Garbage collect names that are no longer used in the doc.
+function garbageCollectLongNames(namesFound, prefix) {
+  var p = PropertiesService.getDocumentProperties();
+  var keys = p.getKeys();
+  for(var k in keys) {
+    var key = keys[k];
+    if(isExpandable(key) && key.substring(0, prefix.length) == prefix
+      && typeof namesFound[key] == "undefined") {
+      p.deleteProperty(key)
+    }
+  }
+}
+
+// Returns true if the name is something to expand
+function isExpandable(name) {
+  return name.length >= 2 &&
+    (name[0] == "=" && name[1] == "@" &&
+     name.substring(1, shortenedPrefix.length + 1) == shortenedPrefix ||
+      name[0] == "@" &&
+        name.substring(0, shortenedPrefix.length) == shortenedPrefix);
+}
+
+// Parse a named range and possibly returns the longer name stored in the propertiesService.
+function maybeExpandLongName(name) {
+  if(isExpandable(name)) {
+    var p = PropertiesService.getDocumentProperties();
+    return p.getProperty(name);
+  }
+  return name;
+}
+
+// Given a namedRange, returns its name (possibly retrieved from the document properties)
+function getNamedRangeLongName(namedRange) {
+  return maybeExpandLongName(namedRange.getName())
+}
+
 // Add the given range with a name.
 // insertPosition is an Array DRange
-function addRange_(doc, name, insertPositions) {
+function addRange_(doc, name, insertPositions, canoverflow) {
+  if(name.length >= 255) {
+    name = storeLongName(name);
+  }
   return doc.addNamedRange(name, rangeFromPositions(doc, insertPositions));
 }
 
@@ -174,3 +225,35 @@ function isUnderSelections_(doc, positions) {
     return true;
   }
 }
+
+function elementToObject_(element) {
+  if(element.getChild) {
+    var children = [];
+    var n = element.getNumChildren();
+    for(var i = 0; i < n; i++) {
+      children.push(elementToObject_(element.getChild(i)));
+    }
+    return [element + "", children];
+  } else {
+    return element + ""
+  }
+}
+
+function testInsertion() {
+  var doc = DocumentApp.getActiveDocument();
+  var body = doc.getBody();
+  //var blob = UrlFetchApp.fetch("https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_92x30dp.png").getBlob();
+  var t = body.appendTable([["", ""],["",""]]);
+  
+  //p.appendInlineImage(blob);
+  //body.appendParagraph("");
+  testBodyStructure();
+}
+
+function testBodyStructure() {
+  var doc = DocumentApp.getActiveDocument();
+  var body = doc.getBody();
+  var bodyObject = elementToObject_(doc.getBody());
+  Logger.log(uneval_(bodyObject));
+}
+/**/

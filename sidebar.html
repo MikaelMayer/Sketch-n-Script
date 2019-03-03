@@ -133,6 +133,12 @@
       <hr>
       <div class="righttitle" id="buttoncheatsheet">Cheat sheet</div>
       <div id="cheatsheet" class="hidden">
+        <i>Limitations:</i>
+        <ul><li>Hidden formulas are not stored in the clipboard when copying. To ensure to copy formulas, always reveal them before copying.</li>
+        <li>For a single field, the length of the formula and its associated values is limited in total
+            to 224 characters (256 minus the 32 char separator)</li>
+        </ul>
+        <br>
         Define variables in doc or <span class="hint" highlight="#sidebarEnv">above</span>:
         <div class="doclike">name = some text</div>
         <div class="doclike">upper = (function(x) { return x.toUpperCase() })</div>
@@ -147,11 +153,50 @@
         Alternatively, select some text, <span class="hint" highlight="#nameToGive">write a name</span>
         and <span class="hint" highlight="#make-selection-formula">name the selection</span>.<br>
         <br>
-        Rich text formulas:
+        Rich text formulas: 
+          (<a href="https://developers.google.com/apps-script/reference/document/text">settable properties*</a>)
         <div class="doclike">=["emphasized", {italic: true, link: "www.google.com"}]</div>
         <br>
-        Inline Images:
+        Inline Images: 
+          (<a href="https://developers.google.com/apps-script/reference/document/inline-image">settable properties*</a>)
         <div class="doclike">=["img", {src: "http://www.texrendr.com/cgi-bin/mathtex.cgi?\\sqrt{z}"}, []]</div>
+        <br>
+        Paragraphs: 
+          (<a href="https://developers.google.com/apps-script/reference/document/paragraph">settable properties*</a>)
+        <div class="doclike">=["p", {heading: "heading1"}, ["Hello ", ["world", {italic:true}]]]</div>
+        <br>
+        List items: 
+          (<a href="https://developers.google.com/apps-script/reference/document/list-item">settable properties*</a>)
+        <div class="doclike">=["li", {id: 1, nesting: 0, glyph: "number"}, []]</div>
+        <br>
+        Tables: 
+          (<a href="https://developers.google.com/apps-script/reference/document/table">settable properties*</a>)
+        <div class="doclike">=["table", {}, [["Hello", ["world", {italic:true}]], [["Comb", ["ined", {bold: true}]], ""]]]</div>
+        <br>
+        You can also enter arrays of text, rich text and inline images.
+        If you enter an array of paragraphs, list items and tables, make sure the formula spans an entire paragraph.
+        <br>
+        <i>*Settable properties</i>.
+        <br>
+        If <code>setXyzWk</code> is in this
+          <a href="https://developers.google.com/apps-script/reference/document/table">list of methods,</a>
+          (except <code>setAttribute</code>), then <code>xyzWk</code> is an attribute that can be set (case insensitive).
+          For methods requiring objects in arguments, just provide the name of the object
+          e.g. <code>textAlignment: "superscript"</code>.<br>
+          Some shortcut exists for attribute names:
+          <ul>
+          <li><code>link:</code>or <code>url:</code> for <code>linkUrl:</code></li>
+          <li><code>alt:</code>or <code>desc:</code> for <code>altDescription:</code></li>
+          <li><code>id:</code> for <code>listId:</code> (number)</li>
+          <li><code>title:</code> for <code>setAltTitle:</code></li>
+          <li><code>color:</code> for <code>foregroundColor:</code></li>
+          <li><code>background:</code> for <code>backgroundColor:</code></li>
+          <li><code>strike:</code> for <code>strikethrough:</code></li>
+          <li><code>align:</code> for <code>textAlignment:</code></li>
+          <li><code>horizontal:</code> for <code>alignment:</code></li>
+          <li><code>nesting:</code> for <code>nestingLevel:</code></li>
+          </ul>
+        
       </div>
       <div id="finaldummy">&nbsp;
       </div>

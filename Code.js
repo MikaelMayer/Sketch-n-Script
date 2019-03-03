@@ -67,36 +67,10 @@ function builtinEnv_() {
 }
 
 
-function testAppendImage() {
-  var doc = doc || DocumentApp.getActiveDocument();
-  var body = body || doc.getBody();
-  
-  // Insert a web image  
-  var image = "https://img.labnol.org/logo.png";
-  var blob = UrlFetchApp.fetch(image).getBlob();
-  
-  // Insert an image from Google Drive
-  /*var image  = "https://drive.google.com/open?id=xyz";
-  var fileID = image.match(/[\w\_\-]{25,}/).toString();
-  var blob   = eval("Drive"+"App").getFileById(fileID).getBlob();*/
-  var cursor = doc.getCursor();
-  
-  if (cursor) {    
-    cursor.insertInlineImage(blob);
-  } else {
-    body.appendImage(blob);
-  }
-}
-
 var regexDeclarations = "^[a-zA-Z$_][a-zA-Z0-9_$]*\\s*=\\s+.*$"
 var regexExtractDeclaration = "(^|\n)([a-zA-Z0-9_$]+)(\\s*=\\s+)(.*?)\\s*(?:$|(?=\n))";
 
-function testParseSidebarCode() {
-  var x = parseSidebarCode(undefined, "Comment\n\na = Hello world  \nOther comment\nb = (1\n+1)\nfinal comment")
-  Logger.log("finished");
-}
-
-function parseSidebarCode(doc, defs) {
+function parseSidebarCode_(doc, defs) {
   var doc = doc || DocumentApp.getActiveDocument();
   var env = builtinEnv_();
   var r = new RegExp(regexExtractDeclaration, "g");
@@ -206,7 +180,7 @@ function isEqualFormula_(formula) {
 }
 
 // If the expression is a function application, get the function part
-function getFunctionSource(source) {
+function getFunctionSource_(source) {
   var r = new RegExp("^\\(" + commentStart + "(" + varName + ")\\([^\\)]*\\)=" + commentEnd);
   r.lastIndex = 0;
   var x = r.exec(source);
@@ -229,7 +203,7 @@ function computeValue_(doc, $$value$$$) { // Strange name to prevent override wh
       with(envJS) {
         var result = [eval($$source$$$)];
       }
-      var fs = getFunctionSource($$source$$$);
+      var fs = getFunctionSource_($$source$$$);
       if(typeof fs !== "undefined") {
         with(envJS) {
           result.push(eval(fs));
@@ -449,7 +423,7 @@ function evaluateFormulas(options, docProperties, doc, body) {
   docProperties = docProperties || getDocProperties();
   removeNameRangeAndHighlighting_(REVEALED_FORMULA_NAME, doc, body);
   detectFormulaRanges_(doc ,body);
-  var sidebarEnv = parseSidebarCode(doc, docProperties.sidebarEnv);
+  var sidebarEnv = parseSidebarCode_(doc, docProperties.sidebarEnv);
   var env = collectEnv_(doc, body, sidebarEnv);
   var exprs = extractExprs_(doc, options.finalExpr);
   exprs = resolveDependencies_(exprs, env); // Reorder the exprs so that dependencies are respected.
@@ -458,6 +432,7 @@ function evaluateFormulas(options, docProperties, doc, body) {
   exprs = newenvexprs[1];
   var newSidebarEnv = recoverSidebarEnv_(env);
   var nameValues = [];
+  var potentialWarnings = "";
   
   List.foreach(env, function(binding) {
     var v = binding.value.v_; // Already computed
@@ -497,7 +472,8 @@ function evaluateFormulas(options, docProperties, doc, body) {
           numUpdated += 1;
           // If positions are ranges, it will delete everything inside first
           insertedPositions = insertRichValue_(doc, positions, v, expr, exprs);
-          expr.namedRange = addRange_(doc, formulaValue_(formula, strV), insertedPositions);
+          var formulaValueName = formulaValue_(formula, strV);
+          expr.namedRange = addRange_(doc, formulaValueName, insertedPositions);
           expr.range = expr.namedRange.getRange();
         } else {
           insertedPositions = drangesOf_(expr.range);
@@ -514,7 +490,7 @@ function evaluateFormulas(options, docProperties, doc, body) {
   });
   return {
     nameValues: nameValues,
-    feedback: "Updated " + numUpdated + " computed values.",
+    feedback: "Updated " + numUpdated + " computed values." + potentialWarnings,
     newSidebarEnv: newSidebarEnv};
 }
 
@@ -523,7 +499,7 @@ function removeFormulas_(doc, txt, start, endInclusive) {
   var namedFormulas = getFormulas_(doc);
   foreachNamedRange_(
     namedFormulas,
-    function(name, range, namedRange) {
+    function(name /* Maybe to expand */, range, namedRange) {
       var shouldDelete = false;
       foreachDRange_(
         range,
@@ -548,18 +524,24 @@ function detectFormulaRanges_(doc, body) {
   var body = body || doc.getBody();
   var searchResult = null;
   var namedRanges = getFormulas_(doc);
+  var namesFound = [];
+  foreachNamedRange_(namedRanges,
+                     function(name) {
+                       namesFound[name] = true;
+                     }, function() {});
+  garbageCollectLongNames(namesFound, "=");
   
   var isPartiallyGenerated = function(txt, start, endInclusive) {
     var overlapsComputedFormulas = false;
     foreachNamedRange_(
       namedRanges,
-      function(name, range, namedRange) {
+      function(name /*Maybe to expand*/, range, namedRange) {
         return foreachDRange_(
           range,
           function(txtGenerated, startGenerated, endInclusiveGenerated) {
             if(areSameElement_(txt, txtGenerated) && !(endInclusive < startGenerated || endInclusiveGenerated < start)) {
               // Now we check if the formula was evaluated: If not, we remove the previous formula and we're ok.
-              var formulaValue = formulaValueUnapply_(namedRange.getName());
+              var formulaValue = formulaValueUnapply_(maybeExpandLongName(name));
               if(typeof formulaValue[1] == "undefined") {
                 namedRange.remove();
                 return true; // To stop that
@@ -587,7 +569,7 @@ function detectFormulaRanges_(doc, body) {
       if(!needToReorder) {
         foreachNamedRange_(
           namedRanges,
-          function(name, range, namedRange) {
+          function(name /* Maybe to expand */, range, namedRange) {
             return foreachDRange_(
               range,
               function(txtGenerated, startGenerated, endInclusiveGenerated) {
@@ -618,9 +600,9 @@ function detectFormulaRanges_(doc, body) {
 function foreachNamedRange_(namedRanges, callbackNameRange) {
   for(var i in namedRanges) {
     var namedRange = namedRanges[i];
-    var name = namedRange.getName();
+    var nameMaybeToExpand = namedRange.getName();
     var range = namedRange.getRange();
-    var x = callbackNameRange(name, range, namedRange);
+    var x = callbackNameRange(nameMaybeToExpand, range, namedRange);
     if(x) return x;
   }
 }
@@ -635,7 +617,7 @@ function reorderFormulaRanges_(doc, body) {
   var toAdd = true;
   foreachNamedRange_(
     namedRanges,
-    function(name, range, namedRange) {
+    function(name /* Maybe to expand */, range, namedRange) {
       foreachDRange_(
         range,
         function(txt, start, endInclusive, rangeElement) {
@@ -819,7 +801,7 @@ function updateLetExprs_(doc, env, letExprs) {
         newOutput = mergeValues(oldOutput, updatedNewEnv.head.value.v_, newOutput);
         updatedEnv1 = updatedNewEnv.tail;
       }
-      if(areCompatibleUpdateType(oldOutput, newOutput) &&
+      if(areCompatibleUpdateType_(oldOutput, newOutput) &&
            oldOutput != newOutput) {
         // Here the value was changed directly or indiretly, or a merge of both.
         formulaEnvUpdate = update_(env, formula)(newOutput);
@@ -834,7 +816,7 @@ function updateLetExprs_(doc, env, letExprs) {
     });
 }
 
-function areCompatibleUpdateType(oldOutput, newOutput) {
+function areCompatibleUpdateType_(oldOutput, newOutput) {
   var to = typeof oldOutput;
   return (to === "string" || to == "number" || to == "boolean") &&
      typeof newOutput === to;
@@ -850,7 +832,7 @@ function extractExprs_(doc, maybeFinalExpr) {
   var exprs = [];
   for(var i in namedRanges) {
     var namedRange = namedRanges[i]
-    var formulaValue = formulaValueUnapply_(namedRange.getName());
+    var formulaValue = formulaValueUnapply_(getNamedRangeLongName(namedRange));
     var formula = formulaValue[0];
     var oldOutputStr = formulaValue[1];
     var oldOutput = oldOutputStr; // compatibility with previous approach
@@ -966,7 +948,7 @@ function updateNamedRanges_(doc, env, exprs) {
   var changed = false;
   List.foreach(exprs, function(expr) {
     var to = typeof expr.newOutput
-    if(areCompatibleUpdateType(expr.oldOutput, expr.newOutput) &&
+    if(areCompatibleUpdateType_(expr.oldOutput, expr.newOutput) &&
        expr.oldOutput !== expr.newOutput) {
       changed = expr.name || expr.source;
       return changed;
@@ -1052,43 +1034,65 @@ function uneval_(x) {
   return "" + x;
 }
 
+// Splits an element an the given insertion position
+// Returns
+function splitAt_(insertPosition) {
+  
+}
+
 // Inserts a rich element at the given index by invoking parent["append" + name] or parent["insert" + name],
 // depending on the context.
-// insertPosition is either [parent, indexInsertion, numChildren] or [text, start]
-function insertElementAt_(doc, insertPosition, name, element, exprs) {
-  // TODO: If the append[name] or insert[name] method is not available,
-  // the value should be inserted in the parent of the parent (e.g. splitting the paragraph)
+// Body-level elements (i.e.. list items, tables and paragraphs) can be inserted only if the formula takes an entire paragraph.
+// insertPosition is either {ctor: "IndexPosition", parent: Element, index: Int} or {ctor: "TextPosition", txt: TextElement, start: Int}
+function insertElementAt_(doc, insertPosition, name, initializationContent, exprs) {
+  // TODO: If the append[name] or insert[name] method is not available in the parent (the paragraph)
+  // the value should be inserted in the parent of the parent (the body, the table cell, or whatever)
+  // splitting the paragraph if needed.
   if(insertPosition.ctor == "IndexPosition") { // it's inside the list of a parent
     var parent = insertPosition.parent;
     var indexInsertion = insertPosition.index;
     var numChildren = parent.getNumChildren();
     var txtLastChild = indexTxt == numChildren - 1;
     if(indexInsertion >= numChildren) { // Last element
-      return parent["append" + name](element);
+      if(typeof parent["append" + name] != "undefined") {
+        return parent["append" + name](initializationContent);
+      }
+      throw ("Cannot append " + name + " here");
     } else {
-      return parent["insert" + name](indexInsertion, element);
+      if(typeof parent["insert" + name] != "undefined") {
+        return parent["insert" + name](indexInsertion, initializationContent);
+      }
+      throw ("Cannot insert " + name + " here");
     }
   }
-  // It's inside a text
+  // It's inside a text. We might have to split the text.
   var txt = insertPosition.txt;
   var index = insertPosition.start;
   var parent = txt.getParent();
   var indexTxt = parent.getChildIndex(txt);
   var numChildren = parent.getNumChildren();
   var txtLastChild = indexTxt == parent.getNumChildren() - 1;
-  if(txt.getText().length == index) { // No need to split. Insert after the text.
+  if(txt.getText().length == index) { // No need to split. Insert after the text element!
     if(txtLastChild) { // Last element
-      return parent["append" + name](element);
+      if(typeof parent["append" + name] != "undefined") {
+        return parent["append" + name](initializationContent);
+      }
+      throw ("Cannot append " + name + " here"); 
     } else {
-      return parent["insert" + name](indexTxt + 1, element);
+      if(typeof parent["insert" + name] != "undefined") {
+        return parent["insert" + name](indexTxt + 1, initializationContent);
+      }
+      throw ("Cannot insert " + name + " here");
     }
   }
   if(index == 0) { // No need to split. Insert before the text
-    return parent["insert" + name](indexTxt, element);
+    if(typeof parent["insert" + name] != "undefined") {
+      return parent["insert" + name](indexTxt, initializationContent);
+    }
+    throw ("Cannot insert " + name + " here");
   }
   // Need to split here, possibly removing empty remaining text element
-  // Attempt to reposition namedRanges on the deleted text.
-  //var namedRanges = doc.getNamedRanges();
+  // Attempt to reposition namedRanges from exprs on the deleted text.
   var toReposition = [];
   var shouldRemove = false;
   var currentRange = [];
@@ -1115,17 +1119,17 @@ function insertElementAt_(doc, insertPosition, name, element, exprs) {
         }
       });
       if(toReAdd.length > 0) {
-        toReposition.push([expr, namedRange.getName(), toReAdd, positions]);
+        toReposition.push([expr, namedRange.getName() /* Might be expandable but we don't care here */, toReAdd, positions]);
         namedRange.remove();
       }
     });
   var txtToReinsert = txt.getText().substring(index);
   txt.deleteText(index, txt.getText().length - 1); // Deletes all the associated namedRanges
   if(txtLastChild) { // Last element
-    var elementToReturn = parent["append" + name](element);
+    var elementToReturn = parent["append" + name](initializationContent);
     var txt2 = parent.appendText(txtToReinsert);
   } else {
-    var elementToReturn = parent["insert" + name](indexTxt + 1, element);
+    var elementToReturn = parent["insert" + name](indexTxt + 1, initializationContent);
     var txt2 = parent.insertText(indexTxt + 2, txtToReinsert);
   }
   for(var i in toReposition) {
@@ -1153,61 +1157,7 @@ function valueIsRichText_(value) {
   return typeof value == "object" && value.length == 2 && typeof value[1] == "object" && typeof value[1].length == "undefined";
 }
 
-// Inserts the rich value "value" at the start position of the txt element.
-// @param positions : Array DRange A an array of positions
-// Value is either string (raw text), [string, attributes] or [string tag, attributes, children]
-// To encode a sequence of elements instead of a single element, ["list", attributes for each child, children]
-// Each child is a value, but not a list.
-// Returns a list of Position[txt, start, end] (inserted value) or [element] (inserted element)
-// exprs is passed on in case their namedRange need to be removed and re-added to the doc.
-function insertRichValue_(doc, positions, values, expr, exprs) {
-  var insertPosition;
-  var deleteAction = function() {};
-  for(var p in positions) { // Delete previous positions if they were ranges
-    var position = positions[p];
-    if(isTextRange(position)) {
-      var txt = position.txt;
-      var start = position.start;
-      var endInclusive = position.endInclusive;
-      if(typeof endInclusive !== "undefined") {
-        deleteAction = (function(txt, start, endInclusive, prevDeleteAction) {
-          return function() {
-            prevDeleteAction();
-            txt.deleteText(start, endInclusive);
-            //We remove the text or the formula beneath
-            //However, this does not remove the namedRange
-          };
-        })(position.txt, position.start, position.endInclusive, deleteAction);
-      }
-      if(typeof insertPosition == "undefined") {
-        insertPosition = {ctor: "TextPosition", txt: txt, start: start};
-      }
-    } else { // We have to remove the element but keep track of where to insert the rich values back.
-      var element = position.element;
-      var parent = element.getParent();
-      var index = parent.getChildIndex(element);
-      if(typeof insertPosition == "undefined") {
-        insertPosition = {ctor: "IndexPosition", parent: parent, index: index}; // 3 elements: inside the children of a parent.
-        deleteAction = (function(element, prevDeleteAction) {
-          return function() {
-            prevDeleteAction();
-            element.removeFromParent();
-            //We remove the text or the formula beneath
-            //However, this does not remove the namedRange
-          };
-        })(element, deleteAction);
-      }
-    }
-  }
-  if(expr && expr.namedRange) {
-    deleteAction = (function(prevDeleteAction) {
-      return function() {
-        prevDeleteAction();
-        expr.namedRange.remove(); // This is not automatic unfortunately
-        expr.namedRange = undefined;
-        expr.range = undefined;
-      };})(deleteAction);
-  }
+function valuestoArray_(values) {
   if(valueIsElement_(values) ||
      typeof values == "string" ||
      typeof values == "number" ||
@@ -1220,6 +1170,20 @@ function insertRichValue_(doc, positions, values, expr, exprs) {
     Logger.log("Unexpected value: " + uneval_(values));
     values = [values]
   }
+  return values;
+}
+
+/* type alias ToInsert =
+      {ctor: "element", tag: "InlineImage" | "Paragraph" | "Table" | ..., attrs: Object, children: Array ToInsert}
+      | {ctor: "element
+*/
+// Converts the values into elements that can be inserted
+// Pre-fetches all images
+// Return 
+function valuesToElementsToInsert_(values) {
+  // Make sure values is an array
+  values = valuestoArray_(values);
+  // We gather the elements to insert
   var toInsert = [];
   // We gather the elements to insert
   for(var v in values) {
@@ -1232,9 +1196,29 @@ function insertRichValue_(doc, positions, values, expr, exprs) {
         var url = attrs.src;
         if(!url) throw "['img', {src: 'URL'}, []] is the valid syntax. Missing src attribute";
         var blob = UrlFetchApp.fetch(url).getBlob();
-        toInsert.push({ctor: "element", tag: "InlineImage", content: blob, attrs: attrs});
+        toInsert.push({ctor: "element", tag: "InlineImage", content: blob, attrs: attrs, children: []});
+      } else if(tag.toLowerCase() == "paragraph" || tag.toLowerCase() == "p") {
+        toInsert.push({ctor: "element", tag: "Paragraph", content: "", attrs: attrs, children: valuesToElementsToInsert_(children)});
+      } else if(tag.toLowerCase() == "listitem" || tag.toLowerCase() == "li") {
+        toInsert.push({ctor: "element", tag: "ListItem", content: "", attrs: attrs, children: valuesToElementsToInsert_(children)});
+      } else if(tag.toLowerCase() == "table") {
+        var initContent = [];
+        var childrenToInsert = [];
+        for(var rowIndex in children) {
+          var childRow = [];
+          var childToInsertRow = [];
+          var row = children[rowIndex];
+          for(var colIndex in row) {
+            childRow.push("");
+            childToInsertRow.push(valuesToElementsToInsert_(row[colIndex]));
+          }
+          initContent.push(childRow);
+          childrenToInsert.push(childToInsertRow);
+        }
+        toInsert.push({ctor: "element", tag: "Table", content: initContent, attrs: attrs, children: childrenToInsert});
+        // TODO Google docs cannot end with a table, a paragraph would be appended in this case. Check this.
       } else {
-        throw ("Tag cannot be inserted yet: " + tag);
+        throw ("Tag cannot be inserted (yet?): " + tag);
       }
     } else {
       if(valueIsRichText_(value)) {
@@ -1250,32 +1234,139 @@ function insertRichValue_(doc, positions, values, expr, exprs) {
       }
     }
   } // for loop
-  // Now that we have the content to insert, we can delete the previous content
-  deleteAction();
+  return toInsert;
+}
+
+function convertSpecialValue_(setMethod, value) {
+  if(setMethod == "setGlyphType") {
+    value = value.toUpperCase && value.toUpperCase();
+    if(typeof DocumentApp.GlyphType[value] != "undefined") {
+      value = DocumentApp.GlyphType[value];
+    } else {
+      value = DocumentApp.GlyphType.BULLET;
+    }
+  } else if(setMethod == "setHeading") {
+    value = value.toUpperCase && value.toUpperCase();
+    if(typeof DocumentApp.ParagraphHeading[value] != "undefined") {
+      value = DocumentApp.ParagraphHeading[value];
+    } else {
+      value = DocumentApp.ParagraphHeading.NORMAL;
+    }
+  } else if(setMethod == "setTextAlignment") {
+    value = value.toUpperCase && value.toUpperCase();
+    if(typeof DocumentApp.TextAlignment[value] != "undefined") {
+      value = DocumentApp.TextAlignment[value];
+    } else {
+      value = DocumentApp.TextAlignment.NOrMAL;
+    }
+  } else if(setMethod == "setAlignment") {
+    value = value.toUpperCase && value.toUpperCase();
+    if(typeof DocumentApp.HorizontalAlignment[value] != "undefined") {
+      value = DocumentApp.HorizontalAlignment[value];
+    } else {
+      value = DocumentApp.HorizontalAlignment.LEFT;
+    }
+  }
+  return value;
+}
+
+
+function standardizeKey_(key) {
+  if(key == "link" || key == "url") return "linkUrl";
+  if(key == "alt" || key == "desc") return "altDescription";
+  if(key == "id") return "listId";
+  if(key == "title") return "setAltTitle";
+  if(key == "color") return "foregroundColor";
+  if(key == "background") return "backgroundColor";
+  if(key == "strike") return "strikethrough";
+  if(key == "align") return "textAlignment";
+  if(key == "horizontal") return "alignment";
+  if(key == "nesting") return "nestingLevel";
+  if(key == "glyph") return "glyphType";
+  return key;
+}
+
+function isInlineElement_(toInsert) {
+  return toInsert.ctor == "text" || toInsert.ctor == "element" && toInsert.tag == "InlineImage";
+  // TODO: Other inline elements, such as page break, etc?
+}
+
+function maybeWrapInParagraph_(toInsert) {
+  var allInline = true;
+  for(var i in toInsert) {
+    var t = toInsert[i];
+    allInline = allInline && isInlineElement_(t);
+  }
+  if(allInline) {
+    return [{ctor: "element", tag: "Paragraph", content: "", attrs: {}, children: toInsert}]
+  }
+  return toInsert;
+}
+
+// Insert the list of elements to insert at the given position
+// exprs is given in case we need to move namedRanges when splitting some text.
+function insertAtPosition_(doc, insertPosition, toInsert, exprs) {
   var insertedElements = [];
-  var attrsToSet = []; // We set the attributes later to avoid formatted text to spill non-formatted text
+  var attrsToSet = [];
+  
+  var listItems = {};
+
+  // We set text attributes later to avoid formatted text to spill non-formatted text
   for(var i in toInsert) {
     if(toInsert[i].ctor == "element") {
       var blob = toInsert[i].content;
       var attrs = toInsert[i].attrs;
-      var element = insertElementAt_(doc, insertPosition, "InlineImage", blob, exprs);
+      var tag = toInsert[i].tag;
+      var children = toInsert[i].children;
+      var element = insertElementAt_(doc, insertPosition, tag, blob, exprs);
       for(var key in attrs) {
         var value = attrs[key];
-        if(key == "link" || key == "url") key = "linkUrl";
-        if(key == "alt" || key == "desc") key = "altDescription";
-        if(key == "title") key = "setAltTitle";
+        key = standardizeKey_(key);
         var setMethod = key.length > 0 && ("set" + key[0].toUpperCase() + key.substring(1));
-        if(key != "attributes" && 
-           key.length > 0 && element[setMethod]) {
-          element[setMethod](value);
+        if(!setMethod) continue;
+        value = convertSpecialValue_(setMethod, value);
+        if(setMethod == "setListId" && tag == "ListItem") { // We need to get the ID of previously inserted elements.
+          if(typeof listItems[value] != "undefined") {
+            element.setListId(listItems[value]);
+          } else {
+            listItems[value] = element;
+          }
+        } else {
+          if(key != "attributes" && 
+             key.length > 0 && element[setMethod]) {
+            element[setMethod](value);
+          }
         }
       }
       insertedElements.push(Element(element));
-      // Update the insertion position
+      
+      if(tag == "Table") {
+        // Append all children, remove the first text of each cell.
+        for(var rowIndex = 0; rowIndex < children.length; rowIndex++) {
+          var row = children[rowIndex];
+          for(var cellIndex = 0; cellIndex < row.length; cellIndex++) {
+            var tableCell = element.getCell(rowIndex, cellIndex);
+            var childInsertPosition = { ctor: "IndexPosition", parent: tableCell, index: 0 };
+            insertAtPosition_(doc, childInsertPosition, maybeWrapInParagraph_(row[cellIndex]), exprs); // We don't need the inserted elements there
+            if(tableCell.getNumChildren() >= 2) { // The last paragraph was a dummy one, we remove it.
+              // TODO: Unless the element before is itself a table.
+              var lastChild = tableCell.getChild(tableCell.getNumChildren() - 1);
+              var remainingElem = lastChild.getPreviousSibling();
+              if(remainingElem.getType() != DocumentApp.ElementType.TABLE) {
+                lastChild.removeFromParent();
+              }
+            }
+          }
+        }
+      } else if(tag == "Paragraph" || tag == "ListItem") {
+        var childInsertPosition = { ctor: "IndexPosition", parent: element, index: 0 };
+        insertAtPosition_(doc, childInsertPosition, children); // We don't need the inserted elements there
+      }
       insertPosition = {ctor: "IndexPosition", parent: element.getParent(), index: element.getParent().getChildIndex(element) + 1};
     } else if(toInsert[i].ctor == "text") {
       var content = toInsert[i].content;
       var attrs = toInsert[i].attrs;
+      var txt, start;
       if(insertPosition.ctor == "TextPosition") {
         // At this point, we should suppose that we insert text and that the insertPosition is [txt, start]
         txt = insertPosition.txt;
@@ -1289,18 +1380,22 @@ function insertRichValue_(doc, positions, values, expr, exprs) {
         var index = insertPosition.index;
         var numChildren = insertPosition[2];
         start = 0;
-        if(index + 1 == parent.getNumChildren()) {
-          txt = parent.appendText(content); // We should check if we can insert to the previous text.
-        } else {
-          txt = parent.insertText(index, content);
+        if(content != "") {
+          if(index + 1 == parent.getNumChildren()) {
+            txt = parent.appendText(content); // We should check if we can insert to the previous text.
+          } else {
+            txt = parent.insertText(index, content);
+          }
+          insertPosition = {ctor: "TextPosition", txt: txt, start: content.length};
         }
-        insertPosition = {ctor: "TextPosition", txt: txt, start: content.length};
       }
       var endAfterReplacement = start + content.length - 1;
-      if(attrs) {
+      if(attrs && txt) {
         attrsToSet.push({txt: txt, start: start, endAfterReplacement: endAfterReplacement, attrs: attrs});
       }
-      insertedElements.push(TextRange(txt, start, endAfterReplacement));
+      if(txt) {
+        insertedElements.push(TextRange(txt, start, endAfterReplacement));
+      }
     }
   }
   // Now we set the attributes
@@ -1312,24 +1407,164 @@ function insertRichValue_(doc, positions, values, expr, exprs) {
     var attrs = attrToSet.attrs;
     for(var key in attrs) {
       var value = attrs[key];
-      if(key == "link" || key == "url" || key == "src") key = "linkUrl";
-      if(key == "color") key = "foregroundColor";
-      if(key == "background") key = "backgroundColor";
-      if(key == "strike") key = "strikethrough";
-      if(key == "align") key = "textAlignment";
+      key = standardizeKey_(key);
       var setMethod = key.length > 0 && ("set" + key[0].toUpperCase() + key.substring(1));
-      if(key == "textAlignment") {
-        value = value.toLowerCase && value.toLowerCase()
-        if(value == "normal") value = DocumentApp.TextAlignment.NOrMAL;
-        else if(value == "superscript") value = DocumentApp.TextAlignment.SUPERSCRIPT;
-        else if(value == "subscript") value = DocumentApp.TextAlignment.SUBSCRIPT;
-      }
+      if(!setMethod) continue;
+      value = convertSpecialValue_(setMethod, value);
       if(key != "text" && key != "attributes" && 
          key.length > 0 && txt[setMethod]) {
         txt[setMethod](start, endAfterReplacement, value);
       }
     }
   }
+  
+  return insertedElements;
+}
+
+// Inserts the rich value "value" at the start position of the txt element.
+// @param positions : Array DRange    An array of positions
+// Value is either string (raw text), [string, attributes] or [string tag, attributes, children]
+// To encode a sequence of elements instead of a single element, wrap them in a list
+// Returns an array of DRange (inserted text or elements)
+// exprs is passed on in case their namedRange need to be removed and re-added to the doc.
+function insertRichValue_(doc, positions, values, expr, exprs) {
+  var insertPosition;
+  var deleteAction = function() {};
+  var thingsToDelete = [];
+  for(var p in positions) { // Delete previous positions if they were ranges
+    var position = positions[p];
+    if(isTextRange(position)) {
+      var txt = position.txt;
+      var start = position.start;
+      var endInclusive = position.endInclusive;
+      if(typeof endInclusive !== "undefined") {
+        thingsToDelete.push(position);
+      }
+      if(typeof insertPosition == "undefined") {
+        insertPosition = {ctor: "TextPosition", txt: txt, start: start};
+      }
+    } else { // We have to remove the element but keep track of where to insert the rich values back.
+      var element = position.element;
+      var parent = element.getParent();
+      var index = parent.getChildIndex(element);
+      if(typeof insertPosition == "undefined") {
+        insertPosition = {ctor: "IndexPosition", parent: parent, index: index}; // 3 elements: inside the children of a parent.
+      }
+      thingsToDelete.push({ctor: "Element", element: element});
+    }
+  }
+  if(expr && expr.namedRange) {
+    thingsToDelete.push({ctor: "NamedRange", expr: expr});
+  }
+  var toInsert = valuesToElementsToInsert_(values);
+  if(toInsert.length == 0) throw "Cannot insert an empty array of elements or text nodes";
+  // Check if all the elements to insert can be inserted.
+  // Rules: If there are Table, Paragraphs and ListItems, then the formula should span the entire paragraph.
+  var notallBodyChildren = false;
+  var foundBodyChildren = false;
+  for(var i in toInsert) {
+    if(toInsert[i].ctor == "element") {
+      var tag = toInsert[i].tag;
+      if(tag == "ListItem" || tag == "Table" || tag == "Paragraph") {
+        foundBodyChildren = tag;
+      } else {
+        notallBodyChildren = tag;
+      }
+    } else {
+      notallBodyChildren = "text";
+    }
+  }
+  if(foundBodyChildren) { // To the deletion of text, we need to delete the parent and update the insertion position.
+    if(notallBodyChildren) {
+      throw ("Cannot insert " + foundBodyChildren +
+             " because it's alongside with elements that cannot be inserted at the top-level document level (" + notallBodyChildren + ")" +
+             ". To keep " + foundBodyChildren + ", wrap other elements to insert (such as strings or inline images) in paragraphs, e.g. " +
+             '["p", {}, ["Some text here"]]');
+    } else { // All children are body.
+      // We check that the insertion point is either an index position with a compatible parent
+      if(insertPosition.ctor == "IndexPosition") {
+        // Fine here. We reuse the same position.
+      } else {
+        // Or if it's a text (because it's a formula=, it occupies the entire paragraph
+        var txt = insertPosition.txt;
+        var parent = txt.getParent();
+        var preciseError = "";
+        var checkSingleChild = parent.getNumChildren() == 1;
+        if(!checkSingleChild) {
+          preciseError += " The area containing the formula should have only one child, the formula itself. Got " + parent.getNumChildren() + " children";
+        }
+        var thingsToDeleteLengthIsOne = thingsToDelete.length >= 1;
+        if(!thingsToDeleteLengthIsOne) {
+          preciseError += " The formula should span one element, but it spans " + (thingsToDelete.length) + " elements."
+        }
+        var checkIsTextRange = thingsToDeleteLengthIsOne && isTextRange(thingsToDelete[0]);
+        if(thingsToDeleteLengthIsOne && !checkIsTextRange) {
+          preciseError += " The area containing the formula is not a text range";
+        }
+        var insertPositionAtBeginning = checkIsTextRange && insertPosition.start == 0;
+        if(checkIsTextRange && !insertPositionAtBeginning) {
+          preciseError += " The formula should be at the beginning. Remove '"+thingsToDelete[0].txt.getText().substring(0, insertPosition.start)+"'.";
+        }
+        var formulaEndsAtEnd = checkIsTextRange && thingsToDelete[0].txt.getText().length != thingsToDelete[0].endInclusive + 1;
+        if(formulaEndsAtEnd) {
+          preciseError += " There should not be trailing text after the formula. Remove '" + thingsToDelete[0].txt.getText().substring(thingsToDelete[0].endInclusive + 1) +"'.";
+        }
+        
+        // Need to check that the only thing to delete is some text spanning the entire siblings
+        if(preciseError != "") {
+          throw preciseError;
+        }
+        thingsToDelete = [{ctor: "Element", element: parent}];
+        var parentParent = parent.getParent();
+        insertPosition = {ctor: "IndexPosition", parent: parentParent, index: parentParent.getChildIndex(parent)};
+      }
+    }
+  }
+  // Now that we have the content to insert, we can delete the previous content
+  for(var d in thingsToDelete) {
+    var toDelete = thingsToDelete[d];
+    if(toDelete.ctor == "TextRange") {
+      toDelete.txt.deleteText(toDelete.start, toDelete.endInclusive);
+    } else if(toDelete.ctor == "Element") {
+      // We delete elements after the new ones are inserted, to prevent empty element list errors.
+      //toDelete.element.removeFromParent();
+    } else if(toDelete.ctor == "NamedRange") { // expression
+      var expr = toDelete.expr;
+      expr.namedRange.remove(); // This is not automatic unfortunately
+      expr.namedRange = undefined;
+      expr.range = undefined;
+    }
+  }
+ 
+  var insertedElements = insertAtPosition_(doc, insertPosition, toInsert, exprs);
+  
+  // Now that we have the content to insert, we can delete the previous content
+  for(var d in thingsToDelete) {
+    var toDelete = thingsToDelete[d];
+    if(toDelete.ctor == "TextRange") {
+      //toDelete.txt.deleteText(toDelete.start, toDelete.endInclusive);
+    } else if(toDelete.ctor == "Element") {
+      // Check that this element is not the last paragraph of a part of the document.
+      // IF so, we have to delete this element later
+      var parent = toDelete.element.getParent();
+      var childIndex = parent.getChildIndex(toDelete.element);
+      var tpe = toDelete.element.getType();
+      if(childIndex + 1 == parent.getNumChildren() && parent.appendParagraph && (
+         tpe == DocumentApp.ElementType.PARAGRAPH ||
+         tpe == DocumentApp.ElementType.LIST_ITEM ||
+         tpe == DocumentApp.ElementType.TABLE)) {
+        // Need to append an empty paragraph before deleting this element.
+        parent.appendParagraph("");
+      }
+      toDelete.element.removeFromParent();
+    } else if(toDelete.ctor == "NamedRange") { // expression
+      /*var expr = toDelete.expr;
+      expr.namedRange.remove(); // This is not automatic unfortunately
+      expr.namedRange = undefined;
+      expr.range = undefined;*/
+    }
+  }
+
   return insertedElements;
 }
 
@@ -1426,13 +1661,26 @@ function revealFormulas(options, docProperties, doc, body) {
             lastStart = start;
           }
         } else {
+          // It could be other elements inside a paragraph, InlineImage, page break.
+          // Or it could be body-level elements (paragraphs, listItems, and tables)
+          var tpe = position.element.getType();
+          var bodyLevel =
+              tpe == DocumentApp.ElementType.PARAGRAPH || 
+                tpe == DocumentApp.ElementType.TABLE || 
+                  tpe == DocumentApp.ElementType.LIST_ITEM;
           lastParent = position.element.getParent();
           lastChildIndex = lastParent.getChildIndex(position.element); // Should always stay the same
-          var prev = position.element.getPreviousSibling();
-          if(prev && prev.getType() == DocumentApp.ElementType.TEXT) {
-            lastTxt = prev;
-            lastStart = lastTxt.getText().length;
+          if(bodyLevel) {
+            if(!lastTxt) {
+              lastTxt = position.element.getParent().insertParagraph(lastChildIndex, "");
+              lastStart = 0;
+            }
           } else {
+            var prev = position.element.getPreviousSibling();
+            if(prev && prev.getType() == DocumentApp.ElementType.TEXT) {
+              lastTxt = prev;
+              lastStart = lastTxt.getText().length;
+            }
           }
           position.element.removeFromParent();
         }
@@ -1467,6 +1715,9 @@ function revealFormulas(options, docProperties, doc, body) {
       }
       var endFormula = start + expr.source.length - 1;
       if(options.highlightFormulas == "true") {
+        if(txt.getType() == DocumentApp.ElementType.PARAGRAPH) {
+          txt = txt.getChild(0);
+        }
         txt.setBackgroundColor(start, endFormula, REVEALED_FORMULA_COLOR);
         txt.setFontFamily(start, endFormula, REVEALED_FORMULA_FONT);
         addRange_(doc, REVEALED_FORMULA_NAME, [TextRange(txt, start, endFormula)]);
@@ -1476,7 +1727,7 @@ function revealFormulas(options, docProperties, doc, body) {
   return {feedback: "Revealed " + numRevealed + " formulas"};
 };
 
-function testNameSelection() {
+function testNameSelection_() {
   nameSelection({nameToGive: "heros"});
 }
 
