@@ -299,6 +299,9 @@ function nextOffsetDelimiters_(s, o, delimiters) {
 }
 
 // Fast parsing: Find the tightest end of the expression knowing it starts with a variable (possibly followed by a delimiter) or a delimiter
+// TODO: It's not compatible with comments.
+// TODO: We might want not the tightest, but the longest until a closing delimiter is found (e.g. ')', ']', or ',')
+
 function getEndOffsetInclusiveFormula_(string, endOffsetInclusive) {
   string = sanitizeQuotes_(string);
   var delimiters = [];
