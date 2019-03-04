@@ -132,6 +132,7 @@ function collectEnv_(doc, body, env) {
   var searchResult = null;
   env = env || builtinEnv_();
   // Search until the paragraph is found.
+  // A Javscript formula might span several paragraphs.
   while (searchResult = body.findText(regexDeclarations, searchResult)) {
     var txt = searchResult.getElement();
     var s = sanitizeQuotes_(txt.getText());
