@@ -432,7 +432,7 @@ function evaluateFormulas(options, docProperties, doc, body) {
   exprs = newenvexprs[1];
   var newSidebarEnv = recoverSidebarEnv_(env);
   var nameValues = [];
-  var potentialWarnings = "";
+  var potentialWarnings = newenvexprs[2] || "";
   
   List.foreach(env, function(binding) {
     var v = binding.value.v_; // Already computed
@@ -957,7 +957,8 @@ function updateNamedRanges_(doc, env, exprs) {
   if(changed) {
     Logger.log("Value of " + changed + " changed. Back-propagating");
     return resultCase(
-      updateLetExprs_(doc, env, exprs), function (msg) { throw msg; },
+      updateLetExprs_(doc, env, exprs), function (msg) { 
+        return [env, exprs, msg]; },
       function(newenvexprs) {
         var newenv = newenvexprs[0];
         var tmp = newenv;
