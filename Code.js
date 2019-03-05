@@ -10,7 +10,8 @@ var UNHIGHLIGHT_VALUE_COLOR = "#FFFFFF";
 var REVEALED_FORMULA_COLOR = "#FFE8C9";
 var REVEALED_FORMULA_NAME = "revealedFormula";
 var REVEALED_FORMULA_FONT = "Consolas";
-var ERROR_NAME = "definition-error"
+var ERROR_NAME = "definition-error";
+var DEFINITION_PARAGRAPHS = "definition-paragraphs"
 
 var RAW = 0; // String interpreted as string
 var RAWFORMULA = 1; // String interpreted as a formula
@@ -128,13 +129,14 @@ function collectEnv_(doc, body, env) {
   deleteEvalErrors(doc, body);
   
    // Define the search parameters.
-  var searchType = DocumentApp.ElementType.TEXT;
   var searchResult = null;
   env = env || builtinEnv_();
+  var lastElement = undefined;
   // Search until the paragraph is found.
   // A Javscript formula might span several paragraphs.
   while (searchResult = body.findText(regexDeclarations, searchResult)) {
     var txt = searchResult.getElement();
+    if(lastElement && isBeforeElement(txt, lastElement)) continue;
     var s = sanitizeQuotes_(txt.getText());
     regexExtractDeclaration.lastIndex = 0;
     var r = new RegExp(regexExtractDeclaration);
@@ -146,11 +148,29 @@ function collectEnv_(doc, body, env) {
       var equalSign = m[3];
       var content = m[4];
       var textStartIndex = m.index + newline.length + name.length + equalSign.length;
-      var textEndIndex = textStartIndex + content.length;
-      var sourceType = RAW;
+      var dRanges;
+      var sourceType;
       if(content.length > 0 && content[0]=="(") {
         sourceType = RAWFORMULA;
+        dRanges = getFormulaOnMultipleParagraphs_(txt, textStartIndex);
+        content = "";
+        for(var d in dRanges) {
+          var dr = dRanges[d];
+          if(isTextRange(dr)) {
+            content = content + (content == "" ? "" : "\n") + dr.txt.getText().substring(dr.start, dr.endInclusive + 1);
+          } else {
+            content = content + (content == "" ? "" : "\n") + dr.element.editAsText().getText();
+          }
+        }
+        content = sanitizeQuotes_(content);
+      } else {
+        sourceType = RAW;
+        var textEndIndex = textStartIndex + content.length;
+        dRanges = [TextRange(txt, textStartIndex, textEndIndex - 1)]
       }
+      if(!dRanges) continue; // No end detected
+      var lastRange = dRanges[dRanges.length - 1];
+      lastElement = isTextRange(lastRange) ? lastRange.txt : lastRange.element;
       // Record this raw text's provenance.
       env =
         cons_({name: name,
@@ -162,7 +182,7 @@ function collectEnv_(doc, body, env) {
                                name: name,
                                sourceType: sourceType,
                                source: content,
-                               range: rangeFromPositions(doc, [TextRange(txt, textStartIndex, textEndIndex - 1)]),
+                               range: rangeFromPositions(doc, dRanges),
                                namedRange: undefined,
                                meta: undefined // Whitespace for unparsing in sidebar
                              },
@@ -279,6 +299,72 @@ function buildEnvJS_(env) {
   });
   env.cache = result;
   return result;
+}
+
+// Given the old formula and the new value, try to generate a new formula.
+// If fails, return false
+// update_: (Env, StringFormula) -> StringValue -> (Ok([Env (updated with flags), StringFormula]) | Err(msg))
+function update_(env, oldFormula) {
+  return jsFormulaCase(oldFormula, {
+    whitespaces: function(wsBefore, content, wsAfter) {
+      return function(newOutput) {
+        return resultCase(
+          update_(env, content)(newOutput), Err,
+          function(envX) {
+            return Ok([envX[0], wsBefore + envX[1] + wsAfter])
+          });
+      }},
+    string: function(string) {
+        var charDelim = string[0];
+        return function(newOutput) {
+          return Ok([env, toExpString(newOutput, charDelim)]);
+        } 
+      },
+    number: function(numberValue, numberString) {
+        return function(newOutput) {
+          return Ok([env, numberValue == newOutput ? numberString : "" + newOutput]);
+        }
+      },
+    boolean: function(boolValue) {
+        return function(newOutput) {
+          return Ok([env, "" + newOutput]);
+        }
+      },
+    parentheses: function(content) {
+        return function(newOutput) {
+          return resultCase(
+            update_(env, content)(newOutput), Err,
+            function(envX) {
+              return Ok([envX[0], "(" + envX[1] + ")"]);
+            });
+        };
+      },
+    variable: function(name) {
+        return function(newOutput) {
+          var newEnv = updateVar_(env, name, function(oldValue) {
+            return {v_: newOutput,
+                    vName_: typeof oldValue.vName_ != "undefined" ? newOutput : undefined,
+                    expr: oldValue.expr,
+                    env: oldValue.env};
+          });
+          return Ok([newEnv, name]);
+        };
+      },
+    operator: function(left, ws, op, right) {
+        return function(newOutput) {
+          return Err("Cannot back-propagate changes through operator " + op + " yet");
+        }
+      },
+    orElse: function(formula) {
+        return function(newOutput) {
+          return Err("could not update " + formula + " with " + newOutput + ", no rule found");
+        }
+      }
+  });
+}
+
+function testUpdate() {
+  Logger.log(update_(undefined, "/*a=*/\"Hi\"")("Hai"));
 }
 
 
@@ -570,20 +656,23 @@ function reorderFormulaRanges_(doc, body) {
       namedRange.remove();
       toAdd = true;
     });
-  toSort.sort(function(e1, e2) {
-    var c = comparePaths(e1[2], e2[2]);
-    if(c != 0) return c;
-    if(e1.length == 4 && e2.length == 4)
-      return e1[3] - e2[3];
-    else
-      return 0;
-  });
+  toSort.sort(sortingFunction);
   for(var i in toSort) {
     var x = toSort[i];
     var fullname = x[0];
     var range = x[1];
     doc.addNamedRange(fullname, range);
   }
+}
+
+// Sorts arrays which contain ranges in third position, and possibly a text index at fourth position
+function sortingFunction(e1, e2) {
+  var c = comparePaths(e1[2], e2[2]);
+  if(c != 0) return c;
+  if(e1.length == 4 && e2.length == 4)
+    return e1[3] - e2[3];
+  else
+    return 0;
 }
 
 /* Only in case something goes wrong ! All formulas would be lost
@@ -1882,4 +1971,119 @@ function setDocProperty(name, value, oldValue) {
   }
   p.setProperty(name, value);
   return value;
+}
+
+function hideDefinitions(options, docProperties, doc, body) {
+  options = options || defaultOptions;
+  docProperties = docProperties || getDocProperties();
+  //var docProperties = PropertiesService.getDocumentProperties();
+  var doc = doc || DocumentApp.getActiveDocument();
+  var body = body || doc.getBody();
+  var namedRanges = doc.getNamedRanges(DEFINITION_PARAGRAPHS);
+  // Take everything marked as a definition paragraph, including comments in between.
+  var error = "";
+  var hiddenAgain = "";
+  var moved = [];
+  foreachNamedRange_(
+    namedRanges,
+    function(name, range, namedRange) {
+      // Everything between the leftmost range and the rightmost range should be added.
+      var toSort = [];
+      foreachDRange_(
+        range,
+        function(txt, start, endInclusive, rangeElement) {
+          toSort.push([name, rangeElement, getPathUntilBody_(txt), start]);
+        },
+        function(element, rangeElement) {
+          toSort.push([name, rangeElement, getPathUntilBody_(element)]);
+        });
+      toSort.sort(sortingFunction);
+      if(!toSort.length) return;
+      var min = toSort[0];
+      var max = toSort[toSort.length - 1];
+      var minPath = min[2];
+      var maxPath = max[2];
+      var minElement = min[1].getElement();
+      minElement = minElement.getType() == DocumentApp.ElementType.TEXT ? minElement.getParent() : minElement;
+      var tmp = minElement;
+      var prev;
+      var toRemove = [];
+      while(tmp && comparePaths(getPathUntilBody_(tmp), maxPath) <= 0) {
+        prev = tmp;
+        toRemove.push(tmp);
+        var s = tmp.getText();
+        hiddenAgain = hiddenAgain + (hiddenAgain == "" || s == "" ? "" : "\n") + s;
+        tmp = tmp.getNextSibling();
+      }
+      for(var t in toRemove) {
+        try {
+          toRemove[t].removeFromParent();
+        } catch(err) {
+          error = error + (error == "" || err == "" ? "" : "\n") + err;
+        }
+      }
+      namedRange.remove();
+    });
+  var acc = ""; // New definitions
+  var env = collectEnv_(doc, body);
+  var sidebarEnv = docProperties.sidebarEnv; // docProperties.getProperty("sidebarEnv");
+  List.foreach(env, function(binding) {
+    if(!binding.value.expr) return;
+    var range = binding.value.expr.range;
+    if(range) {
+      acc = binding.name + " = " + binding.value.expr.source + (acc == "" ? "" : "\n") + acc;
+      moved.unshift(binding.name);
+      try {
+      foreachDRange_(range,
+                     function(txt, start, endInclusive) {
+                       txt.getParent().removeFromParent();
+                     },
+                     function(element) {
+                       element.removeFromParent();
+                     });
+      } catch(e) {
+        error += " Could not delete definition for '" + binding.name +"': " + e + ". Please delete it manually";
+      }
+    }
+  });
+  var acc = hiddenAgain + (hiddenAgain == "" || acc == "" ? "" : "\n") + acc;
+  var newSidebarEnv = sidebarEnv + (sidebarEnv == "" || acc == "" ? "" : "\n") + acc;
+  PropertiesService.getDocumentProperties().setProperty("sidebarEnv", newSidebarEnv);
+  var feedback = moved.length ? "Moved the definitions of " + moved.join(", ") + " to above. " : "";
+  return {feedback: feedback + error, newSidebarEnv: newSidebarEnv};
+}
+
+function showDefinitions(options, docProperties, doc, body) {
+  options = options || defaultOptions;
+  docProperties = docProperties || getDocProperties();
+  //var docProperties = PropertiesService.getDocumentProperties();
+  var doc = doc || DocumentApp.getActiveDocument();
+  var body = body || doc.getBody();
+  var sidebarEnv = docProperties.sidebarEnv; // docProperties.getProperty("sidebarEnv");
+  if(sidebarEnv.trim() == "") {
+    return {feedback: "Nothing to move."};
+  }
+  var lines = sidebarEnv.split("\n");
+  var rangeBuilder = doc.newRange();
+  var lastPar = undefined;
+  for(var i = lines.length - 1; i >= 0; i--) {
+    var line = lines[i];
+    var par = body.insertParagraph(0, line);
+    lastPar = lastPar || par;
+    var style = {};
+    style[DocumentApp.Attribute.FONT_FAMILY] = 'Consolas';
+    style[DocumentApp.Attribute.FONT_SIZE] = 14;    
+    // Append a plain paragraph.
+    
+    // Apply the custom style.
+    par.setAttributes(style);
+    rangeBuilder.addElement(par);
+  }
+  if(lastPar) {
+    lastPar.appendPageBreak();
+  }
+  
+  var range = rangeBuilder.build();
+  doc.addNamedRange(DEFINITION_PARAGRAPHS, range);
+  return {feedback: "Done.", newSidebarEnv: ""};
 }

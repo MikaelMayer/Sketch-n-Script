@@ -44,6 +44,7 @@
       textarea#sidebarEnv {
         width: 100%;
         min-height: 2em;
+        font-family: "Consolas", monospace;
       }
       div.righttitle {
         right: 1em;
@@ -97,7 +98,9 @@
               >Display formulas</button>
           </div>
           <div class="section">
-            <textarea id="sidebarEnv" name="docProperties" placeholder="Write further name definitions here" title="'x = Raw Text' or : 'x = (JavaScript)'"></textarea>
+            <textarea id="sidebarEnv" name="docProperties" placeholder="Write hidden name definitions here" title="'x = Raw Text' or : 'x = (JavaScript)'"></textarea>
+            <button id="hidedefs" title="Hide definitions from doc by putting them in the textarea above">Hide defs</button>
+            <button id="showdefs" title="Put definitions above back to doc, in a separate page">Show defs in doc</button>
           </div>
           <hr>
           <div class="section">
@@ -230,6 +233,8 @@
         });
         $('#evaluate-formulas').click(launch("evaluateFormulas", "Computing formulas...", handleScriptFeedback));
         $('#reveal-formulas').click(launch("revealFormulas", "Revealing formulas...", handleScriptFeedback));
+        $('#hidedefs').click(launch("hideDefinitions", "Moving definitions from the doc to above...", handleScriptFeedback));
+        $('#showdefs').click(launch("showDefinitions", "Moving definitions from above to the doc...", handleScriptFeedback));
         $("[name=userProperties]").change(saveUserProperty);
         $("[name=docProperties]").change(saveDocProperty);
         $("#make-selection-formula").click(launch("nameSelection", "Naming selection...", handleScriptFeedback));
@@ -281,7 +286,7 @@
       
       function handleScriptFeedback(result) {
         if(!result) return;
-        if(result.newSidebarEnv) {
+        if(typeof result.newSidebarEnv == "string") {
           if(result.newSidebarEnv != docProperties.sidebarEnv) {
             $("#sidebarEnv").val(result.newSidebarEnv);
             docProperties.sidebarEnv = result.newSidebarEnv;

@@ -239,6 +239,69 @@ function elementToObject_(element) {
   }
 }
 
+// Returns a list of DRange for a formula that starts with ( and ends with )
+// [TextRange(txt, textStartIndex, textEndIndex - 1)]
+function getFormulaOnMultipleParagraphs_(txt, start) {
+  var string = txt.getText();
+  string = sanitizeQuotes_(string);
+  var delimiters = [];
+  var endOffsetExclusive = start;
+  var ranges = [];
+  var currentStart = start;
+  var toInclude = "TEXT";
+  var uncle;
+  var cousin;
+  
+  function maybeNextTxt() {
+    if(endOffsetExclusive == string.length) {
+      if(endOffsetExclusive > currentStart) {
+        if(toInclude == "TEXT") {
+          ranges.push(TextRange(txt, currentStart, endOffsetExclusive - 1));
+        } else {
+          ranges.push(Element(toInclude));
+        }
+      }
+      if(txt.getNextSibling() && txt.getNextSibling().getType() == DocumentApp.ElementType.TEXT) {
+        txt = txt.getNextSibling();
+      } else {
+        uncle = txt.getParent().getNextSibling();
+        cousin = uncle && uncle.getChild(0);
+        while(!cousin || cousin.getType() != DocumentApp.ElementType.TEXT) {
+          uncle = uncle.getNextSibling();
+          cousin = uncle && uncle.getChild(0);
+        }
+        if(cousin) {
+          txt = cousin;
+          toInclude = uncle;
+        } else {
+          txt = undefined;
+        }
+      }
+      if(txt) { // Let's continue parsing
+        currentStart = 0;
+        endOffsetExclusive = 0;
+        string = sanitizeQuotes_(txt.getText());
+      }
+    }
+  }
+  maybeNextTxt();
+  
+  while(txt && endOffsetExclusive < string.length) {
+    var [endOffsetExclusive, _] = nextOffsetDelimiters_(string, endOffsetExclusive, delimiters);
+    if(delimiters.length == 0) {
+      break;
+    }
+    maybeNextTxt();
+  }
+  if(delimiters.length > 0) {
+    return undefined;
+  }
+  if(txt && endOffsetExclusive > currentStart) {
+    ranges.push(TextRange(txt, currentStart, endOffsetExclusive - 1));
+  }
+  return ranges;
+}
+
 function testInsertion() {
   var doc = DocumentApp.getActiveDocument();
   var body = doc.getBody();
@@ -255,5 +318,19 @@ function testBodyStructure() {
   var body = doc.getBody();
   var bodyObject = elementToObject_(doc.getBody());
   Logger.log(uneval_(bodyObject));
+  
+  /*var txt = doc.getBody().editAsText();
+  var search = txt.findText("world[\\s\\S]*hi");
+  if(search) {
+    Logger.log(search.getElement().getText());
+    Logger.log(search.getStartOffset());
+    Logger.log(search.getEndOffsetInclusive());
+  }
+  search = txt.findText("world[\\s\\S]*hi", search);
+  if(search) {
+    Logger.log(search.getElement().getText());
+    Logger.log(search.getStartOffset());
+    Logger.log(search.getEndOffsetInclusive());
+  }*/
 }
 /**/
