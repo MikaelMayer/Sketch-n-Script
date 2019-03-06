@@ -2,6 +2,15 @@
  * @OnlyCurrentDoc  Limits the script to only accessing the current document.
  */
 
+function doIt() {
+  Logger.log(uneval_(jsparser().parse("var x = 1;\n(function(y) { return 2 + y })(x)")));
+}
+  
+function dontDoIt() {
+  Logger.log("This should be faster");
+}
+
+
 // https://developers.google.com/gsuite/add-ons/how-tos/publish-for-domains#before_you_publish
 // 
 
@@ -1041,6 +1050,9 @@ function uneval_(x) {
   }
   if(typeof x == "number" || typeof x == "boolean") {
     return "" + x;
+  }
+  if(typeof x == "object" && x == null) {
+    return "null";
   }
   if(typeof x == "object" && typeof x.length == "number") { // Arrays
     var result = [];

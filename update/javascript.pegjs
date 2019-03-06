@@ -19,8 +19,9 @@
     return optional ? optional[index] : null;
   }
 
+  // extractList: List (Element) -> ((x: Number) -> List (Element[x]) && (x: Element -> B) -> List B)
   function extractList(list, index) {
-    return list.map(function(element) { return element[index]; });
+    return list.map(function(element) { return typeof index == "function" ? index(element): element[index]; });
   }
 
   function buildList(head, tail, index) {
@@ -31,7 +32,9 @@
     return tail.reduce(function(result, element) {
       return {
         type: "BinaryExpression",
+        wsBeforeOp: element[0],
         operator: element[1],
+        wsAfterOp: element[2],
         left: result,
         right: element[3]
       };
@@ -42,7 +45,9 @@
     return tail.reduce(function(result, element) {
       return {
         type: "LogicalExpression",
+        wsBeforeOp: element[0],
         operator: element[1],
+        wsAfterOp: element[2],
         left: result,
         right: element[3]
       };
@@ -52,10 +57,20 @@
   function optionalList(value) {
     return value !== null ? value : [];
   }
+  
+  function extractCommaBefore(tailElem) {
+    return {wsBeforeComma: tailElem[0], comma: tailElem[1], wsAfterComma: tailElem[2], expr: tailElem[3]}
+  }
+  function extractSpaceBefore(tailElem) {
+    return {wsBefore: tailElem[0], expr: tailElem[1]}
+  }
 }
 
 Start
-  = __ program:Program __ { return program; }
+  = wsBefore:__ program:Program wsAfter:__ {
+    program.wsBefore = wsBefore;
+    program.wsAfter = wsAfter;
+    return program; }
 
 // ----- A.1 Lexical Grammar -----
 
@@ -86,13 +101,13 @@ Comment "comment"
   / SingleLineComment
 
 MultiLineComment
-  = "/*" (!"*/" SourceCharacter)* "*/"
+  = open:"/*" inside:(!"*/" SourceCharacter)* close:"*/" {return open+ extractList(inside, 1).join("")+ close; }
 
 MultiLineCommentNoLineTerminator
-  = "/*" (!("*/" / LineTerminator) SourceCharacter)* "*/"
+  = open:"/*" inside:(!("*/" / LineTerminator) SourceCharacter)* close:"*/" {return open+ extractList(inside, 1).join("")+ close; }
 
 SingleLineComment
-  = "//" (!LineTerminator SourceCharacter)*
+  = open:"//" inside:(!LineTerminator SourceCharacter)* {return open+ extractList(inside, 1).join("") }
 
 Identifier
   = !ReservedWord name:IdentifierName { return name; }
@@ -442,21 +457,21 @@ VoidToken       = "void"       !IdentifierPart
 WhileToken      = "while"      !IdentifierPart
 WithToken       = "with"       !IdentifierPart
 
-// Skipped
+// Not skipped
 
 __
-  = (WhiteSpace / LineTerminatorSequence / Comment)*
+  = ws:$(WhiteSpace / LineTerminatorSequence / Comment)* { return ws; }
 
 _
-  = (WhiteSpace / MultiLineCommentNoLineTerminator)*
+  = ws:$(WhiteSpace / MultiLineCommentNoLineTerminator)* { return ws; }
 
 // Automatic Semicolon Insertion
 
 EOS
-  = __ ";"
-  / _ SingleLineComment? LineTerminatorSequence
-  / _ &"}"
-  / __ EOF
+  = ws:__ co:";" { return ws + co; }
+  / ws:_ slc:SingleLineComment? lts:LineTerminatorSequence { return ws + (slc ? slc : "") + lts; }
+  / ws:_ &"}" { return ws; }
+  / ws:__ EOF  { return ws; }
 
 EOF
   = !.
@@ -473,23 +488,32 @@ PrimaryExpression
   / Literal
   / ArrayLiteral
   / ObjectLiteral
-  / "(" __ expression:Expression __ ")" { return expression; }
+  / "(" ws0:__ expression:Expression ws1:__ ")" { 
+    expression.wsAfterOpening = ws0;
+    expression.wsBeforeClosing = ws1;
+    return expression; }
 
 ArrayLiteral
-  = "[" __ elision:(Elision __)? "]" {
+  = "[" ws0:__ elision:(Elision __)? "]" {
       return {
+        wsAfterOpening: ws0,
         type: "ArrayExpression",
         elements: optionalList(extractOptional(elision, 0))
       };
     }
-  / "[" __ elements:ElementList __ "]" {
+  / "[" ws0:__ elements:ElementList ws1:__ "]" {
       return {
+        wsAfterOpening: ws0,
+        wsBeforeClosing: ws1,
         type: "ArrayExpression",
         elements: elements
       };
     }
-  / "[" __ elements:ElementList __ "," __ elision:(Elision __)? "]" {
+  / "[" ws0:__ elements:ElementList ws1:__ "," ws2:__ elision:(Elision __)? "]" {
       return {
+        wsAfterOpening: ws0,
+        wsBeforeComma: ws1,
+        wsAfterComma: ws1,
         type: "ArrayExpression",
         elements: elements.concat(optionalList(extractOptional(elision, 0)))
       };
@@ -650,9 +674,10 @@ LeftHandSideExpression
   / NewExpression
 
 PostfixExpression
-  = argument:LeftHandSideExpression _ operator:PostfixOperator {
+  = argument:LeftHandSideExpression wsBeforeOp:_ operator:PostfixOperator {
       return {
         type: "UpdateExpression",
+        wsBeforeOp: wsBeforeOp,
         operator: operator,
         argument: argument,
         prefix: false
@@ -666,14 +691,14 @@ PostfixOperator
 
 UnaryExpression
   = PostfixExpression
-  / operator:UnaryOperator __ argument:UnaryExpression {
+  / operator:UnaryOperator wsAfterOp:__ argument:UnaryExpression {
       var type = (operator === "++" || operator === "--")
         ? "UpdateExpression"
         : "UnaryExpression";
 
       return {
         type: type,
-        operator: operator,
+        operator: operator, wsAfterOp: wsAfterOp,
         argument: argument,
         prefix: true
       };
@@ -854,24 +879,28 @@ ConditionalExpressionNoIn
   / LogicalORExpressionNoIn
 
 AssignmentExpression
-  = left:LeftHandSideExpression __
-    "=" !"=" __
+  = left:LeftHandSideExpression wsBeforeOp:__
+    "=" !"=" wsAfterOp:__
     right:AssignmentExpression
     {
       return {
         type: "AssignmentExpression",
+        wsBeforeOp: wsBeforeOp,
         operator: "=",
+        wsAfterOp: wsAfterOp,
         left: left,
         right: right
       };
     }
-  / left:LeftHandSideExpression __
-    operator:AssignmentOperator __
+  / left:LeftHandSideExpression wsBeforeOp:__
+    operator:AssignmentOperator wsAfterOp:__
     right:AssignmentExpression
     {
       return {
         type: "AssignmentExpression",
+        wsBeforeOp: wsBeforeOp,
         operator: operator,
+        wsAfterOp: wsAfterOp,
         left: left,
         right: right
       };
@@ -879,24 +908,28 @@ AssignmentExpression
   / ConditionalExpression
 
 AssignmentExpressionNoIn
-  = left:LeftHandSideExpression __
-    "=" !"=" __
+  = left:LeftHandSideExpression wsBeforeOp:__
+    "=" !"=" wsAfterOp:__
     right:AssignmentExpressionNoIn
     {
       return {
         type: "AssignmentExpression",
+        wsBeforeOp: wsBeforeOp,
         operator: "=",
+        wsAfterOp: wsAfterOp,
         left: left,
         right: right
       };
     }
-  / left:LeftHandSideExpression __
-    operator:AssignmentOperator __
+  / left:LeftHandSideExpression wsBeforeOp:__
+    operator:AssignmentOperator wsAfterOp:__
     right:AssignmentExpressionNoIn
     {
       return {
         type: "AssignmentExpression",
+        wsBeforeOp: wsBeforeOp,
         operator: operator,
+        wsAfterOp: wsAfterOp,
         left: left,
         right: right
       };
@@ -918,16 +951,20 @@ AssignmentOperator
 
 Expression
   = head:AssignmentExpression tail:(__ "," __ AssignmentExpression)* {
+      var initHead = {wsBeforeComma: "", comma: "", wsAfterComma: "", expr: head};
       return tail.length > 0
-        ? { type: "SequenceExpression", expressions: buildList(head, tail, 3) }
-        : head;
+        ? { type: "SequenceExpression", expressions: buildList(
+               initHead, tail, extractCommaBefore) }
+        : initHead;
     }
 
 ExpressionNoIn
   = head:AssignmentExpressionNoIn tail:(__ "," __ AssignmentExpressionNoIn)* {
+      var initHead = {wsBeforeComma: "", comma: "", wsAfterComma: "", expr: head};
       return tail.length > 0
-        ? { type: "SequenceExpression", expressions: buildList(head, tail, 3) }
-        : head;
+        ? { type: "SequenceExpression", expressions: buildList(
+              initHead, tail, extractCommaBefore) }
+        : initHead;
     }
 
 // ----- A.4 Statements -----
@@ -950,33 +987,42 @@ Statement
   / DebuggerStatement
 
 Block
-  = "{" __ body:(StatementList __)? "}" {
+  = "{" ws0:__ body:(StatementList __)? "}" {
       return {
+        wsAFterOpening: ws0errToError,
         type: "BlockStatement",
-        body: optionalList(extractOptional(body, 0))
+        body: optionalList(extractOptional(body, 0)),
+        wsBeforeClosing: extractOptional(body, 1) || ""
       };
     }
 
 StatementList
-  = head:Statement tail:(__ Statement)* { return buildList(head, tail, 1); }
+  = head:Statement tail:(__ Statement)* {
+    var initHead = {wsBefore: "", expr: head};
+    return buildList(initHead, tail, extractSpaceBefore); }
 
 VariableStatement
-  = VarToken __ declarations:VariableDeclarationList EOS {
+  = varToken:VarToken wsBefore:__ declarations:VariableDeclarationList wsAfter:EOS {
       return {
+        varToken: varToken,
+        wsBefore: wsBefore,
         type: "VariableDeclaration",
         declarations: declarations,
-        kind: "var"
+        kind: "var",
+        wsAfter: wsAfter
       };
     }
 
 VariableDeclarationList
   = head:VariableDeclaration tail:(__ "," __ VariableDeclaration)* {
-      return buildList(head, tail, 3);
+      var initHead = {wsBefore: "", comma: "", wsAfterComma: "", expr: head};
+      return buildList(initHead, tail, extractCommaBefore)
     }
 
 VariableDeclarationListNoIn
   = head:VariableDeclarationNoIn tail:(__ "," __ VariableDeclarationNoIn)* {
-      return buildList(head, tail, 3);
+      var initHead = {wsBefore: "", comma: "", wsAfterComma: "", expr: head};
+      return buildList(initHead, tail, extractCommaBefore);
     }
 
 VariableDeclaration
@@ -984,6 +1030,7 @@ VariableDeclaration
       return {
         type: "VariableDeclarator",
         id: id,
+        wsBeforeEq: extractOptional(init, 0) || "",
         init: extractOptional(init, 1)
       };
     }
@@ -993,44 +1040,56 @@ VariableDeclarationNoIn
       return {
         type: "VariableDeclarator",
         id: id,
+        wsBeforeEq: extractOptional(init, 0) || "",
         init: extractOptional(init, 1)
       };
     }
 
 Initialiser
-  = "=" !"=" __ expression:AssignmentExpression { return expression; }
+  = eq:"=" !"=" wsAfterEq:__ expression:AssignmentExpression { return {eq: eq, wsAfterEq: wsAfterEq, expr: expression}; }
 
 InitialiserNoIn
-  = "=" !"=" __ expression:AssignmentExpressionNoIn { return expression; }
+  = eq:"=" !"=" wsAfterEq:__ expression:AssignmentExpressionNoIn { return {eq: eq, wsAfterEq: wsAfterEq, expr: expression}; }
 
 EmptyStatement
-  = ";" { return { type: "EmptyStatement" }; }
+  = semicolon:";" { return { type: "EmptyStatement", content: semicolon }; }
 
 ExpressionStatement
-  = !("{" / FunctionToken) expression:Expression EOS {
+  = !("{" / FunctionToken) expression:Expression wsAfter:EOS {
       return {
         type: "ExpressionStatement",
-        expression: expression
+        expression: expression,
+        wsAfter: wsAfter
       };
     }
 
 IfStatement
-  = IfToken __ "(" __ test:Expression __ ")" __
-    consequent:Statement __
-    ElseToken __
+  = IfToken wsAfterIf:__ "(" wsAfterOpening:__ test:Expression wsBeforeClosing:__ ")" wsAfterCond:__
+    consequent:Statement wsBeforeElse:__
+    ElseToken wsAfterElse:__
     alternate:Statement
     {
       return {
         type: "IfStatement",
+        wsAfterIf: wsAfterIf,
+        wsAfterOpening: wsAfterOpening,
+        wsBeforeClosing: wsBeforeClosing,
+        wsAfterCond: wsAfterCond,
+        wsBeforeElse: wsBeforeElse,
+        wsAfterElse: wsAfterElse,
         test: test,
         consequent: consequent,
         alternate: alternate
       };
     }
-  / IfToken __ "(" __ test:Expression __ ")" __
+  / IfToken wsAfterIf:__ "(" wsAfterOpening:__ test:Expression wsBeforeClosing:__ ")" wsAfterCond:__
     consequent:Statement {
       return {
         type: "IfStatement",
+        wsAfterIf: wsAfterIf,
+        wsAfterOpening: wsAfterOpening,
+        wsBeforeClosing: wsBeforeClosing,
+        wsAfterCond: wsAfterCond,
         test: test,
         consequent: consequent,
         alternate: null
@@ -1038,241 +1097,274 @@ IfStatement
     }
 
 IterationStatement
-  = DoToken __
-    body:Statement __
-    WhileToken __ "(" __ test:Expression __ ")" EOS
-    { return { type: "DoWhileStatement", body: body, test: test }; }
-  / WhileToken __ "(" __ test:Expression __ ")" __
+  = DoToken wsAfterDo:__
+    body:Statement wsAfterBody:__
+    WhileToken wsAfterWhile:__ "(" wsAfterOpening:__ test:Expression wsBeforeClosing:__ ")" EOS
+    { return {
+       type: "DoWhileStatement", wsAfterDo: wsAfterDo,
+       body: body, wsAfterBody: wsAfterBody, wsAfterWhile: wsAfterWhile, wsAfterOpening: wsAfterOpening,
+       test: test, wsBeforeClosing: wsBeforeClosing }; }
+  / WhileToken wsAfterWhile:__ "(" wsAfterOpening:__ test:Expression wsBeforeClosing:__ ")" wsBeforeBody:__
     body:Statement
-    { return { type: "WhileStatement", test: test, body: body }; }
-  / ForToken __
-    "(" __
-    init:(ExpressionNoIn __)? ";" __
-    test:(Expression __)? ";" __
+    { return {
+      type: "WhileStatement", wsAfterWhile: wsAfterWhile, wsAfterOpening: wsAfterOpening,
+      test: test, wsBeforeClosing: wsBeforeClosing, wsBeforeBody: wsBeforeBody, body: body }; }
+  / ForToken wsAfterFor:__
+    "(" wsAfterOpening:__
+    init:(ExpressionNoIn __)? ";" wsAfterSemicolon1:__
+    test:(Expression __)? ";" wsAfterSemicolon2:__
     update:(Expression __)?
-    ")" __
+    ")" wsAfterClosing:__
     body:Statement
     {
       return {
-        type: "ForStatement",
-        init: extractOptional(init, 0),
-        test: extractOptional(test, 0),
-        update: extractOptional(update, 0),
+        type: "ForStatement", wsAfterFor: wsAfterFor, wsAfterOpening: wsAfterOpening,
+        init: extractOptional(init, 0), wsBeforeSemicolon1: extractOptional(init, 1), wsAfterSemicolon1: wsAfterSemicolon1,
+        test: extractOptional(test, 0), wsBeforeSemicolon2: extractOptional(test, 1), wsAfterSemicolon2: wsAfterSemicolon2,
+        update: extractOptional(update, 0), wsBeforeClosing: extractOptional(update, 1), wsAfterClosing: wsAfterClosing,
         body: body
       };
     }
-  / ForToken __
-    "(" __
-    VarToken __ declarations:VariableDeclarationListNoIn __ ";" __
-    test:(Expression __)? ";" __
+  / ForToken wsAfterFor:__
+    "(" wsAfterOpening:__
+    VarToken wsAfterVar:__ declarations:VariableDeclarationListNoIn wsBeforeSemicolon1:__ ";" wsAfterSemicolon1:__
+    test:(Expression __)? ";" wsAfterSemicolon2:__
     update:(Expression __)?
-    ")" __
+    ")" wsAfterClosing:__
     body:Statement
     {
       return {
-        type: "ForStatement",
+        type: "ForStatement", wsAfterFor: wsAfterFor, wsAfterOpening: wsAfterOpening,
         init: {
-          type: "VariableDeclaration",
+          type: "VariableDeclaration", wsAfterVar: wsAfterVar,
           declarations: declarations,
           kind: "var"
-        },
-        test: extractOptional(test, 0),
-        update: extractOptional(update, 0),
+        }, wsBeforeSemicolon1: wsBeforeSemicolon1, wsAfterSemicolon1: wsAfterSemicolon1,
+        test: extractOptional(test, 0), wsBeforeSemicolon2: extractOptional(test, 1), wsAfterSemicolon2: wsAfterSemicolon2,
+        update: extractOptional(update, 0), wsBeforeClosing: extractOptional(update, 1), wsAfterClosing: wsAfterClosing,
         body: body
       };
     }
-  / ForToken __
-    "(" __
-    left:LeftHandSideExpression __
-    InToken __
-    right:Expression __
-    ")" __
+  / ForToken wsAfterFor:__
+    "(" wsAfterOpening:__
+    left:LeftHandSideExpression wsBeforeIn:__
+    InToken wsAfterIn:__
+    right:Expression wsBeforeClosing:__
+    ")" wsAfterClosing:__
     body:Statement
     {
       return {
-        type: "ForInStatement",
-        left: left,
-        right: right,
+        type: "ForInStatement", wsAfterFor: wsAfterFor, wsAfterOpening: wsAfterOpening,
+        left: left, wsBeforeIn: wsBeforeIn, wsAfterIn:wsAfterIn,
+        right: right, wsBeforeClosing: wsBeforeClosing, wsAfterClosing: wsAfterClosing,
         body: body
       };
     }
-  / ForToken __
-    "(" __
-    VarToken __ declarations:VariableDeclarationListNoIn __
-    InToken __
-    right:Expression __
-    ")" __
+  / ForToken wsAfterFor:__
+    "(" wsAfterOpening:__
+    VarToken wsAfterVar:__ declarations:VariableDeclarationListNoIn wsBeforeIn:__
+    InToken wsAfterIn:__
+    right:Expression wsBeforeClosing:__
+    ")" wsAfterClosing:__
     body:Statement
     {
       return {
-        type: "ForInStatement",
+        type: "ForInStatement", wsAfterFor: wsAfterFor, wsAfterOpening: wsAfterOpening,
         left: {
           type: "VariableDeclaration",
           declarations: declarations,
           kind: "var"
-        },
-        right: right,
+        }, wsBeforeIn: wsBeforeIn, wsAfterIn:wsAfterIn,
+        right: right, wsBeforeClosing: wsBeforeClosing, wsAfterClosing: wsAfterClosing,
         body: body
       };
     }
 
 ContinueStatement
-  = ContinueToken EOS {
-      return { type: "ContinueStatement", label: null };
+  = ContinueToken wsAfter:EOS {
+      return { type: "ContinueStatement", label: null, wsAfter: wsAfter };
     }
-  / ContinueToken _ label:Identifier EOS {
-      return { type: "ContinueStatement", label: label };
+  / ContinueToken wsBeforeLabel:_ label:Identifier wsAfter:EOS {
+      return { type: "ContinueStatement", label: label, wsBeforeLabel: wsBeforeLabel, wsAfter: wsAfter };
     }
 
 BreakStatement
-  = BreakToken EOS {
-      return { type: "BreakStatement", label: null };
+  = BreakToken wsAfter:EOS {
+      return { type: "BreakStatement", label: null, wsAfter: wsAfter };
     }
-  / BreakToken _ label:Identifier EOS {
-      return { type: "BreakStatement", label: label };
+  / BreakToken wsBeforeLabel:_ label:Identifier wsAfter:EOS {
+      return { type: "BreakStatement", label: label, wsBeforeLabel: wsBeforeLabel, wsAfter: wsAfter };
     }
 
 ReturnStatement
-  = ReturnToken EOS {
-      return { type: "ReturnStatement", argument: null };
+  = ReturnToken wsAfter:EOS {
+      return { type: "ReturnStatement", argument: null, wsAfter: wsAfter };
     }
-  / ReturnToken _ argument:Expression EOS {
-      return { type: "ReturnStatement", argument: argument };
+  / ReturnToken wsBeforeArgument:_ argument:Expression wsAfter:EOS {
+      return { type: "ReturnStatement", argument: argument, wsBeforeArgument: wsBeforeArgument, wsAfter: wsAfter };
     }
 
 WithStatement
-  = WithToken __ "(" __ object:Expression __ ")" __
+  = WithToken wsBeforeOpening:__ "(" wsAfterOpening:__ object:Expression wsBeforeClosing:__ ")" wsAfterClosing:__
     body:Statement
-    { return { type: "WithStatement", object: object, body: body }; }
+    { return {
+        type: "WithStatement", wsBeforeOpening: wsBeforeOpening, wsAfterOpening: wsAfterOpening,
+        object: object, wsBeforeClosing: wsBeforeClosing, wsAfterClosing: wsAfterClosing,
+        body: body }; }
 
 SwitchStatement
-  = SwitchToken __ "(" __ discriminant:Expression __ ")" __
+  = SwitchToken wsBeforeOpening:__ "(" wsAfterOpening:__ discriminant:Expression wsBeforeClosing:__ ")" wsAfterClosing:__
     cases:CaseBlock
     {
       return {
-        type: "SwitchStatement",
-        discriminant: discriminant,
+        type: "SwitchStatement", wsBeforeOpening: wsBeforeOpening, wsAfterOpening: wsAfterOpening,
+        discriminant: discriminant, wsBeforeClosing: wsBeforeClosing, wsAfterClosing: wsAfterClosing,
         cases: cases
       };
     }
 
 CaseBlock
-  = "{" __ clauses:(CaseClauses __)? "}" {
-      return optionalList(extractOptional(clauses, 0));
+  = "{" wsAfterOpening:__ clauses:(CaseClauses __)? "}" {
+      return { wsAfterOpening: wsAfterOpening,
+        clauses: optionalList(extractOptional(clauses, 0)),
+        wsBeforeClosing: extractOptional(clauses, 1) };
     }
-  / "{" __
+  / "{" wsAfterOpening:__
     before:(CaseClauses __)?
-    default_:DefaultClause __
+    default_:DefaultClause wsAfterDefault:__
     after:(CaseClauses __)? "}"
     {
-      return optionalList(extractOptional(before, 0))
-        .concat(default_)
-        .concat(optionalList(extractOptional(after, 0)));
+      return {wsAfterOpening: wsAfterOpening,
+        wsBeforeDefault: extractOptional(before, 1),
+        wsAfterDefault: wsAfterDefault,
+        clauses:
+          optionalList(extractOptional(before, 0))
+          .concat(default_)
+          .concat(optionalList(extractOptional(after, 0))),
+        wsBeforeClosing: extractOptional(after, 1)
+        };
     }
 
 CaseClauses
-  = head:CaseClause tail:(__ CaseClause)* { return buildList(head, tail, 1); }
+  = head:CaseClause tail:(__ CaseClause)* { 
+    var initHead = { wsBefore: "", expr: head };
+    return buildList(initHead, tail, extractSpaceBefore); }
 
 CaseClause
-  = CaseToken __ test:Expression __ ":" consequent:(__ StatementList)? {
+  = CaseToken wsAfterCase:__ test:Expression wsBeforeColon:__ ":" consequent:(__ StatementList)? {
       return {
         type: "SwitchCase",
+        wsAfterCase: wsAfterCase,
         test: test,
+        wsBeforeColon: wsBeforeColon,
+        wsAfterColon: extractOptional(consequent, 0) || "",
         consequent: optionalList(extractOptional(consequent, 1))
       };
     }
 
 DefaultClause
-  = DefaultToken __ ":" consequent:(__ StatementList)? {
+  = DefaultToken wsBeforeColon:__ ":" consequent:(__ StatementList)? {
       return {
         type: "SwitchCase",
+        wsBeforeColon: wsBeforeColon,
         test: null,
+        wsAfterColon: extractOptional(consequent, 0) || "",
         consequent: optionalList(extractOptional(consequent, 1))
       };
     }
 
 LabelledStatement
-  = label:Identifier __ ":" __ body:Statement {
-      return { type: "LabeledStatement", label: label, body: body };
+  = label:Identifier wsBeforeColon:__ ":" wsAfterColon:__ body:Statement {
+      return {
+        type: "LabeledStatement",
+        label: label, wsBeforeColon: wsBeforeColon, wsAfterColon: wsAfterColon,
+        body: body };
     }
 
 ThrowStatement
-  = ThrowToken _ argument:Expression EOS {
-      return { type: "ThrowStatement", argument: argument };
+  = ThrowToken wsAfterThrow:_ argument:Expression wsAfterArgument:EOS {
+      return {
+        type: "ThrowStatement", wsAfterThrow: wsAfterThrow,
+        argument: argument, wsAfterArgument: wsAfterArgument };
     }
 
 TryStatement
-  = TryToken __ block:Block __ handler:Catch __ finalizer:Finally {
+  = TryToken wsAfterTry:__ block:Block wsBeforeCatch:__ handler:Catch wsBeforeFinally:__ finalizer:Finally {
       return {
-        type: "TryStatement",
-        block: block,
-        handler: handler,
+        type: "TryStatement", wsAfterTry: wsAfterTry, 
+        block: block, wsBeforeCatch: wsBeforeCatch,
+        handler: handler, wsBeforeFinally: wsBeforeFinally,
         finalizer: finalizer
       };
     }
-  / TryToken __ block:Block __ handler:Catch {
+  / TryToken wsAfterTry:__ block:Block wsBeforeCatch:__ handler:Catch {
       return {
-        type: "TryStatement",
-        block: block,
+        type: "TryStatement", wsAfterTry: wsAfterTry, 
+        block: block, wsBeforeCatch: wsBeforeCatch,
         handler: handler,
         finalizer: null
       };
     }
-  / TryToken __ block:Block __ finalizer:Finally {
+  / TryToken wsAfterTry:__ block:Block wsBeforeFinally:__ finalizer:Finally {
       return {
-        type: "TryStatement",
+        type: "TryStatement", wsAfterTry: wsAfterTry, 
         block: block,
-        handler: null,
+        handler: null, wsBeforeFinally: wsBeforeFinally,
         finalizer: finalizer
       };
     }
 
 Catch
-  = CatchToken __ "(" __ param:Identifier __ ")" __ body:Block {
+  = CatchToken wsBeforeOpening:__ "(" wsAfterOpening:__ param:Identifier wsBeforeClosing:__ ")" wsAfterClosing:__ body:Block {
       return {
-        type: "CatchClause",
-        param: param,
+        type: "CatchClause", wsBeforeOpening: wsBeforeOpening, wsAfterOpening: wsAfterOpening,
+        param: param, wsBeforeClosing: wsBeforeClosing, wsAfterClosing: wsAfterClosing,
         body: body
       };
     }
 
 Finally
-  = FinallyToken __ block:Block { return block; }
+  = FinallyToken wsAfterFinally:__ block:Block {
+     return { type: "FinallyClause", wsAfterFinally: wsAfterFinally, block: block}; }
 
 DebuggerStatement
-  = DebuggerToken EOS { return { type: "DebuggerStatement" }; }
+  = DebuggerToken wsAfter:EOS { return { type: "DebuggerStatement", wsAfter: wsAfter }; }
 
 // ----- A.5 Functions and Programs -----
 
 FunctionDeclaration
-  = FunctionToken __ id:Identifier __
-    "(" __ params:(FormalParameterList __)? ")" __
-    "{" __ body:FunctionBody __ "}"
+  = FunctionToken wsAfterFunction:__ id:Identifier wsBeforeOpening:__
+    "(" wsAfterOpening:__ params:(FormalParameterList __)? ")" wsAfterClosing:__
+    "{" wsBeforeBody:__ body:FunctionBody wsAfterBody:__ "}"
     {
       return {
-        type: "FunctionDeclaration",
-        id: id,
+        type: "FunctionDeclaration", wsAfterFunction: wsAfterFunction,
+        id: id, wsBeforeOpening: wsBeforeOpening, wsAfterOpening: wsAfterOpening,
         params: optionalList(extractOptional(params, 0)),
-        body: body
+        wsBeforeClosing: extractOptional(params, 1) || "", wsAfterClosing: wsAfterClosing,
+        wsBeforeBody: wsBeforeBody,
+        body: body, wsAfterBody: wsAfterBody
       };
     }
 
 FunctionExpression
-  = FunctionToken __ id:(Identifier __)?
-    "(" __ params:(FormalParameterList __)? ")" __
-    "{" __ body:FunctionBody __ "}"
+  = FunctionToken wsAfterFunction:__ id:(Identifier __)?
+    "(" wsAfterOpening:__ params:(FormalParameterList __)? ")" wsAfterClosing:__
+    "{" wsBeforeBody:__ body:FunctionBody wsAfterBody:__ "}"
     {
       return {
-        type: "FunctionExpression",
-        id: extractOptional(id, 0),
-        params: optionalList(extractOptional(params, 0)),
-        body: body
+        type: "FunctionExpression", wsAfterFunction: wsAfterFunction,
+        id: extractOptional(id, 0), wsBeforeOpening: extractOptional(id, 1), wsAfterOpening: wsAfterOpening,
+        params: optionalList(extractOptional(params, 0)), wsBeforeClosing: extractOptional(params, 1) || "", wsAfterClosing: wsAfterClosing,
+        wsBeforeBody: wsBeforeBody,
+        body: body, wsAfterBody: wsAfterBody
       };
     }
 
 FormalParameterList
   = head:Identifier tail:(__ "," __ Identifier)* {
-      return buildList(head, tail, 3);
+      var initHead = { wsBeforeComma: "", comma: "", wsAfterComma: "", expr: head };
+      return buildList(initHead, tail, extractCommaBefore);
     }
 
 FunctionBody
@@ -1293,7 +1385,8 @@ Program
 
 SourceElements
   = head:SourceElement tail:(__ SourceElement)* {
-      return buildList(head, tail, 1);
+      var initHead = {wsBefore: "", expr: head};
+      return buildList(head, tail, extractSpaceBefore);
     }
 
 SourceElement

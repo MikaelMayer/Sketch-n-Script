@@ -91,6 +91,19 @@ If you don't want that clasp push some files or folders, note that `clasp` ignor
 * That don't have an accepted file extension
 * That are ignored (filename matches a glob pattern in the `.claspignore` file)
 
+## Updating the javascript parser:
+
+If running the first time, run:
+
+    npm install -s pegjs
+    npm install uglify-js -g
+
+Then:
+
+    make buildjsparser
+
+This will create the file `update/jsparser-min.js`
+
 ## Publishing the add-on (for authors only)
 
 * Make sure all changes are pushed online.
