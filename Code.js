@@ -3,13 +3,34 @@
  */
 
 function doIt() {
-  Logger.log(uneval_(jsparser().parse("var x = 1;\n(function(y) { return 2 + y })(x)")));
+  var ts = [];
+  ts.push(Date.now());
+  var parser = esprima;
+  ts.push(Date.now());
+  var x1 = parser.parse("var x = 1;\n(function(y) { return 1 + y })(x)");
+  ts.push(Date.now());
+  var x2 = parser.parse("var x = 1;\n(function(y) { return 2 + y })(x)");
+  ts.push(Date.now());
+  var x3 = parser.parse("var x = 1;\n(function(y) { return 3 + y })(x)");
+  ts.push(Date.now());
+  ts.push(Date.now());
+  var s1 = uneval_(x1);
+  ts.push(Date.now());
+  var s2 = uneval_(x2);
+  ts.push(Date.now());
+  var s3 = uneval_(x3);
+  ts.push(Date.now());
+  
+  for(var i = 0; i < ts.length - 1; i++) {
+    Logger.log("t" + (i + 2) + "-t" + (i + 1) + ": " + (ts[i+1]-ts[i]));
+  }
+  //Logger.log(uneval_(jsparser().parse("var x = 1;\n(function(y) { return 2 + y })(x)"))); // 9s for the first
+  //Logger.log(uneval_(jsparser().parse("var x = 2;\n(function(y) { return 3 + y })(x)"))); // 2s for successive calls.
 }
   
 function dontDoIt() {
   Logger.log("This should be faster");
 }
-
 
 // https://developers.google.com/gsuite/add-ons/how-tos/publish-for-domains#before_you_publish
 // 
@@ -67,13 +88,29 @@ var FORMULA_VALUE_SEPARATOR = "2AFF312A461BF32A670663193A9D0F61" // md5 of "qdfs
 
 
 function builtinEnv_() {
+  var h = function(n) {
+    return "(function(title, attrs) {\n  return [\"p\", Object.assign(attrs || {}, { heading: \"heading\"" + n + "), title]; })";
+  var reversibleValue = function(src) {
+    return  {v_: eval(src), expr: {sourceType: RAWFORMULA, source: src}};
+  }
   return arrayToList_([
     {name: "oui", value: {v_: true, frozen: true}},
     {name: "non", value: {v_: false, frozen: true}},
     {name: "vrai", value: {v_: true, frozen: true}},
     {name: "faux", value: {v_: false, frozen: true}},
     {name: "petit", value: {v_: function(s) { return s.toLowerCase()}, frozen: true }},
-    {name: "grand", value: {v_: function(s) { return s.toUpperase()}, frozen: true }}]);
+    {name: "grand", value: {v_: (function(s) { return s.toUpperase()}, frozen: true }},
+    {name: "h1", value: reversibleValue(h(1))},
+    {name: "h1", value: reversibleValue(h(2))},
+    {name: "h1", value: reversibleValue(h(3))},
+    {name: "h1", value: reversibleValue(h(4))},
+    {name: "h1", value: reversibleValue(h(5))},
+    {name: "h1", value: reversibleValue(h(6))},
+    {name: "img", value: reversibleValue("(function(src, attrs) {\n return [\"img\", Object.assign({src: src}, attrs), []] \})")},
+    {name: "li", value: reversibleValue("(function(content, attrs) {\n return [\"li\", attrs || {}, content] \})")},
+    {name: "table", value: reversibleValue("(function(cells, attrs) {\n return [\"table\", attrs || {}, cells] \})")},
+    {name: "$$", value: reversibleValue("(function(formula) {\n  return [\"img\", {src: \"http://www.texrendr.com/cgi-bin/mathtex.cgi?\" + encodeURIComponent(formula)}, []]})")}
+    ]);
 }
 
 

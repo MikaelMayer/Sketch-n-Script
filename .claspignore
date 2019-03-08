@@ -1,1 +1,4 @@
-tests/*
+script_buildjsparser.js
+script_buildjsparser2.js
+script_testscript.js
+test_update.js
