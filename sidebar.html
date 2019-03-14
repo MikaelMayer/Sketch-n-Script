@@ -99,8 +99,8 @@
           </div>
           <div class="section">
             <textarea id="sidebarEnv" name="docProperties" placeholder="Write hidden name definitions here" title="'x = Raw Text' or : 'x = (JavaScript)'"></textarea>
-            <button id="hidedefs" title="Hide definitions from doc by putting them in the textarea above">Hide defs</button>
-            <button id="showdefs" title="Put definitions above back to doc, in a separate page">Show defs in doc</button>
+            <button id="hidedefs" title="Extract definitions from doc by putting them in the textarea above">Extract defs</button>
+            <button id="showdefs" title="Put definitions above back to doc, in a separate first page">Put defs back in doc</button>
           </div>
           <hr>
           <div class="section">
@@ -158,21 +158,30 @@
           (<a href="https://developers.google.com/apps-script/reference/document/text">settable properties*</a>)
         <div class="doclike">=["emphasized", {italic: true, link: "www.google.com"}]</div>
         <br>
-        Inline Images: 
+        Inline Images and LaTeX: 
           (<a href="https://developers.google.com/apps-script/reference/document/inline-image">settable properties*</a>)
         <div class="doclike">=["img", {src: "http://www.texrendr.com/cgi-bin/mathtex.cgi?\\sqrt{z}"}, []]</div>
+        <div class="doclike">=img("http://www.texrendr.com/cgi-bin/mathtex.cgi?\\sqrt{z}")</div>
+        <div class="doclike">=$$("\\sqrt{z}")</div>
         <br>
-        Paragraphs: 
+        Paragraphs and headings: 
           (<a href="https://developers.google.com/apps-script/reference/document/paragraph">settable properties*</a>)
         <div class="doclike">=["p", {heading: "heading1"}, ["Hello ", ["world", {italic:true}]]]</div>
+        <div class="doclike">=h2("Hello world")</div>
         <br>
         List items: 
           (<a href="https://developers.google.com/apps-script/reference/document/list-item">settable properties*</a>)
-        <div class="doclike">=["li", {id: 1, nesting: 0, glyph: "number"}, []]</div>
+        <div class="doclike">=["li", {id: 1, nesting: 0, glyph: "number"}, "Todo item"]</div>
+        <div class="doclike">=li("Todo item")</div>
         <br>
         Tables: 
           (<a href="https://developers.google.com/apps-script/reference/document/table">settable properties*</a>)
         <div class="doclike">=["table", {}, [["Hello", ["world", {italic:true}]], [["Comb", ["ined", {bold: true}]], ""]]]</div>
+        <div class="doclike">=table([["Top left", "Top right"], ["BT Left", "BT Right"]]))</div>
+        <div class="doclike">=table(rotate([["One", "Item", "Per", "Row"]]))</div>
+        <br>
+        Builtin functions:
+        <div class="doclike">=sum([1, 2, 3, 4, 5])</div>
         <br>
         You can also enter arrays of text, rich text and inline images.
         If you enter an array of paragraphs, list items and tables, make sure the formula spans an entire paragraph.
@@ -189,7 +198,7 @@
           <li><code>link:</code>or <code>url:</code> for <code>linkUrl:</code></li>
           <li><code>alt:</code>or <code>desc:</code> for <code>altDescription:</code></li>
           <li><code>id:</code> for <code>listId:</code> (number)</li>
-          <li><code>title:</code> for <code>setAltTitle:</code></li>
+          <li><code>title:</code> for <code>altTitle:</code></li>
           <li><code>color:</code> for <code>foregroundColor:</code></li>
           <li><code>background:</code> for <code>backgroundColor:</code></li>
           <li><code>strike:</code> for <code>strikethrough:</code></li>

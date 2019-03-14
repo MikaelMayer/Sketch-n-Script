@@ -64,10 +64,19 @@ function onInstall(e) {
 
 var FORMULA_VALUE_SEPARATOR = "2AFF312A461BF32A670663193A9D0F61" // md5 of "qdfsmlkfj,mqldskfjmlqksjdfmlkvjqslk"
 
-
 function builtinEnv_() {
+  var assignDefinition = "function assign(o1, o2) {\
+    if(typeof o2 != 'object') return o1;\
+    if(typeof o1 != 'object') return o2;\
+    for(var k in o2) {\
+      o1[k] = o2[k];\
+    }\
+    return o1;\
+  }\
+  ";
   var h = function(n) {
-    return "(function(title, attrs) {\n  return [\"p\", Object.assign(attrs || {}, { heading: \"heading\"" + n + "), title]; })";
+    return "(function(title, attrs) {\n  "+assignDefinition+"return [\"p\", assign({ heading: \"heading" + n + "\"}, attrs || {}), title]; })";
+  }
   var reversibleValue = function(src) {
     return  {v_: eval(src), expr: {sourceType: RAWFORMULA, source: src}};
   }
@@ -77,17 +86,41 @@ function builtinEnv_() {
     {name: "vrai", value: {v_: true, frozen: true}},
     {name: "faux", value: {v_: false, frozen: true}},
     {name: "petit", value: {v_: function(s) { return s.toLowerCase()}, frozen: true }},
-    {name: "grand", value: {v_: (function(s) { return s.toUpperase()}, frozen: true }},
+    {name: "grand", value: {v_: function(s) { return s.toUpperase()}, frozen: true }},
     {name: "h1", value: reversibleValue(h(1))},
     {name: "h2", value: reversibleValue(h(2))},
     {name: "h3", value: reversibleValue(h(3))},
     {name: "h4", value: reversibleValue(h(4))},
     {name: "h5", value: reversibleValue(h(5))},
     {name: "h6", value: reversibleValue(h(6))},
-    {name: "img", value: reversibleValue("(function(src, attrs) {\n return [\"img\", Object.assign({src: src}, attrs), []] \})")},
-    {name: "li", value: reversibleValue("(function(content, attrs) {\n return [\"li\", attrs || {}, content] \})")},
-    {name: "table", value: reversibleValue("(function(cells, attrs) {\n return [\"table\", attrs || {}, cells] \})")},
-    {name: "$$", value: reversibleValue("(function(formula) {\n  return [\"img\", {src: \"http://www.texrendr.com/cgi-bin/mathtex.cgi?\" + encodeURIComponent(formula)}, []]})")}
+    {name: "img", value: reversibleValue("(function(src, attrs) {\n "+assignDefinition+"return [\"img\", assign({src: src}, attrs), []] \})")},
+    {name: "li", value: reversibleValue("(function(content, attrs) {\n  return [\"li\", attrs || {}, content] \})")},
+    {name: "p", value: reversibleValue("(function(content, attrs) {\n  return [\"p\", attrs || {}, content] \})")},
+    {name: "table", value: reversibleValue("(function(cells, attrs) {\n  return [\"table\", attrs || {}, cells] \})")},
+    {name: "$$", value: reversibleValue("(function(formula, attrs) {\n  "+assignDefinition+"return [\"img\", assign({src: \"http://www.texrendr.com/cgi-bin/mathtex.cgi?\" + encodeURIComponent(formula)}, attrs || {}), []]})")},
+    {name: "rotate", value: reversibleValue("(function(array) {\
+       var result = [];\
+       for(var rIndex in array) {\
+         var row = array[rIndex];\
+         for(var cIndex in row) {\
+           var cell = row[cIndex];\
+           if(typeof result[cIndex] == 'undefined') result[cIndex] = [];\
+           result[cIndex][rIndex] = cell;\
+       } }\
+       return result;\
+       })")},
+    {name: "sum", value: reversibleValue("(function sum(array) {\
+       var result = 0;\
+       for(var rIndex in array) {\
+         var row = array[rIndex];\
+         if(typeof row == 'number') result += row;\
+         else if(typeof row == 'object') {\
+         for(var cIndex in row) {\
+           var cell = row[cIndex];\
+           if(typeof cell == 'number') result += cell;\
+       } } }\
+       return result;\
+       })")}
     ]);
 }
 
