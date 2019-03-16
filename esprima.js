@@ -172,6 +172,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	exports.tokenize = tokenize;
 	var syntax_1 = __webpack_require__(2);
 	exports.Syntax = syntax_1.Syntax;
+	var Node = __webpack_require__(7);
+	exports.Node = Node;
 	// Sync with *.json manifests.
 	exports.version = '4.0.0-dev';
 
@@ -2281,6 +2283,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    }
 	    return '' + x;
 	}
+	exports.uneval = uneval;
 	function toExpString(str, raw) {
 	    var charDelim = raw && raw.length >= 1 && (raw[0] === '"' || raw[0] === '`' || raw[0] === '\'') ? raw[0] : '"';
 	    return charDelim + unescapeCharSequence(str).replace(charDelim, '\\' + charDelim) + charDelim;
@@ -2297,7 +2300,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    Literal.prototype.unparse = function (parent) {
 	        return this.wsBefore +
 	            (this.original === this.value ? this.raw :
-	                typeof this.value === 'string' ?
+	                typeof this.value === 'string' && typeof this.original == 'string' ?
 	                    toExpString(this.value, this.raw) :
 	                    typeof this.value === 'object' ?
 	                        this.value === null ?
