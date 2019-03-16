@@ -1,3 +1,5 @@
+// Test
+
 function updateDirect(env, oldNode, newValue) {
   if(oldNode.type == Syntax.Program) {
     if(oldNode.body.length != 1) {

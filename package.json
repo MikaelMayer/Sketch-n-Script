@@ -1,0 +1,29 @@
+{
+  "name": "sketch-n-script",
+  "version": "1.0.0",
+  "description": "The Google docs add-on to enter formulas in your doc",
+  "main": "test_update.js",
+  "scripts": {
+    "compile": "tsc -p src/ --outDir add-on/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MikaelMayer/Sketch-n-Script.git"
+  },
+  "devDependencies": {
+    "tslint": "~5.11.0",
+    "typescript": "~3.2.1"
+  },
+  "keywords": [
+    "Bidirectional",
+    "Programming",
+    "Program",
+    "Synthesis"
+  ],
+  "author": "Mikaël Mayer",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/MikaelMayer/Sketch-n-Script/issues"
+  },
+  "homepage": "https://github.com/MikaelMayer/Sketch-n-Script#readme"
+}
