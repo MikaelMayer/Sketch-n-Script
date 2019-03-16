@@ -1,3 +1,1 @@
-
-
-console.log(update_(undefined, "/*number=*/(12)")(13))
+console.log(update_(undefined, "/*code*/[15, 16]")([13, '14']))

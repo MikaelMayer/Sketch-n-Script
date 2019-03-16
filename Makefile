@@ -1,7 +1,5 @@
 test:
-	node scripts/testscript.js
+	node script_testscript.js
 
-buildjsparser:
-	node scripts/buildjsparser.js
-	uglifyjs --compress --mangle --output update/jsparser-min.js -- update/jsparser.js
-	node scripts/buildjsparser2.js
+minifyesprima:
+	uglifyjs --compress --mangle --output esprima-min.js -- esprima.js

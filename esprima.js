@@ -481,19 +481,23 @@ return /******/ (function(modules) { // webpackBootstrap
 	    };
 	    JSXParser.prototype.reenterJSX = function () {
 	        this.startJSX();
-	        this.expectJSX('}');
+	        var wsBefore = this.expectJSX('}');
 	        // Pop the closing '}' added from the lookahead.
 	        if (this.config.tokens) {
 	            this.tokens.pop();
 	        }
+	        return wsBefore;
 	    };
 	    JSXParser.prototype.createJSXNode = function () {
+	        var wsStart = this.scanner.index;
 	        this.collectComments();
-	        return {
-	            index: this.scanner.index,
-	            line: this.scanner.lineNumber,
-	            column: this.scanner.index - this.scanner.lineStart
-	        };
+	        var tokenStart = this.scanner.index;
+	        var wsBefore = tokenStart === wsStart ? '' : this.scanner.source.substring(wsStart, tokenStart);
+	        return { wsBefore: wsBefore, node: {
+	                index: this.scanner.index,
+	                line: this.scanner.lineNumber,
+	                column: this.scanner.index - this.scanner.lineStart
+	            } };
 	    };
 	    JSXParser.prototype.createJSXChildNode = function () {
 	        return {
@@ -659,7 +663,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var wsStart = this.scanner.index;
 	        this.collectComments();
 	        var tokenStart = this.scanner.index;
-	        var ws = tokenStart == wsStart ? "" : this.scanner.source.substring(wsStart, tokenStart);
+	        var ws = tokenStart === wsStart ? '' : this.scanner.source.substring(wsStart, tokenStart);
 	        this.startMarker.index = this.scanner.index;
 	        this.startMarker.line = this.scanner.lineNumber;
 	        this.startMarker.column = this.scanner.index - this.scanner.lineStart;
@@ -703,7 +707,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            lineStart: this.scanner.lineStart,
 	            start: start,
 	            end: this.scanner.index,
-	            wsBefore: ""
+	            wsBefore: ''
 	        };
 	        if ((text.length > 0) && this.config.tokens) {
 	            this.tokens.push(this.convertToken(token));
@@ -715,7 +719,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var wsStart = this.scanner.index;
 	        this.scanner.scanComments();
 	        var tokenStart = this.scanner.index;
-	        var ws = tokenStart == wsStart ? "" : this.scanner.source.substring(wsStart, tokenStart);
+	        var ws = tokenStart === wsStart ? '' : this.scanner.source.substring(wsStart, tokenStart);
 	        var next = this.lexJSX(ws);
 	        this.scanner.restoreState(state);
 	        return next;
@@ -727,48 +731,50 @@ return /******/ (function(modules) { // webpackBootstrap
 	        if (token.type !== 7 /* Punctuator */ || token.value !== value) {
 	            this.throwUnexpectedToken(token);
 	        }
+	        return token.wsBefore;
 	    };
 	    // Return true if the next JSX token matches the specified punctuator.
 	    JSXParser.prototype.matchJSX = function (value) {
 	        var next = this.peekJSXToken();
 	        return next.type === 7 /* Punctuator */ && next.value === value;
 	    };
-	    JSXParser.prototype.parseJSXIdentifier = function () {
-	        var node = this.createJSXNode();
+	    JSXParser.prototype.parseJSXIdentifier = function (wsBefore) {
+	        if (wsBefore === void 0) { wsBefore = ''; }
+	        var wsNode = this.createJSXNode();
 	        var token = this.nextJSXToken();
 	        if (token.type !== 100 /* Identifier */) {
 	            this.throwUnexpectedToken(token);
 	        }
-	        return this.finalize(node, new JSXNode.JSXIdentifier(token.value));
+	        return this.finalize(wsNode.node, new JSXNode.JSXIdentifier(wsBefore + wsNode.wsBefore + token.wsBefore, token.value));
 	    };
 	    JSXParser.prototype.parseJSXElementName = function () {
-	        var node = this.createJSXNode();
-	        var elementName = this.parseJSXIdentifier();
+	        var wsNode = this.createJSXNode();
+	        var elementName = this.parseJSXIdentifier(wsNode.wsBefore);
 	        if (this.matchJSX(':')) {
 	            var namespace = elementName;
 	            this.expectJSX(':');
 	            var name_1 = this.parseJSXIdentifier();
-	            elementName = this.finalize(node, new JSXNode.JSXNamespacedName(namespace, name_1));
+	            elementName = this.finalize(wsNode.node, new JSXNode.JSXNamespacedName(namespace, name_1));
 	        }
 	        else if (this.matchJSX('.')) {
 	            while (this.matchJSX('.')) {
 	                var object = elementName;
 	                this.expectJSX('.');
 	                var property = this.parseJSXIdentifier();
-	                elementName = this.finalize(node, new JSXNode.JSXMemberExpression(object, property));
+	                elementName = this.finalize(wsNode.node, new JSXNode.JSXMemberExpression(object, property));
 	            }
 	        }
 	        return elementName;
 	    };
 	    JSXParser.prototype.parseJSXAttributeName = function () {
-	        var node = this.createJSXNode();
+	        var wsNode = this.createJSXNode();
 	        var attributeName;
-	        var identifier = this.parseJSXIdentifier();
+	        var identifier = this.parseJSXIdentifier(wsNode.wsBefore);
 	        if (this.matchJSX(':')) {
 	            var namespace = identifier;
 	            this.expectJSX(':');
 	            var name_2 = this.parseJSXIdentifier();
-	            attributeName = this.finalize(node, new JSXNode.JSXNamespacedName(namespace, name_2));
+	            attributeName = this.finalize(wsNode.node, new JSXNode.JSXNamespacedName(namespace, name_2));
 	        }
 	        else {
 	            attributeName = identifier;
@@ -776,47 +782,48 @@ return /******/ (function(modules) { // webpackBootstrap
 	        return attributeName;
 	    };
 	    JSXParser.prototype.parseJSXStringLiteralAttribute = function () {
-	        var node = this.createJSXNode();
+	        var wsNode = this.createJSXNode();
 	        var token = this.nextJSXToken();
 	        if (token.type !== 8 /* StringLiteral */) {
 	            this.throwUnexpectedToken(token);
 	        }
 	        var raw = this.getTokenRaw(token);
-	        return this.finalize(node, new Node.Literal(token.value, raw));
+	        return this.finalize(wsNode.node, new Node.Literal(wsNode.wsBefore + token.wsBefore, token.value, raw));
 	    };
 	    JSXParser.prototype.parseJSXExpressionAttribute = function () {
-	        var node = this.createJSXNode();
-	        this.expectJSX('{');
+	        var wsNode = this.createJSXNode();
+	        var wsBefore = wsNode.wsBefore + this.expectJSX('{');
 	        this.finishJSX();
 	        if (this.match('}')) {
 	            this.tolerateError('JSX attributes must only be assigned a non-empty expression');
 	        }
 	        var expression = this.parseAssignmentExpression();
-	        this.reenterJSX();
-	        return this.finalize(node, new JSXNode.JSXExpressionContainer(expression));
+	        var wsBeforeClosing = this.reenterJSX();
+	        return this.finalize(wsNode.node, new JSXNode.JSXExpressionContainer(wsBefore, expression, wsBeforeClosing));
 	    };
 	    JSXParser.prototype.parseJSXAttributeValue = function () {
 	        return this.matchJSX('{') ? this.parseJSXExpressionAttribute() :
 	            this.matchJSX('<') ? this.parseJSXElement() : this.parseJSXStringLiteralAttribute();
 	    };
 	    JSXParser.prototype.parseJSXNameValueAttribute = function () {
-	        var node = this.createJSXNode();
+	        var wsNode = this.createJSXNode();
 	        var name = this.parseJSXAttributeName();
 	        var value = null;
+	        var wsBeforeEq = '';
 	        if (this.matchJSX('=')) {
-	            this.expectJSX('=');
+	            wsBeforeEq = this.expectJSX('=');
 	            value = this.parseJSXAttributeValue();
 	        }
-	        return this.finalize(node, new JSXNode.JSXAttribute(name, value));
+	        return this.finalize(wsNode.node, new JSXNode.JSXAttribute(wsNode.wsBefore, name, wsBeforeEq, value));
 	    };
 	    JSXParser.prototype.parseJSXSpreadAttribute = function () {
-	        var node = this.createJSXNode();
+	        var wsNode = this.createJSXNode();
 	        this.expectJSX('{');
 	        this.expectJSX('...');
 	        this.finishJSX();
 	        var argument = this.parseAssignmentExpression();
-	        this.reenterJSX();
-	        return this.finalize(node, new JSXNode.JSXSpreadAttribute(argument));
+	        var wsBeforeClosing = this.reenterJSX();
+	        return this.finalize(wsNode.node, new JSXNode.JSXSpreadAttribute(wsNode.wsBefore, argument, wsBeforeClosing));
 	    };
 	    JSXParser.prototype.parseJSXAttributes = function () {
 	        var attributes = [];
@@ -828,57 +835,63 @@ return /******/ (function(modules) { // webpackBootstrap
 	        return attributes;
 	    };
 	    JSXParser.prototype.parseJSXOpeningElement = function () {
-	        var node = this.createJSXNode();
-	        this.expectJSX('<');
+	        var wsNode = this.createJSXNode();
+	        var wsBefore = wsNode.wsBefore + this.expectJSX('<');
 	        var name = this.parseJSXElementName();
 	        var attributes = this.parseJSXAttributes();
 	        var selfClosing = this.matchJSX('/');
+	        var wsBeforeEnd = '';
 	        if (selfClosing) {
-	            this.expectJSX('/');
+	            wsBeforeEnd = this.expectJSX('/');
 	        }
-	        this.expectJSX('>');
-	        return this.finalize(node, new JSXNode.JSXOpeningElement(name, selfClosing, attributes));
+	        var wsBeforeGt = this.expectJSX('>');
+	        return this.finalize(wsNode.node, new JSXNode.JSXOpeningElement(wsBefore, name, selfClosing, attributes, wsBeforeEnd, wsBeforeGt));
 	    };
 	    JSXParser.prototype.parseJSXBoundaryElement = function () {
-	        var node = this.createJSXNode();
-	        this.expectJSX('<');
+	        var wsNode = this.createJSXNode();
+	        var wsBefore = wsNode.wsBefore + this.expectJSX('<');
+	        var wsBeforeEnd = '';
 	        if (this.matchJSX('/')) {
 	            this.expectJSX('/');
 	            var elementName = this.parseJSXElementName();
-	            this.expectJSX('>');
-	            return this.finalize(node, new JSXNode.JSXClosingElement(elementName));
+	            wsBeforeEnd = this.expectJSX('>');
+	            return this.finalize(wsNode.node, new JSXNode.JSXClosingElement(elementName, wsBeforeEnd));
 	        }
 	        var name = this.parseJSXElementName();
 	        var attributes = this.parseJSXAttributes();
 	        var selfClosing = this.matchJSX('/');
 	        if (selfClosing) {
-	            this.expectJSX('/');
+	            wsBeforeEnd = this.expectJSX('/');
 	        }
-	        this.expectJSX('>');
-	        return this.finalize(node, new JSXNode.JSXOpeningElement(name, selfClosing, attributes));
+	        var wsBeforeGt = this.expectJSX('>');
+	        return this.finalize(wsNode.node, new JSXNode.JSXOpeningElement(wsBefore, name, selfClosing, attributes, wsBeforeEnd, wsBeforeGt));
 	    };
 	    JSXParser.prototype.parseJSXEmptyExpression = function () {
 	        var node = this.createJSXChildNode();
+	        var wsStart = this.scanner.index;
 	        this.collectComments();
+	        var tokenStart = this.scanner.index;
+	        var ws = tokenStart === wsStart ? '' : this.scanner.source.substring(wsStart, tokenStart);
 	        this.lastMarker.index = this.scanner.index;
 	        this.lastMarker.line = this.scanner.lineNumber;
 	        this.lastMarker.column = this.scanner.index - this.scanner.lineStart;
-	        return this.finalize(node, new JSXNode.JSXEmptyExpression());
+	        return this.finalize(node, new JSXNode.JSXEmptyExpression(ws));
 	    };
 	    JSXParser.prototype.parseJSXExpressionContainer = function () {
-	        var node = this.createJSXNode();
-	        this.expectJSX('{');
+	        var wsNode = this.createJSXNode();
+	        var wsBefore = wsNode.wsBefore + this.expectJSX('{');
 	        var expression;
+	        var wsBeforeEnd = '';
 	        if (this.matchJSX('}')) {
 	            expression = this.parseJSXEmptyExpression();
-	            this.expectJSX('}');
+	            wsBeforeEnd = this.expectJSX('}');
 	        }
 	        else {
 	            this.finishJSX();
 	            expression = this.parseAssignmentExpression();
-	            this.reenterJSX();
+	            wsBeforeEnd = this.lookahead.wsBefore + this.reenterJSX();
 	        }
-	        return this.finalize(node, new JSXNode.JSXExpressionContainer(expression));
+	        return this.finalize(wsNode.node, new JSXNode.JSXExpressionContainer(wsBefore, expression, wsBeforeEnd));
 	    };
 	    JSXParser.prototype.parseJSXChildren = function () {
 	        var children = [];
@@ -909,7 +922,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            if (element.type === jsx_syntax_1.JSXSyntax.JSXOpeningElement) {
 	                var opening = element;
 	                if (opening.selfClosing) {
-	                    var child = this.finalize(node, new JSXNode.JSXElement(opening, [], null));
+	                    var child = this.finalize(node, new JSXNode.JSXElement('', opening, [], null));
 	                    el.children.push(child);
 	                }
 	                else {
@@ -925,7 +938,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	                    this.tolerateError('Expected corresponding JSX closing tag for %0', open_1);
 	                }
 	                if (stack.length > 0) {
-	                    var child = this.finalize(el.node, new JSXNode.JSXElement(el.opening, el.children, el.closing));
+	                    var child = this.finalize(el.node, new JSXNode.JSXElement('', el.opening, el.children, el.closing));
 	                    el = stack[stack.length - 1];
 	                    el.children.push(child);
 	                    stack.pop();
@@ -937,25 +950,27 @@ return /******/ (function(modules) { // webpackBootstrap
 	        }
 	        return el;
 	    };
-	    JSXParser.prototype.parseJSXElement = function () {
-	        var node = this.createJSXNode();
+	    JSXParser.prototype.parseJSXElement = function (wsBefore) {
+	        if (wsBefore === void 0) { wsBefore = ''; }
+	        var wsNode = this.createJSXNode();
 	        var opening = this.parseJSXOpeningElement();
 	        var children = [];
 	        var closing = null;
 	        if (!opening.selfClosing) {
-	            var el = this.parseComplexJSXElement({ node: node, opening: opening, closing: closing, children: children });
+	            var el = this.parseComplexJSXElement({ node: wsNode.node, opening: opening, closing: closing, children: children });
 	            children = el.children;
 	            closing = el.closing;
 	        }
-	        return this.finalize(node, new JSXNode.JSXElement(opening, children, closing));
+	        return this.finalize(wsNode.node, new JSXNode.JSXElement(wsBefore + wsNode.wsBefore, opening, children, closing));
 	    };
 	    JSXParser.prototype.parseJSXRoot = function () {
 	        // Pop the opening '<' added from the lookahead.
+	        var wsBefore = this.lookahead.wsBefore;
 	        if (this.config.tokens) {
 	            this.tokens.pop();
 	        }
 	        this.startJSX();
-	        var element = this.parseJSXElement();
+	        var element = this.parseJSXElement(wsBefore);
 	        this.finishJSX();
 	        return element;
 	    };
@@ -1034,99 +1049,175 @@ return /******/ (function(modules) { // webpackBootstrap
 	"use strict";
 	Object.defineProperty(exports, "__esModule", { value: true });
 	var jsx_syntax_1 = __webpack_require__(6);
+	var Node = __webpack_require__(7);
 	/* tslint:disable:max-classes-per-file */
 	var JSXClosingElement = /** @class */ (function () {
-	    function JSXClosingElement(name) {
+	    function JSXClosingElement(name, wsAfterName) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = jsx_syntax_1.JSXSyntax.JSXClosingElement;
 	        this.name = name;
+	        this.wsAfterName = wsAfterName;
 	    }
+	    JSXClosingElement.prototype.unparse = function (parent) {
+	        return this.wsBefore + '</' + Node.unparseChild(this)(this.name) + this.wsAfterName + '>' + this.wsAfter;
+	    };
 	    return JSXClosingElement;
 	}());
 	exports.JSXClosingElement = JSXClosingElement;
 	var JSXElement = /** @class */ (function () {
-	    function JSXElement(openingElement, children, closingElement) {
+	    function JSXElement(wsBefore, openingElement, children, closingElement) {
+	        this.wsAfter = '';
 	        this.type = jsx_syntax_1.JSXSyntax.JSXElement;
 	        this.openingElement = openingElement;
 	        this.children = children;
 	        this.closingElement = closingElement;
+	        this.wsBefore = wsBefore;
 	    }
+	    JSXElement.prototype.unparse = function (parent) {
+	        return this.wsBefore + Node.unparseChild(this)(this.openingElement) +
+	            Node.unparseChildren(this, '')(this.children) +
+	            (this.closingElement ? Node.unparseChild(this)(this.closingElement) : '') +
+	            this.wsAfter;
+	    };
 	    return JSXElement;
 	}());
 	exports.JSXElement = JSXElement;
 	var JSXEmptyExpression = /** @class */ (function () {
-	    function JSXEmptyExpression() {
+	    function JSXEmptyExpression(wsBefore) {
+	        this.wsAfter = '';
 	        this.type = jsx_syntax_1.JSXSyntax.JSXEmptyExpression;
+	        this.wsBefore = wsBefore;
 	    }
+	    JSXEmptyExpression.prototype.unparse = function (parent) {
+	        return this.wsBefore + this.wsAfter;
+	    };
 	    return JSXEmptyExpression;
 	}());
 	exports.JSXEmptyExpression = JSXEmptyExpression;
 	var JSXExpressionContainer = /** @class */ (function () {
-	    function JSXExpressionContainer(expression) {
+	    function JSXExpressionContainer(wsBefore, expression, wsBeforeClosing) {
+	        this.wsAfter = '';
 	        this.type = jsx_syntax_1.JSXSyntax.JSXExpressionContainer;
 	        this.expression = expression;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
+	    JSXExpressionContainer.prototype.unparse = function (parent) {
+	        return this.wsBefore + '{' + Node.unparseChild(this)(this.expression) + this.wsBeforeClosing + '}' + this.wsAfter;
+	    };
 	    return JSXExpressionContainer;
 	}());
 	exports.JSXExpressionContainer = JSXExpressionContainer;
 	var JSXIdentifier = /** @class */ (function () {
-	    function JSXIdentifier(name) {
+	    function JSXIdentifier(wsBefore, name) {
+	        this.wsAfter = '';
 	        this.type = jsx_syntax_1.JSXSyntax.JSXIdentifier;
+	        this.wsBefore = wsBefore;
 	        this.name = name;
 	    }
+	    JSXIdentifier.prototype.unparse = function (parent) {
+	        return this.wsBefore + this.name + this.wsAfter;
+	    };
 	    return JSXIdentifier;
 	}());
 	exports.JSXIdentifier = JSXIdentifier;
 	var JSXMemberExpression = /** @class */ (function () {
 	    function JSXMemberExpression(object, property) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = jsx_syntax_1.JSXSyntax.JSXMemberExpression;
 	        this.object = object;
 	        this.property = property;
 	    }
+	    JSXMemberExpression.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            Node.unparseChild(this)(this.object) + '.' +
+	            Node.unparseChild(this)(this.property) +
+	            this.wsAfter;
+	    };
 	    return JSXMemberExpression;
 	}());
 	exports.JSXMemberExpression = JSXMemberExpression;
 	var JSXAttribute = /** @class */ (function () {
-	    function JSXAttribute(name, value) {
+	    function JSXAttribute(wsBefore, name, wsBeforeEq, value) {
+	        this.wsAfter = '';
 	        this.type = jsx_syntax_1.JSXSyntax.JSXAttribute;
 	        this.name = name;
 	        this.value = value;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeEq = wsBeforeEq;
 	    }
+	    JSXAttribute.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            Node.unparseChild(this)(this.name) + this.wsBeforeEq + (this.value ? '=' + Node.unparseChild(this)(this.value) : '') +
+	            this.wsAfter;
+	    };
 	    return JSXAttribute;
 	}());
 	exports.JSXAttribute = JSXAttribute;
 	var JSXNamespacedName = /** @class */ (function () {
 	    function JSXNamespacedName(namespace, name) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = jsx_syntax_1.JSXSyntax.JSXNamespacedName;
 	        this.namespace = namespace;
 	        this.name = name;
 	    }
+	    JSXNamespacedName.prototype.unparse = function (parent) {
+	        return this.wsBefore + Node.unparseChild(this)(this.namespace) + ':' + Node.unparseChild(this)(this.name) +
+	            this.wsAfter;
+	    };
 	    return JSXNamespacedName;
 	}());
 	exports.JSXNamespacedName = JSXNamespacedName;
 	var JSXOpeningElement = /** @class */ (function () {
-	    function JSXOpeningElement(name, selfClosing, attributes) {
+	    function JSXOpeningElement(wsBefore, name, selfClosing, attributes, wsBeforeEnd, wsBeforeGt) {
+	        this.wsAfter = '';
 	        this.type = jsx_syntax_1.JSXSyntax.JSXOpeningElement;
 	        this.name = name;
 	        this.selfClosing = selfClosing;
 	        this.attributes = attributes;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeEnd = wsBeforeEnd;
+	        this.wsBeforeGt = wsBeforeGt;
 	    }
+	    JSXOpeningElement.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            '<' + Node.unparseChild(this)(this.name) +
+	            Node.unparseChildren(this)(this.attributes) +
+	            this.wsBeforeEnd + (this.selfClosing ? '/' : '') + this.wsBeforeGt + '>' +
+	            this.wsAfter;
+	    };
 	    return JSXOpeningElement;
 	}());
 	exports.JSXOpeningElement = JSXOpeningElement;
 	var JSXSpreadAttribute = /** @class */ (function () {
-	    function JSXSpreadAttribute(argument) {
+	    function JSXSpreadAttribute(wsBefore, argument, wsBeforeClosing) {
+	        this.wsAfter = '';
 	        this.type = jsx_syntax_1.JSXSyntax.JSXSpreadAttribute;
 	        this.argument = argument;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
+	    JSXSpreadAttribute.prototype.unparse = function (parent) {
+	        return this.wsBefore + '{...' + Node.unparseChild(this)(this.argument) + this.wsBeforeClosing + '}' + this.wsAfter;
+	    };
 	    return JSXSpreadAttribute;
 	}());
 	exports.JSXSpreadAttribute = JSXSpreadAttribute;
 	var JSXText = /** @class */ (function () {
 	    function JSXText(value, raw) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = jsx_syntax_1.JSXSyntax.JSXText;
 	        this.value = value;
+	        this.originalValue = value;
 	        this.raw = raw;
 	    }
+	    JSXText.prototype.unparse = function (parent) {
+	        return this.wsBefore + (this.value === this.originalValue ? this.raw : this.value) + this.wsAfter;
+	    };
 	    return JSXText;
 	}());
 	exports.JSXText = JSXText;
@@ -1160,25 +1251,101 @@ return /******/ (function(modules) { // webpackBootstrap
 	"use strict";
 	Object.defineProperty(exports, "__esModule", { value: true });
 	var syntax_1 = __webpack_require__(2);
+	exports.unparseChildren = function (parent, join, defaultJoin) {
+	    if (parent === void 0) { parent = undefined; }
+	    if (join === void 0) { join = ''; }
+	    if (defaultJoin === void 0) { defaultJoin = ''; }
+	    return function (children) {
+	        if (children) {
+	            var renderedChildren = children.map(function (child) { return child ? child.unparse(parent) : ''; });
+	            if (typeof join === 'string') {
+	                return renderedChildren.join(join);
+	            }
+	            var result = '';
+	            for (var i = 0; i < renderedChildren.length; i++) {
+	                result += renderedChildren[i];
+	                if (i < join.length) {
+	                    result += join[i];
+	                }
+	                else if (i < renderedChildren.length - 1) {
+	                    if (join.length > 0) {
+	                        result += join[join.length - 1];
+	                    }
+	                    else {
+	                        result += defaultJoin;
+	                    }
+	                }
+	            }
+	            return result;
+	        }
+	        return '';
+	    };
+	};
+	exports.unparseChild = function (parent) {
+	    if (parent === void 0) { parent = undefined; }
+	    return function (node) { return node ? node.unparse(parent) : ''; };
+	};
+	function unparseArray(parent) {
+	    return this.wsBefore +
+	        '[' +
+	        exports.unparseChildren(this, this.separators, ', ')(this.elements) +
+	        this.wsBeforeClosing +
+	        ']' +
+	        this.wsAfter;
+	}
 	/* tslint:disable:max-classes-per-file */
+	/* type alias UnparseElement =
+	     ({name: string, map?: (typeof this[name], (Node, ParentNode?) => string, Node, ParentNode?)  => UnparseElement} | string);
+	   type alias UnparseArray = UnparseElement[] */
 	var ArrayExpression = /** @class */ (function () {
-	    function ArrayExpression(elements) {
+	    function ArrayExpression(wsBefore, elements, separators, wsBeforeClosing) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ArrayExpression;
 	        this.elements = elements;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeClosing = wsBeforeClosing;
+	        this.separators = separators;
 	    }
+	    ArrayExpression.prototype.unparse = function (parent) {
+	        return unparseArray.bind(this)(parent);
+	    };
 	    return ArrayExpression;
 	}());
 	exports.ArrayExpression = ArrayExpression;
 	var ArrayPattern = /** @class */ (function () {
-	    function ArrayPattern(elements) {
+	    function ArrayPattern(wsBefore, elements, separators, wsBeforeClosing) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ArrayPattern;
 	        this.elements = elements;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeClosing = wsBeforeClosing;
+	        this.separators = separators;
 	    }
+	    ArrayPattern.prototype.unparse = function (parent) {
+	        return unparseArray.bind(this)(parent);
+	    };
 	    return ArrayPattern;
 	}());
 	exports.ArrayPattern = ArrayPattern;
+	var arrowFunctionUnparser = function (parent) {
+	    return this.wsBefore +
+	        (this.async ? this.wsBeforeAsync + 'async' : '') +
+	        this.wsBeforeOpening +
+	        (this.params.length === 1 && this.noparens ? '' : '(') +
+	        exports.unparseChildren(this, this.separators, ', ')(this.params) +
+	        this.wsBeforeClosing +
+	        (this.params.length === 1 && this.noparens ? '' : ')') +
+	        this.wsBeforeArrow +
+	        this.arrow +
+	        exports.unparseChild(this)(this.body) +
+	        this.wsAfter;
+	};
 	var ArrowFunctionExpression = /** @class */ (function () {
-	    function ArrowFunctionExpression(params, body, expression) {
+	    function ArrowFunctionExpression(wsBeforeOpening, params, separators, wsBeforeClosing, noparens, wsBeforeArrow, body, expression) {
+	        this.wsBefore = '';
+	        this.wsBeforeAsync = '';
+	        this.arrow = '=>';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ArrowFunctionExpression;
 	        this.id = null;
 	        this.params = params;
@@ -1186,31 +1353,62 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.generator = false;
 	        this.expression = expression;
 	        this.async = false;
+	        this.wsBeforeOpening = wsBeforeOpening;
+	        this.separators = separators;
+	        this.wsBeforeClosing = wsBeforeClosing;
+	        this.wsBeforeArrow = wsBeforeArrow;
+	        this.noparens = noparens;
 	    }
+	    ArrowFunctionExpression.prototype.unparse = function (parent) {
+	        return arrowFunctionUnparser.bind(this)(parent);
+	    };
 	    return ArrowFunctionExpression;
 	}());
 	exports.ArrowFunctionExpression = ArrowFunctionExpression;
+	function binaryUnparser(parent) {
+	    return this.wsBefore +
+	        exports.unparseChild(this)(this.left) +
+	        this.wsBeforeOp +
+	        (isAssignmentPattern(this) ? '=' : this.operator) +
+	        exports.unparseChild(this)(this.right) +
+	        this.wsAfter;
+	}
 	var AssignmentExpression = /** @class */ (function () {
-	    function AssignmentExpression(operator, left, right) {
+	    function AssignmentExpression(wsBeforeOp, operator, left, right) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.AssignmentExpression;
 	        this.operator = operator;
 	        this.left = left;
 	        this.right = right;
+	        this.wsBeforeOp = wsBeforeOp;
 	    }
+	    AssignmentExpression.prototype.unparse = function (parent) {
+	        return binaryUnparser.bind(this)(parent);
+	    };
 	    return AssignmentExpression;
 	}());
 	exports.AssignmentExpression = AssignmentExpression;
 	var AssignmentPattern = /** @class */ (function () {
-	    function AssignmentPattern(left, right) {
+	    function AssignmentPattern(left, wsBeforeOp, right) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.AssignmentPattern;
 	        this.left = left;
 	        this.right = right;
+	        this.wsBeforeOp = wsBeforeOp;
 	    }
+	    AssignmentPattern.prototype.unparse = function (parent) {
+	        return binaryUnparser.bind(this)(parent);
+	    };
 	    return AssignmentPattern;
 	}());
 	exports.AssignmentPattern = AssignmentPattern;
 	var AsyncArrowFunctionExpression = /** @class */ (function () {
-	    function AsyncArrowFunctionExpression(params, body, expression) {
+	    function AsyncArrowFunctionExpression(wsBeforeAsync, wsBeforeOpening, params, separators, wsBeforeClosing, noparens, wsBeforeArrow, body, expression) {
+	        this.wsBefore = '';
+	        this.arrow = '=>';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ArrowFunctionExpression;
 	        this.id = null;
 	        this.params = params;
@@ -1218,12 +1416,42 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.generator = false;
 	        this.expression = expression;
 	        this.async = true;
+	        this.wsBeforeOpening = wsBeforeOpening;
+	        this.wsBeforeArrow = wsBeforeArrow;
+	        this.noparens = noparens;
+	        this.separators = separators;
+	        this.wsBeforeClosing = wsBeforeClosing;
+	        this.wsBeforeAsync = wsBeforeAsync;
 	    }
+	    AsyncArrowFunctionExpression.prototype.unparse = function (parent) {
+	        return arrowFunctionUnparser.bind(this)(parent);
+	    };
 	    return AsyncArrowFunctionExpression;
 	}());
 	exports.AsyncArrowFunctionExpression = AsyncArrowFunctionExpression;
+	// Context-sensitive unparsing definition.
+	// If a method, the async and generator (*) are already managed, and the word "function" does not appear.
+	var functionDeclarationUnparser = function (parent) {
+	    var isFunctionMethod = parent && (parent.type === syntax_1.Syntax.Property && (parent.method || parent.kind === 'get' || parent.kind === 'set') || parent.type === syntax_1.Syntax.MethodDefinition);
+	    return this.wsBefore +
+	        (isFunctionMethod ? '' :
+	            this.async ? this.wsBeforeAsync + 'async' : '') +
+	        this.wsBeforeFunction +
+	        (isFunctionMethod ? '' : 'function' +
+	            (this.generator ? this.wsBeforeStar + '*' : '')) +
+	        exports.unparseChild(this)(this.id) +
+	        this.wsBeforeParams +
+	        '(' +
+	        exports.unparseChildren(this, this.separators, ', ')(this.params) +
+	        this.wsBeforeEndParams +
+	        ')' +
+	        exports.unparseChild(this)(this.body) +
+	        this.wsAfter;
+	};
 	var AsyncFunctionDeclaration = /** @class */ (function () {
-	    function AsyncFunctionDeclaration(id, params, body) {
+	    function AsyncFunctionDeclaration(wsBeforeAsync, wsBeforeFunction, id, wsBeforeParams, params, separators, wsBeforeEndParams, body) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.FunctionDeclaration;
 	        this.id = id;
 	        this.params = params;
@@ -1231,12 +1459,23 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.generator = false;
 	        this.expression = false;
 	        this.async = true;
+	        this.wsBeforeFunction = wsBeforeFunction;
+	        this.wsBeforeAsync = wsBeforeAsync;
+	        this.wsBeforeStar = '';
+	        this.wsBeforeParams = wsBeforeParams;
+	        this.separators = separators;
+	        this.wsBeforeEndParams = wsBeforeEndParams;
 	    }
+	    AsyncFunctionDeclaration.prototype.unparse = function (parent) {
+	        return functionDeclarationUnparser.bind(this)(parent);
+	    };
 	    return AsyncFunctionDeclaration;
 	}());
 	exports.AsyncFunctionDeclaration = AsyncFunctionDeclaration;
 	var AsyncFunctionExpression = /** @class */ (function () {
-	    function AsyncFunctionExpression(id, params, body) {
+	    function AsyncFunctionExpression(wsBeforeAsync, wsBeforeFunction, id, wsBeforeParams, params, separators, wsBeforeEndParams, body) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.FunctionExpression;
 	        this.id = id;
 	        this.params = params;
@@ -1244,228 +1483,547 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.generator = false;
 	        this.expression = false;
 	        this.async = true;
+	        this.wsBeforeFunction = wsBeforeFunction;
+	        this.wsBeforeAsync = wsBeforeAsync;
+	        this.wsBeforeStar = '';
+	        this.wsBeforeParams = wsBeforeParams;
+	        this.separators = separators;
+	        this.wsBeforeEndParams = wsBeforeEndParams;
 	    }
+	    AsyncFunctionExpression.prototype.unparse = function (parent) {
+	        return functionDeclarationUnparser.bind(this)(parent);
+	    };
 	    return AsyncFunctionExpression;
 	}());
 	exports.AsyncFunctionExpression = AsyncFunctionExpression;
 	var AwaitExpression = /** @class */ (function () {
-	    function AwaitExpression(argument) {
+	    function AwaitExpression(wsBefore, argument) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.AwaitExpression;
 	        this.argument = argument;
+	        this.wsBefore = wsBefore;
 	    }
+	    AwaitExpression.prototype.unparse = function (parent) {
+	        return this.wsBefore + 'await' +
+	            exports.unparseChild(this)(this.argument) + this.wsAfter;
+	    };
 	    return AwaitExpression;
 	}());
 	exports.AwaitExpression = AwaitExpression;
 	var BinaryExpression = /** @class */ (function () {
-	    function BinaryExpression(operator, left, right) {
+	    function BinaryExpression(operator, left, right, wsBeforeOp) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        var logical = (operator === '||' || operator === '&&');
 	        this.type = logical ? syntax_1.Syntax.LogicalExpression : syntax_1.Syntax.BinaryExpression;
 	        this.operator = operator;
 	        this.left = left;
 	        this.right = right;
+	        this.wsBeforeOp = wsBeforeOp;
 	    }
+	    BinaryExpression.prototype.unparse = function (parent) {
+	        return binaryUnparser.bind(this)(parent);
+	    };
 	    return BinaryExpression;
 	}());
 	exports.BinaryExpression = BinaryExpression;
 	var BlockStatement = /** @class */ (function () {
-	    function BlockStatement(body) {
+	    function BlockStatement(wsBefore, body, wsBeforeEnd) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.BlockStatement;
 	        this.body = body;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeEnd = wsBeforeEnd;
 	    }
+	    BlockStatement.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            '{' +
+	            exports.unparseChildren(this)(this.body) +
+	            this.wsBeforeEnd +
+	            '}' +
+	            this.wsAfter;
+	    };
 	    return BlockStatement;
 	}());
 	exports.BlockStatement = BlockStatement;
+	var controlLabelStatementUnparseData = function (parent, name) {
+	    return this.wsBefore +
+	        name +
+	        exports.unparseChild(this)(this.label) +
+	        this.semicolon +
+	        this.wsAfter;
+	};
 	var BreakStatement = /** @class */ (function () {
-	    function BreakStatement(label) {
+	    function BreakStatement(wsBefore, label, semicolon) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.BreakStatement;
 	        this.label = label;
+	        this.wsBefore = wsBefore;
+	        this.semicolon = semicolon;
 	    }
+	    BreakStatement.prototype.unparse = function (parent) {
+	        return controlLabelStatementUnparseData.bind(this)(parent, 'break');
+	    };
 	    return BreakStatement;
 	}());
 	exports.BreakStatement = BreakStatement;
 	var CallExpression = /** @class */ (function () {
-	    function CallExpression(callee, args) {
+	    function CallExpression(callee, wsBeforeArgs, args, separators, wsBeforeEndArgs) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.CallExpression;
 	        this.callee = callee;
 	        this.arguments = args;
+	        this.wsBeforeArgs = wsBeforeArgs;
+	        this.separators = separators;
+	        this.wsBeforeEndArgs = wsBeforeEndArgs;
 	    }
+	    CallExpression.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            exports.unparseChild(this)(this.callee) +
+	            this.wsBeforeArgs +
+	            '(' +
+	            exports.unparseChildren(this, this.separators, ', ')(this.arguments) +
+	            this.wsBeforeEndArgs +
+	            ')' +
+	            this.wsAfter;
+	    };
 	    return CallExpression;
 	}());
 	exports.CallExpression = CallExpression;
 	var CatchClause = /** @class */ (function () {
-	    function CatchClause(param, body) {
+	    function CatchClause(wsBefore, wsBeforeOpening, param, wsBeforeClosing, body) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.CatchClause;
 	        this.param = param;
 	        this.body = body;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeOpening = wsBeforeOpening;
+	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
+	    CatchClause.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            'catch' +
+	            this.wsBeforeOpening +
+	            '(' +
+	            exports.unparseChild(this)(this.param) +
+	            this.wsBeforeClosing +
+	            ')' +
+	            exports.unparseChild(this)(this.body) +
+	            this.wsAfter;
+	    };
 	    return CatchClause;
 	}());
 	exports.CatchClause = CatchClause;
 	var ClassBody = /** @class */ (function () {
-	    function ClassBody(body) {
+	    function ClassBody(wsBeforeOpening, wsAfterOpening, body, wsBeforeClosing) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ClassBody;
 	        this.body = body;
+	        this.wsBeforeOpening = wsBeforeOpening;
+	        this.wsAfterOpening = wsAfterOpening;
+	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
+	    ClassBody.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            this.wsBeforeOpening +
+	            '{' +
+	            this.wsAfterOpening +
+	            exports.unparseChildren(this)(this.body) +
+	            this.wsBeforeClosing +
+	            '}' +
+	            this.wsAfter;
+	    };
 	    return ClassBody;
 	}());
 	exports.ClassBody = ClassBody;
+	var classDeclarationUnparser = function (parent) {
+	    return this.wsBefore +
+	        'class' +
+	        exports.unparseChild(this)(this.id) +
+	        (this.superClass ? this.wsBeforeExtends + 'extends' +
+	            exports.unparseChild(this)(this.superClass) : '') +
+	        exports.unparseChild(this)(this.body) +
+	        this.wsAfter;
+	};
 	var ClassDeclaration = /** @class */ (function () {
-	    function ClassDeclaration(id, superClass, body) {
+	    function ClassDeclaration(wsBefore, id, wsBeforeExtends, superClass, body) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ClassDeclaration;
 	        this.id = id;
 	        this.superClass = superClass;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeExtends = wsBeforeExtends;
 	        this.body = body;
 	    }
+	    ClassDeclaration.prototype.unparse = function (parent) {
+	        return classDeclarationUnparser.bind(this)(parent);
+	    };
 	    return ClassDeclaration;
 	}());
 	exports.ClassDeclaration = ClassDeclaration;
 	var ClassExpression = /** @class */ (function () {
-	    function ClassExpression(id, superClass, body) {
+	    function ClassExpression(wsBefore, id, wsBeforeExtends, superClass, body) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ClassExpression;
 	        this.id = id;
 	        this.superClass = superClass;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeExtends = wsBeforeExtends;
 	        this.body = body;
 	    }
+	    ClassExpression.prototype.unparse = function (parent) {
+	        return classDeclarationUnparser.bind(this)(parent);
+	    };
 	    return ClassExpression;
 	}());
 	exports.ClassExpression = ClassExpression;
 	var ComputedMemberExpression = /** @class */ (function () {
-	    function ComputedMemberExpression(object, property) {
+	    function ComputedMemberExpression(object, wsBeforeOpening, property, wsBeforeClosing) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.MemberExpression;
 	        this.computed = true;
 	        this.object = object;
 	        this.property = property;
+	        this.wsBeforeOpening = wsBeforeOpening;
+	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
+	    ComputedMemberExpression.prototype.unparse = function () {
+	        return this.wsBefore +
+	            exports.unparseChild(this)(this.object) +
+	            this.wsBeforeOpening +
+	            (this.computed ? '[' : '.') +
+	            exports.unparseChild(this)(this.property) +
+	            this.wsBeforeClosing +
+	            (this.computed ? ']' : '') +
+	            this.wsAfter;
+	    };
 	    return ComputedMemberExpression;
 	}());
 	exports.ComputedMemberExpression = ComputedMemberExpression;
 	var ConditionalExpression = /** @class */ (function () {
-	    function ConditionalExpression(test, consequent, alternate) {
+	    function ConditionalExpression(test, wsBeforeQues, consequent, wsBeforeColon, alternate) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ConditionalExpression;
 	        this.test = test;
 	        this.consequent = consequent;
 	        this.alternate = alternate;
+	        this.wsBeforeQues = wsBeforeQues;
+	        this.wsBeforeColon = wsBeforeColon;
 	    }
+	    ConditionalExpression.prototype.unparse = function () {
+	        return this.wsBefore +
+	            exports.unparseChild(this)(this.test) +
+	            this.wsBeforeQues +
+	            '?' +
+	            exports.unparseChild(this)(this.consequent) +
+	            this.wsBeforeColon +
+	            ':' +
+	            exports.unparseChild(this)(this.alternate) +
+	            this.wsAfter;
+	    };
 	    return ConditionalExpression;
 	}());
 	exports.ConditionalExpression = ConditionalExpression;
 	var ContinueStatement = /** @class */ (function () {
-	    function ContinueStatement(label) {
+	    function ContinueStatement(wsBefore, label, semicolon) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ContinueStatement;
 	        this.label = label;
+	        this.wsBefore = wsBefore;
+	        this.semicolon = semicolon;
 	    }
+	    ContinueStatement.prototype.unparse = function (parent) {
+	        return controlLabelStatementUnparseData.bind(this)(parent, 'continue');
+	    };
 	    return ContinueStatement;
 	}());
 	exports.ContinueStatement = ContinueStatement;
 	var DebuggerStatement = /** @class */ (function () {
-	    function DebuggerStatement() {
+	    function DebuggerStatement(wsBefore, semicolon) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.DebuggerStatement;
+	        this.wsBefore = wsBefore;
+	        this.semicolon = semicolon;
 	    }
+	    DebuggerStatement.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            'debugger' +
+	            this.semicolon;
+	    };
 	    return DebuggerStatement;
 	}());
 	exports.DebuggerStatement = DebuggerStatement;
 	var Directive = /** @class */ (function () {
-	    function Directive(expression, directive) {
+	    function Directive(expression, directive, semicolon) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ExpressionStatement;
 	        this.expression = expression;
 	        this.directive = directive;
+	        this.semicolon = semicolon;
 	    }
+	    Directive.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            exports.unparseChild(this)(this.expression) +
+	            this.semicolon +
+	            this.wsAfter;
+	    };
 	    return Directive;
 	}());
 	exports.Directive = Directive;
 	var DoWhileStatement = /** @class */ (function () {
-	    function DoWhileStatement(body, test) {
+	    function DoWhileStatement(wsBefore, body, wsBeforeWhile, wsBeforeOpening, test, wsBeforeClosing, semicolon, closingParens) {
+	        if (closingParens === void 0) { closingParens = ')'; }
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.DoWhileStatement;
 	        this.body = body;
 	        this.test = test;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeWhile = wsBeforeWhile;
+	        this.wsBeforeOpening = wsBeforeOpening;
+	        this.wsBeforeClosing = wsBeforeClosing;
+	        this.closingParens = closingParens;
+	        this.semicolon = semicolon;
 	    }
+	    DoWhileStatement.prototype.unparse = function () {
+	        return this.wsBefore +
+	            'do' +
+	            exports.unparseChild(this)(this.body) +
+	            this.wsBeforeWhile +
+	            'while' +
+	            this.wsBeforeOpening +
+	            '(' +
+	            exports.unparseChild(this)(this.test) +
+	            this.wsBeforeClosing +
+	            this.closingParens + this.semicolon +
+	            this.wsAfter;
+	    };
 	    return DoWhileStatement;
 	}());
 	exports.DoWhileStatement = DoWhileStatement;
 	var EmptyStatement = /** @class */ (function () {
-	    function EmptyStatement() {
+	    function EmptyStatement(wsBefore, semicolon) {
+	        if (semicolon === void 0) { semicolon = ';'; }
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.EmptyStatement;
+	        this.wsBefore = wsBefore;
+	        this.semicolon = semicolon;
 	    }
+	    EmptyStatement.prototype.unparse = function (parent) {
+	        return this.wsBefore + this.semicolon + this.wsAfter;
+	    };
 	    return EmptyStatement;
 	}());
 	exports.EmptyStatement = EmptyStatement;
 	var ExportAllDeclaration = /** @class */ (function () {
-	    function ExportAllDeclaration(source) {
+	    function ExportAllDeclaration(wsBefore, wsBeforeStar, wsBeforeFrom, source, semicolon) {
+	        if (semicolon === void 0) { semicolon = ''; }
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ExportAllDeclaration;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeStar = wsBeforeStar;
+	        this.wsBeforeFrom = wsBeforeFrom;
 	        this.source = source;
+	        this.semicolon = semicolon;
 	    }
+	    ExportAllDeclaration.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            'export' +
+	            this.wsBeforeStar +
+	            '*' +
+	            this.wsBeforeFrom +
+	            'from' +
+	            exports.unparseChild(this)(this.source) +
+	            this.semicolon +
+	            this.wsAfter;
+	    };
 	    return ExportAllDeclaration;
 	}());
 	exports.ExportAllDeclaration = ExportAllDeclaration;
 	var ExportDefaultDeclaration = /** @class */ (function () {
-	    function ExportDefaultDeclaration(declaration) {
+	    function ExportDefaultDeclaration(wsBefore, wsBeforeDefault, declaration, semicolon) {
+	        if (semicolon === void 0) { semicolon = ''; }
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ExportDefaultDeclaration;
 	        this.declaration = declaration;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeDefault = wsBeforeDefault;
+	        this.semicolon = semicolon;
 	    }
+	    ExportDefaultDeclaration.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            'export' +
+	            this.wsBeforeDefault +
+	            'default' +
+	            exports.unparseChild(this)(this.declaration) +
+	            this.semicolon +
+	            this.wsAfter;
+	    };
 	    return ExportDefaultDeclaration;
 	}());
 	exports.ExportDefaultDeclaration = ExportDefaultDeclaration;
 	var ExportNamedDeclaration = /** @class */ (function () {
-	    function ExportNamedDeclaration(declaration, specifiers, source) {
+	    function ExportNamedDeclaration(wsBefore, declaration, hasBrackets, wsBeforeOpening, specifiers, separators, wsBeforeClosing, wsBeforeFrom, source, semicolon) {
+	        if (semicolon === void 0) { semicolon = ''; }
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ExportNamedDeclaration;
 	        this.declaration = declaration;
 	        this.specifiers = specifiers;
 	        this.source = source;
+	        this.wsBefore = wsBefore;
+	        this.hasBrackets = hasBrackets;
+	        this.wsBeforeOpening = wsBeforeOpening;
+	        this.separators = separators;
+	        this.wsBeforeClosing = wsBeforeClosing;
+	        this.wsBeforeFrom = wsBeforeFrom;
+	        this.semicolon = semicolon;
 	    }
+	    ExportNamedDeclaration.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            'export' +
+	            (this.declaration ?
+	                exports.unparseChild(this)(this.declaration) : '') +
+	            (this.specifiers.length || this.hasBrackets ?
+	                this.wsBeforeOpening + '{' + exports.unparseChildren(this, this.separators, ',')(this.specifiers) + this.wsBeforeClosing + '}'
+	                : '') +
+	            (this.source ? this.wsBeforeFrom + 'from' + exports.unparseChild(this)(this.source) : '') + this.semicolon + this.wsAfter;
+	    };
 	    return ExportNamedDeclaration;
 	}());
 	exports.ExportNamedDeclaration = ExportNamedDeclaration;
 	var ExportSpecifier = /** @class */ (function () {
-	    function ExportSpecifier(local, exported) {
+	    function ExportSpecifier(local, noAs, wsBeforeAs, exported) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ExportSpecifier;
 	        this.exported = exported;
 	        this.local = local;
+	        this.noAs = noAs;
+	        this.wsBeforeAs = wsBeforeAs;
 	    }
+	    ExportSpecifier.prototype.unparse = function (parent) {
+	        var localStr = exports.unparseChild(this)(this.local);
+	        var exportedStr = exports.unparseChild(this)(this.exported);
+	        return this.wsBefore +
+	            localStr +
+	            (this.noAs && localStr === exportedStr ?
+	                ''
+	                : this.wsBeforeAs + 'as' + exports.unparseChild(this)(this.exported)) +
+	            this.wsAfter;
+	    };
 	    return ExportSpecifier;
 	}());
 	exports.ExportSpecifier = ExportSpecifier;
 	var ExpressionStatement = /** @class */ (function () {
-	    function ExpressionStatement(expression) {
+	    function ExpressionStatement(expression, semicolon) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ExpressionStatement;
 	        this.expression = expression;
+	        this.semicolon = semicolon;
 	    }
+	    ExpressionStatement.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            exports.unparseChild(this)(this.expression) + this.semicolon +
+	            this.wsAfter;
+	    };
 	    return ExpressionStatement;
 	}());
 	exports.ExpressionStatement = ExpressionStatement;
+	var forCollectionUnparser = function (parent, keyword) {
+	    return this.wsBefore +
+	        this.wsBeforeFor + 'for' + this.wsBeforeOpening + '(' +
+	        exports.unparseChild(this)(this.left) +
+	        this.wsBeforeKeyword + keyword +
+	        exports.unparseChild(this)(this.right) +
+	        this.wsBeforeClosing + this.closingParens +
+	        exports.unparseChild(this)(this.body) +
+	        this.wsAfter;
+	};
 	var ForInStatement = /** @class */ (function () {
-	    function ForInStatement(left, right, body) {
+	    function ForInStatement(wsBeforeFor, wsBeforeOpening, left, wsBeforeKeyword, right, wsBeforeClosing, body, closingParens) {
+	        if (closingParens === void 0) { closingParens = ')'; }
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ForInStatement;
 	        this.left = left;
 	        this.right = right;
 	        this.body = body;
 	        this.each = false;
+	        this.wsBeforeFor = wsBeforeFor;
+	        this.wsBeforeOpening = wsBeforeOpening;
+	        this.wsBeforeKeyword = wsBeforeKeyword;
+	        this.wsBeforeClosing = wsBeforeClosing;
+	        this.closingParens = closingParens;
 	    }
+	    ForInStatement.prototype.unparse = function (parent) {
+	        return forCollectionUnparser.bind(this)(parent, 'in');
+	    };
 	    return ForInStatement;
 	}());
 	exports.ForInStatement = ForInStatement;
 	var ForOfStatement = /** @class */ (function () {
-	    function ForOfStatement(left, right, body) {
+	    function ForOfStatement(wsBeforeFor, wsBeforeOpening, left, wsBeforeKeyword, right, wsBeforeClosing, body, closingParens) {
+	        if (closingParens === void 0) { closingParens = ')'; }
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ForOfStatement;
 	        this.left = left;
 	        this.right = right;
 	        this.body = body;
+	        this.wsBeforeFor = wsBeforeFor;
+	        this.wsBeforeOpening = wsBeforeOpening;
+	        this.wsBeforeKeyword = wsBeforeKeyword;
+	        this.wsBeforeClosing = wsBeforeClosing;
+	        this.closingParens = closingParens;
 	    }
+	    ForOfStatement.prototype.unparse = function (parent) {
+	        return forCollectionUnparser.bind(this)(parent, 'of');
+	    };
 	    return ForOfStatement;
 	}());
 	exports.ForOfStatement = ForOfStatement;
 	var ForStatement = /** @class */ (function () {
-	    function ForStatement(init, test, update, body) {
+	    function ForStatement(wsBeforeFor, wsBeforeOpening, init, wsBeforeSemicolon1, test, wsBeforeSemicolon2, update, wsBeforeClosing, body, closingParens) {
+	        if (closingParens === void 0) { closingParens = ')'; }
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ForStatement;
 	        this.init = init;
 	        this.test = test;
 	        this.update = update;
 	        this.body = body;
+	        this.wsBeforeFor = wsBeforeFor;
+	        this.wsBeforeOpening = wsBeforeOpening;
+	        this.wsBeforeSemicolon1 = wsBeforeSemicolon1;
+	        this.wsBeforeSemicolon2 = wsBeforeSemicolon2;
+	        this.wsBeforeClosing = wsBeforeClosing;
+	        this.closingParens = closingParens;
 	    }
+	    ForStatement.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            this.wsBeforeFor + 'for' + this.wsBeforeOpening + '(' +
+	            exports.unparseChild(this)(this.init) +
+	            this.wsBeforeSemicolon1 + ';' +
+	            exports.unparseChild(this)(this.test) +
+	            this.wsBeforeSemicolon2 + ';' +
+	            exports.unparseChild(this)(this.update) +
+	            this.wsBeforeClosing + this.closingParens +
+	            exports.unparseChild(this)(this.body) +
+	            this.wsAfter;
+	    };
 	    return ForStatement;
 	}());
 	exports.ForStatement = ForStatement;
 	var FunctionDeclaration = /** @class */ (function () {
-	    function FunctionDeclaration(id, params, body, generator) {
+	    function FunctionDeclaration(wsBeforeFunction, wsBeforeStar, id, wsBeforeParams, params, separators, wsBeforeEndParams, body, generator) {
+	        this.wsBefore = '';
+	        this.wsBeforeAsync = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.FunctionDeclaration;
 	        this.id = id;
 	        this.params = params;
@@ -1473,12 +2031,23 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.generator = generator;
 	        this.expression = false;
 	        this.async = false;
+	        this.wsBeforeFunction = wsBeforeFunction;
+	        this.wsBeforeStar = wsBeforeStar;
+	        this.wsBeforeParams = wsBeforeParams;
+	        this.separators = separators;
+	        this.wsBeforeEndParams = wsBeforeEndParams;
 	    }
+	    FunctionDeclaration.prototype.unparse = function (parent) {
+	        return functionDeclarationUnparser.bind(this)(parent);
+	    };
 	    return FunctionDeclaration;
 	}());
 	exports.FunctionDeclaration = FunctionDeclaration;
 	var FunctionExpression = /** @class */ (function () {
-	    function FunctionExpression(id, params, body, generator) {
+	    function FunctionExpression(wsBeforeFunction, wsBeforeStar, id, wsBeforeParams, params, separators, wsBeforeEndParams, body, generator) {
+	        this.wsBefore = '';
+	        this.wsBeforeAsync = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.FunctionExpression;
 	        this.id = id;
 	        this.params = params;
@@ -1486,144 +2055,396 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.generator = generator;
 	        this.expression = false;
 	        this.async = false;
+	        this.wsBeforeFunction = wsBeforeFunction;
+	        this.wsBeforeStar = wsBeforeStar;
+	        this.wsBeforeParams = wsBeforeParams;
+	        this.separators = separators;
+	        this.wsBeforeEndParams = wsBeforeEndParams;
 	    }
+	    FunctionExpression.prototype.unparse = function (parent) {
+	        return functionDeclarationUnparser.bind(this)(parent);
+	    };
 	    return FunctionExpression;
 	}());
 	exports.FunctionExpression = FunctionExpression;
 	var Identifier = /** @class */ (function () {
-	    function Identifier(name) {
+	    function Identifier(wsBefore, name, nameRaw) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.Identifier;
 	        this.name = name;
+	        this.original = name;
+	        this.nameRaw = nameRaw;
+	        this.wsBefore = wsBefore;
 	    }
+	    Identifier.prototype.unparse = function (parent) {
+	        return this.wsBefore + (this.name === this.original ? this.nameRaw : this.name) + this.wsAfter;
+	    };
 	    return Identifier;
 	}());
 	exports.Identifier = Identifier;
 	var IfStatement = /** @class */ (function () {
-	    function IfStatement(test, consequent, alternate) {
+	    function IfStatement(wsBefore, ifKeyword, wsBeforeOpening, test, wsBeforeClosing, consequent, wsBeforeElse, alternate, closingParens) {
+	        if (closingParens === void 0) { closingParens = ')'; }
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.IfStatement;
 	        this.test = test;
 	        this.consequent = consequent;
 	        this.alternate = alternate;
+	        this.ifKeyword = ifKeyword;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeOpening = wsBeforeOpening;
+	        this.wsBeforeClosing = wsBeforeClosing;
+	        this.wsBeforeElse = wsBeforeElse;
+	        this.closingParens = closingParens;
 	    }
+	    IfStatement.prototype.unparse = function (parent) {
+	        return this.wsBefore + this.ifKeyword +
+	            this.wsBeforeOpening + '(' +
+	            exports.unparseChild(this)(this.test) +
+	            this.wsBeforeClosing + this.closingParens +
+	            exports.unparseChild(this)(this.consequent) +
+	            (this.alternate ?
+	                this.wsBeforeElse + 'else' + exports.unparseChild(this)(this.alternate) : '') +
+	            this.wsAfter;
+	    };
 	    return IfStatement;
 	}());
 	exports.IfStatement = IfStatement;
 	var Import = /** @class */ (function () {
-	    function Import() {
+	    function Import(wsBefore) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.Import;
+	        this.wsBefore = wsBefore;
 	    }
+	    Import.prototype.unparse = function (parent) {
+	        return this.wsBefore + 'import' + this.wsAfter;
+	    };
 	    return Import;
 	}());
 	exports.Import = Import;
 	var ImportDeclaration = /** @class */ (function () {
-	    function ImportDeclaration(specifiers, source) {
+	    function ImportDeclaration(wsBefore, wsBeforeOpening, hasBrackets, specifiers, separators, wsBeforeClosing, wsBeforeFrom, source, semicolon) {
+	        if (semicolon === void 0) { semicolon = ''; }
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ImportDeclaration;
+	        this.hasBrackets = hasBrackets;
 	        this.specifiers = specifiers;
 	        this.source = source;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeOpening = wsBeforeOpening;
+	        this.separators = separators;
+	        this.wsBeforeClosing = wsBeforeClosing;
+	        this.wsBeforeFrom = wsBeforeFrom;
+	        this.semicolon = semicolon;
 	    }
+	    ImportDeclaration.prototype.unparse = function (parent) {
+	        var result = this.wsBefore + 'import';
+	        if (this.specifiers.length === 0 && !this.hasBrackets) {
+	            return result + exports.unparseChild(this)(this.source) + this.semicolon + this.wsAfter;
+	        }
+	        var insideImportSpecifiers = false;
+	        for (var i = 0; i < this.specifiers.length; i++) {
+	            var specifier = this.specifiers[i];
+	            if (specifier.type === syntax_1.Syntax.ImportSpecifier) {
+	                if (!insideImportSpecifiers) {
+	                    result += this.wsBeforeOpening + '{';
+	                    insideImportSpecifiers = true;
+	                }
+	            }
+	            result += exports.unparseChild(this)(specifier);
+	            if (i < this.separators.length) {
+	                result += this.separators[i];
+	            }
+	            else if (i < this.specifiers.length - 1) {
+	                result += ', ';
+	            }
+	        }
+	        if (!insideImportSpecifiers && this.hasBrackets) {
+	            result += this.wsBeforeOpening + '{';
+	            insideImportSpecifiers = true;
+	        }
+	        if (insideImportSpecifiers) {
+	            result += this.wsBeforeClosing + '}';
+	        }
+	        return result + this.wsBeforeFrom + 'from' +
+	            exports.unparseChild(this)(this.source) + this.semicolon + this.wsAfter;
+	    };
 	    return ImportDeclaration;
 	}());
 	exports.ImportDeclaration = ImportDeclaration;
 	var ImportDefaultSpecifier = /** @class */ (function () {
 	    function ImportDefaultSpecifier(local) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ImportDefaultSpecifier;
 	        this.local = local;
 	    }
+	    ImportDefaultSpecifier.prototype.unparse = function (parent) {
+	        return this.wsBefore + exports.unparseChild(this)(this.local) + this.wsAfter;
+	    };
 	    return ImportDefaultSpecifier;
 	}());
 	exports.ImportDefaultSpecifier = ImportDefaultSpecifier;
 	var ImportNamespaceSpecifier = /** @class */ (function () {
-	    function ImportNamespaceSpecifier(local) {
+	    function ImportNamespaceSpecifier(wsBefore, wsBeforeAs, local) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ImportNamespaceSpecifier;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeAs = wsBeforeAs;
 	        this.local = local;
 	    }
+	    ImportNamespaceSpecifier.prototype.unparse = function (parent) {
+	        return this.wsBefore + '*' + this.wsBeforeAs + 'as' +
+	            exports.unparseChild(this)(this.local) + this.wsAfter;
+	    };
 	    return ImportNamespaceSpecifier;
 	}());
 	exports.ImportNamespaceSpecifier = ImportNamespaceSpecifier;
 	var ImportSpecifier = /** @class */ (function () {
-	    function ImportSpecifier(local, imported) {
+	    function ImportSpecifier(local, asPresent, wsBeforeAs, imported) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ImportSpecifier;
 	        this.local = local;
 	        this.imported = imported;
+	        this.asPresent = asPresent;
+	        this.wsBeforeAs = wsBeforeAs;
 	    }
+	    ImportSpecifier.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            exports.unparseChild(this)(this.imported) +
+	            (this.asPresent ? this.wsBeforeAs + 'as' +
+	                exports.unparseChild(this)(this.local) : '') + this.wsAfter;
+	    };
 	    return ImportSpecifier;
 	}());
 	exports.ImportSpecifier = ImportSpecifier;
 	var LabeledStatement = /** @class */ (function () {
-	    function LabeledStatement(label, body) {
+	    function LabeledStatement(label, wsBeforeColon, body) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.LabeledStatement;
 	        this.label = label;
 	        this.body = body;
+	        this.wsBeforeColon = wsBeforeColon;
 	    }
+	    LabeledStatement.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            exports.unparseChild(this)(this.label) +
+	            this.wsBeforeColon + ':' +
+	            exports.unparseChild(this)(this.body) +
+	            this.wsAfter;
+	    };
 	    return LabeledStatement;
 	}());
 	exports.LabeledStatement = LabeledStatement;
+	function unescapeChar(m) {
+	    switch (m) {
+	        case '\\': return '\\\\';
+	        case '\b': return '\\b';
+	        case '\f': return '\\f';
+	        case '\n': return '\\n';
+	        case '\r': return '\\r';
+	        case '\t': return '\\t';
+	        case '\v': return '\\v';
+	        default: return m;
+	    }
+	}
+	function unescapeCharSequence(str) {
+	    return str.replace(/[\\\b\f\n\r\t\v]/g, unescapeChar);
+	}
+	function uneval(x) {
+	    if (typeof x === 'string') {
+	        return toExpString(x);
+	    }
+	    if (typeof x === 'number' || typeof x === 'boolean') {
+	        return '' + x;
+	    }
+	    if (typeof x === 'object' && x === null) {
+	        return 'null';
+	    }
+	    if (typeof x === 'object' && typeof x.length === 'number') { // Arrays
+	        var result = [];
+	        x = x;
+	        for (var i = 0; i < x.length; i++) {
+	            result.push(uneval(x[i]));
+	        }
+	        return '[' + result.join(',') + ']';
+	    }
+	    if (typeof x === 'object') {
+	        var result = [];
+	        for (var _i = 0, _a = Object.keys(x); _i < _a.length; _i++) {
+	            var k = _a[_i];
+	            result.push(k + ':' + uneval(x[k]));
+	        }
+	        return '{' + result.join(', ') + '}';
+	    }
+	    return '' + x;
+	}
+	function toExpString(str, raw) {
+	    var charDelim = raw && raw.length >= 1 && (raw[0] === '"' || raw[0] === '`' || raw[0] === '\'') ? raw[0] : '"';
+	    return charDelim + unescapeCharSequence(str).replace(charDelim, '\\' + charDelim) + charDelim;
+	}
 	var Literal = /** @class */ (function () {
-	    function Literal(value, raw) {
+	    function Literal(wsBefore, value, raw) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.Literal;
 	        this.value = value;
 	        this.raw = raw;
+	        this.original = value;
+	        this.wsBefore = wsBefore;
 	    }
+	    Literal.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            (this.original === this.value ? this.raw :
+	                typeof this.value === 'string' ?
+	                    toExpString(this.value, this.raw) :
+	                    typeof this.value === 'object' ?
+	                        this.value === null ?
+	                            'null' :
+	                            uneval(this.value) :
+	                        '' + this.value) + this.wsAfter;
+	    };
 	    return Literal;
 	}());
 	exports.Literal = Literal;
 	var MetaProperty = /** @class */ (function () {
-	    function MetaProperty(meta, property) {
+	    function MetaProperty(meta, wsBeforeDot, property) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.MetaProperty;
 	        this.meta = meta;
 	        this.property = property;
+	        this.wsBeforeDot = wsBeforeDot;
 	    }
+	    MetaProperty.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            exports.unparseChild(this)(this.meta) +
+	            this.wsBeforeDot + '.' +
+	            exports.unparseChild(this)(this.property) +
+	            this.wsAfter;
+	    };
 	    return MetaProperty;
 	}());
 	exports.MetaProperty = MetaProperty;
 	var MethodDefinition = /** @class */ (function () {
-	    function MethodDefinition(key, computed, value, kind, isStatic) {
+	    function MethodDefinition(wsBeforeStatic, wsBeforeGetSet, key, computed, wsBeforeOpening, wsBeforeClosing, value, kind, isStatic) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.MethodDefinition;
 	        this.key = key;
 	        this.computed = computed;
 	        this.value = value;
 	        this.kind = kind;
 	        this.static = isStatic;
+	        this.wsBeforeGetSet = wsBeforeGetSet;
+	        this.wsBeforeStatic = wsBeforeStatic;
+	        this.wsBeforeOpening = wsBeforeOpening;
+	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
+	    MethodDefinition.prototype.unparse = function (parent) {
+	        var keyStr = exports.unparseChild(this)(this.key);
+	        return this.wsBefore +
+	            (this.static ? this.wsBeforeStatic + 'static' : '') +
+	            (this.value && isFunctionExpression(this.value) ?
+	                (this.value.async ? this.value.wsBeforeAsync + 'async' : '') +
+	                    (this.value.generator ? this.value.wsBeforeStar + '*' : '') : '') +
+	            (this.kind === 'set' || this.kind === 'get' ? this.wsBeforeGetSet + this.kind : '') +
+	            (this.computed ? this.wsBeforeOpening + '[' : '') +
+	            keyStr +
+	            (this.computed ? this.wsBeforeClosing + ']' : '') +
+	            exports.unparseChild(this)(this.value) +
+	            this.wsAfter;
+	    };
 	    return MethodDefinition;
 	}());
 	exports.MethodDefinition = MethodDefinition;
 	var Module = /** @class */ (function () {
-	    function Module(body) {
+	    function Module(body, wsAfter) {
+	        this.wsBefore = '';
 	        this.type = syntax_1.Syntax.Program;
 	        this.body = body;
 	        this.sourceType = 'module';
+	        this.wsAfter = wsAfter;
 	    }
+	    Module.prototype.unparse = function (parent) {
+	        return this.wsBefore + exports.unparseChildren(this)(this.body) + this.wsAfter;
+	    };
 	    return Module;
 	}());
 	exports.Module = Module;
 	var NewExpression = /** @class */ (function () {
-	    function NewExpression(callee, args) {
+	    function NewExpression(wsBeforeNew, callee, parentheses, wsBeforeOpening, args, separators, wsBeforeClosing) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.NewExpression;
 	        this.callee = callee;
 	        this.arguments = args;
+	        this.wsBeforeNew = wsBeforeNew;
+	        this.parentheses = parentheses;
+	        this.wsBeforeOpening = wsBeforeOpening;
+	        this.separators = separators;
+	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
+	    NewExpression.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            this.wsBeforeNew + 'new' +
+	            exports.unparseChild(this)(this.callee) +
+	            (this.parentheses || this.arguments.length > 0 ?
+	                this.wsBeforeOpening + '(' +
+	                    exports.unparseChildren(this, this.separators, ', ')(this.arguments) +
+	                    this.wsBeforeClosing + ')'
+	                : '') +
+	            this.wsAfter;
+	    };
 	    return NewExpression;
 	}());
 	exports.NewExpression = NewExpression;
+	var objectExpressionPatternUnparse = function () {
+	    return this.wsBefore + '{' +
+	        exports.unparseChildren(this, this.separators, ', ')(this.properties) +
+	        this.wsBeforeClosing + '}' + this.wsAfter;
+	};
 	var ObjectExpression = /** @class */ (function () {
-	    function ObjectExpression(properties) {
+	    function ObjectExpression(wsBefore, properties, separators, wsBeforeClosing) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ObjectExpression;
 	        this.properties = properties;
+	        this.wsBefore = wsBefore;
+	        this.separators = separators;
+	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
+	    ObjectExpression.prototype.unparse = function (parent) {
+	        return objectExpressionPatternUnparse.bind(this)();
+	    };
 	    return ObjectExpression;
 	}());
 	exports.ObjectExpression = ObjectExpression;
 	var ObjectPattern = /** @class */ (function () {
-	    function ObjectPattern(properties) {
+	    function ObjectPattern(wsBefore, properties, separators, wsBeforeClosing) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ObjectPattern;
 	        this.properties = properties;
+	        this.wsBefore = wsBefore;
+	        this.separators = separators;
+	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
+	    ObjectPattern.prototype.unparse = function (parent) {
+	        return objectExpressionPatternUnparse.bind(this)();
+	    };
 	    return ObjectPattern;
 	}());
 	exports.ObjectPattern = ObjectPattern;
+	function isFunctionExpression(e) {
+	    return e.type === syntax_1.Syntax.FunctionExpression;
+	}
+	function isAssignmentPattern(e) {
+	    return e.type === syntax_1.Syntax.AssignmentPattern;
+	}
 	var Property = /** @class */ (function () {
-	    function Property(kind, key, computed, value, method, shorthand) {
+	    function Property(kind, key, wsBeforeGetSet, wsBeforeOpening, wsBeforeClosing, wsBeforeColon, computed, value, method, shorthand) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.Property;
 	        this.key = key;
 	        this.computed = computed;
@@ -1631,210 +2452,430 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.kind = kind;
 	        this.method = method;
 	        this.shorthand = shorthand;
+	        this.wsBeforeOpening = wsBeforeOpening;
+	        this.wsBeforeClosing = wsBeforeClosing;
+	        this.wsBeforeGetSet = wsBeforeGetSet;
+	        this.wsBeforeColon = wsBeforeColon;
 	    }
+	    Property.prototype.unparse = function (parent) {
+	        var ap = this.value && isAssignmentPattern(this.value);
+	        return this.wsBefore + (this.method && this.value ?
+	            isFunctionExpression(this.value) ?
+	                (this.value.async ? this.value.wsBeforeAsync + 'async' : '') +
+	                    (this.value.generator ? this.value.wsBeforeStar + '*' : '') : ''
+	            : '') +
+	            (this.kind === 'get' || this.kind === 'set' ? this.wsBeforeGetSet + this.kind : '') +
+	            (!this.shorthand || (this.value && !ap) ? (this.computed ? this.wsBeforeOpening + '[' : '') + exports.unparseChild(this)(this.key) + (this.computed ? this.wsBeforeClosing + ']' : '') : '') +
+	            (this.method || this.shorthand || this.kind === 'get' || this.kind === 'set' ? '' : this.wsBeforeColon + ':') +
+	            (this.shorthand && !ap ? '' : exports.unparseChild(this)(this.value)) + this.wsAfter;
+	    };
 	    return Property;
 	}());
 	exports.Property = Property;
 	var RegexLiteral = /** @class */ (function () {
-	    function RegexLiteral(value, raw, pattern, flags) {
+	    function RegexLiteral(wsBefore, value, raw, pattern, flags) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.Literal;
 	        this.value = value;
 	        this.raw = raw;
 	        this.regex = { pattern: pattern, flags: flags };
+	        this.original = { pattern: pattern, flags: flags };
+	        this.wsBefore = wsBefore;
 	    }
+	    RegexLiteral.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            (this.original.pattern === this.regex.pattern &&
+	                this.original.flags === this.regex.flags ? this.raw :
+	                '/' +
+	                    this.regex.pattern +
+	                    '/' +
+	                    this.regex.flags) + this.wsAfter;
+	    };
 	    return RegexLiteral;
 	}());
 	exports.RegexLiteral = RegexLiteral;
 	var RestElement = /** @class */ (function () {
-	    function RestElement(argument) {
+	    function RestElement(wsBefore, argument) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.RestElement;
 	        this.argument = argument;
+	        this.wsBefore = wsBefore;
 	    }
+	    RestElement.prototype.unparse = function (parent) {
+	        return this.wsBefore + '...' +
+	            exports.unparseChild(this)(this.argument) +
+	            this.wsAfter;
+	    };
 	    return RestElement;
 	}());
 	exports.RestElement = RestElement;
 	var ReturnStatement = /** @class */ (function () {
-	    function ReturnStatement(argument) {
+	    function ReturnStatement(wsBefore, argument, semicolon) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ReturnStatement;
 	        this.argument = argument;
+	        this.wsBefore = wsBefore;
+	        this.semicolon = semicolon;
 	    }
+	    ReturnStatement.prototype.unparse = function (parent) {
+	        return this.wsBefore + 'return' +
+	            exports.unparseChild(this)(this.argument) +
+	            this.semicolon + this.wsAfter;
+	    };
 	    return ReturnStatement;
 	}());
 	exports.ReturnStatement = ReturnStatement;
 	var Script = /** @class */ (function () {
-	    function Script(body) {
+	    function Script(body, wsAfter) {
+	        this.wsBefore = '';
 	        this.type = syntax_1.Syntax.Program;
 	        this.body = body;
 	        this.sourceType = 'script';
+	        this.wsAfter = wsAfter;
 	    }
+	    Script.prototype.unparse = function (parent) {
+	        return this.wsBefore + exports.unparseChildren(this)(this.body) +
+	            this.wsAfter;
+	    };
 	    return Script;
 	}());
 	exports.Script = Script;
 	var SequenceExpression = /** @class */ (function () {
-	    function SequenceExpression(expressions) {
+	    function SequenceExpression(parentheses, wsBeforeOpening, expressions, separators, wsBeforeClosing) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.SequenceExpression;
 	        this.expressions = expressions;
+	        this.parentheses = parentheses;
+	        this.wsBeforeOpening = wsBeforeOpening;
+	        this.separators = separators;
+	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
+	    SequenceExpression.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            (this.parentheses ? this.wsBeforeOpening + '(' : '') +
+	            exports.unparseChildren(this, this.separators, ', ')(this.expressions) +
+	            (this.parentheses ? this.wsBeforeClosing + ')' : '') +
+	            this.wsAfter;
+	    };
 	    return SequenceExpression;
 	}());
 	exports.SequenceExpression = SequenceExpression;
 	var SpreadElement = /** @class */ (function () {
-	    function SpreadElement(argument) {
+	    function SpreadElement(wsBefore, argument) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.SpreadElement;
 	        this.argument = argument;
+	        this.wsBefore = wsBefore;
 	    }
+	    SpreadElement.prototype.unparse = function (parent) {
+	        return this.wsBefore + '...' +
+	            exports.unparseChild(this)(this.argument) +
+	            this.wsAfter;
+	    };
 	    return SpreadElement;
 	}());
 	exports.SpreadElement = SpreadElement;
 	var StaticMemberExpression = /** @class */ (function () {
-	    function StaticMemberExpression(object, property) {
+	    function StaticMemberExpression(object, wsBeforeOpening, property) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.MemberExpression;
 	        this.computed = false;
 	        this.object = object;
 	        this.property = property;
+	        this.wsBeforeOpening = wsBeforeOpening;
+	        this.wsBeforeClosing = '';
 	    }
+	    StaticMemberExpression.prototype.unparse = function () {
+	        return this.wsBefore +
+	            exports.unparseChild(this)(this.object) +
+	            this.wsBeforeOpening +
+	            (this.computed ? '[' : '.') +
+	            exports.unparseChild(this)(this.property) +
+	            this.wsBeforeClosing +
+	            (this.computed ? ']' : '') +
+	            this.wsAfter;
+	    };
 	    return StaticMemberExpression;
 	}());
 	exports.StaticMemberExpression = StaticMemberExpression;
 	var Super = /** @class */ (function () {
-	    function Super() {
+	    function Super(wsBefore) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.Super;
+	        this.wsBefore = wsBefore;
 	    }
+	    Super.prototype.unparse = function (parent) {
+	        return this.wsBefore + 'super' + this.wsAfter;
+	    };
 	    return Super;
 	}());
 	exports.Super = Super;
 	var SwitchCase = /** @class */ (function () {
-	    function SwitchCase(test, consequent) {
+	    function SwitchCase(wsBefore, test, wsBeforeColon, consequent) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.SwitchCase;
 	        this.test = test;
 	        this.consequent = consequent;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeColon = wsBeforeColon;
 	    }
+	    SwitchCase.prototype.unparse = function (parent) {
+	        return this.wsBefore + (this.test ? 'case' + exports.unparseChild(this)(this.test) : 'default') +
+	            this.wsBeforeColon + ':' +
+	            exports.unparseChildren(this)(this.consequent) + this.wsAfter;
+	    };
 	    return SwitchCase;
 	}());
 	exports.SwitchCase = SwitchCase;
 	var SwitchStatement = /** @class */ (function () {
-	    function SwitchStatement(discriminant, cases) {
+	    function SwitchStatement(wsBefore, wsBeforeOpening, discriminant, wsBeforeClosing, wsBeforeBlockOpening, cases, wsBeforeBlockClosing) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.SwitchStatement;
 	        this.discriminant = discriminant;
 	        this.cases = cases;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeOpening = wsBeforeOpening;
+	        this.wsBeforeClosing = wsBeforeClosing;
+	        this.wsBeforeBlockOpening = wsBeforeBlockOpening;
+	        this.wsBeforeBlockClosing = wsBeforeBlockClosing;
 	    }
+	    SwitchStatement.prototype.unparse = function (parent) {
+	        return this.wsBefore + 'switch' + this.wsBeforeOpening +
+	            '(' + exports.unparseChild(this)(this.discriminant) + this.wsBeforeClosing +
+	            ')' + this.wsBeforeBlockOpening + '{' +
+	            exports.unparseChildren(this)(this.cases) +
+	            this.wsBeforeBlockClosing + '}' + this.wsAfter;
+	    };
 	    return SwitchStatement;
 	}());
 	exports.SwitchStatement = SwitchStatement;
 	var TaggedTemplateExpression = /** @class */ (function () {
 	    function TaggedTemplateExpression(tag, quasi) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.TaggedTemplateExpression;
 	        this.tag = tag;
 	        this.quasi = quasi;
 	    }
+	    TaggedTemplateExpression.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            exports.unparseChild(this)(this.tag) + exports.unparseChild(this)(this.quasi) +
+	            this.wsAfter;
+	    };
 	    return TaggedTemplateExpression;
 	}());
 	exports.TaggedTemplateExpression = TaggedTemplateExpression;
 	var TemplateElement = /** @class */ (function () {
 	    function TemplateElement(value, tail) {
+	        this.wsBefore = ''; // Not much sense here, there is yet no kind of whitespace for template elements
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.TemplateElement;
 	        this.value = value;
+	        this.originalCooked = value.cooked;
 	        this.tail = tail;
 	    }
+	    TemplateElement.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            (this.value.cooked === this.originalCooked ? this.value.raw :
+	                this.value.cooked.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${')) +
+	            this.wsAfter;
+	    };
 	    return TemplateElement;
 	}());
 	exports.TemplateElement = TemplateElement;
 	var TemplateLiteral = /** @class */ (function () {
-	    function TemplateLiteral(quasis, expressions) {
+	    function TemplateLiteral(wsBefore, quasis, expressions) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.TemplateLiteral;
 	        this.quasis = quasis;
 	        this.expressions = expressions;
+	        this.wsBefore = wsBefore;
 	    }
+	    TemplateLiteral.prototype.unparse = function (parent) {
+	        var result = '';
+	        for (var i = 0; i < this.quasis.length; i++) {
+	            result += exports.unparseChild(this)(this.quasis[i]) + (i < this.expressions.length ? '${' + exports.unparseChild(this)(this.expressions[i]) + '}' : '');
+	        }
+	        return this.wsBefore + '`' + result + '`' + this.wsAfter;
+	    };
 	    return TemplateLiteral;
 	}());
 	exports.TemplateLiteral = TemplateLiteral;
 	var ThisExpression = /** @class */ (function () {
-	    function ThisExpression() {
+	    function ThisExpression(wsBefore) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ThisExpression;
+	        this.wsBefore = wsBefore;
 	    }
+	    ThisExpression.prototype.unparse = function (parent) {
+	        return this.wsBefore + 'this' + this.wsAfter;
+	    };
 	    return ThisExpression;
 	}());
 	exports.ThisExpression = ThisExpression;
 	var ThrowStatement = /** @class */ (function () {
-	    function ThrowStatement(argument) {
+	    function ThrowStatement(wsBefore, argument, semicolon) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ThrowStatement;
 	        this.argument = argument;
+	        this.wsBefore = wsBefore;
+	        this.semicolon = semicolon;
 	    }
+	    ThrowStatement.prototype.unparse = function (parent) {
+	        return this.wsBefore + 'throw' +
+	            exports.unparseChild(this)(this.argument) + this.semicolon +
+	            this.wsAfter;
+	    };
 	    return ThrowStatement;
 	}());
 	exports.ThrowStatement = ThrowStatement;
 	var TryStatement = /** @class */ (function () {
-	    function TryStatement(block, handler, finalizer) {
+	    function TryStatement(wsBefore, block, handler, wsBeforeFinally, finalizer) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.TryStatement;
 	        this.block = block;
 	        this.handler = handler;
 	        this.finalizer = finalizer;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeFinally = wsBeforeFinally;
 	    }
+	    TryStatement.prototype.unparse = function (parent) {
+	        return this.wsBefore + 'try' +
+	            exports.unparseChild(this)(this.block) +
+	            exports.unparseChild(this)(this.handler) +
+	            (this.finalizer ? this.wsBeforeFinally + 'finally' + exports.unparseChild(this)(this.finalizer) : '') +
+	            this.wsAfter;
+	    };
 	    return TryStatement;
 	}());
 	exports.TryStatement = TryStatement;
 	var UnaryExpression = /** @class */ (function () {
-	    function UnaryExpression(operator, argument) {
+	    function UnaryExpression(wsBefore, operator, argument) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.UnaryExpression;
 	        this.operator = operator;
 	        this.argument = argument;
 	        this.prefix = true;
+	        this.wsBefore = wsBefore;
 	    }
+	    UnaryExpression.prototype.unparse = function (parent) {
+	        return this.wsBefore + this.operator +
+	            exports.unparseChild(this)(this.argument) + this.wsAfter;
+	    };
 	    return UnaryExpression;
 	}());
 	exports.UnaryExpression = UnaryExpression;
 	var UpdateExpression = /** @class */ (function () {
-	    function UpdateExpression(operator, argument, prefix) {
+	    function UpdateExpression(wsBefore, operator, argument, prefix) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.UpdateExpression;
 	        this.operator = operator;
 	        this.argument = argument;
 	        this.prefix = prefix;
+	        this.wsBefore = wsBefore;
 	    }
+	    UpdateExpression.prototype.unparse = function (parent) {
+	        return (this.prefix ? this.wsBefore + this.operator : '') +
+	            exports.unparseChild(this)(this.argument) +
+	            (this.prefix ? '' : this.wsBefore + this.operator) +
+	            this.wsAfter;
+	    };
 	    return UpdateExpression;
 	}());
 	exports.UpdateExpression = UpdateExpression;
 	var VariableDeclaration = /** @class */ (function () {
-	    function VariableDeclaration(declarations, kind) {
+	    function VariableDeclaration(wsBefore, declarations, separators, kind, semicolon) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.VariableDeclaration;
 	        this.declarations = declarations;
 	        this.kind = kind;
+	        this.wsBefore = wsBefore;
+	        this.separators = separators;
+	        this.semicolon = semicolon;
 	    }
+	    VariableDeclaration.prototype.unparse = function (parent) {
+	        return this.wsBefore + this.kind + exports.unparseChildren(this, this.separators, ', ')(this.declarations) +
+	            this.semicolon + this.wsAfter;
+	    };
 	    return VariableDeclaration;
 	}());
 	exports.VariableDeclaration = VariableDeclaration;
 	var VariableDeclarator = /** @class */ (function () {
-	    function VariableDeclarator(id, init) {
+	    function VariableDeclarator(id, wsBeforeEq, init) {
+	        this.wsBefore = '';
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.VariableDeclarator;
 	        this.id = id;
+	        this.wsBeforeEq = wsBeforeEq;
 	        this.init = init;
 	    }
+	    VariableDeclarator.prototype.unparse = function (parent) {
+	        return this.wsBefore +
+	            exports.unparseChild(this)(this.id) +
+	            (this.init ? this.wsBeforeEq + '=' + exports.unparseChild(this)(this.init) : '') +
+	            this.wsAfter;
+	    };
 	    return VariableDeclarator;
 	}());
 	exports.VariableDeclarator = VariableDeclarator;
 	var WhileStatement = /** @class */ (function () {
-	    function WhileStatement(test, body) {
+	    function WhileStatement(wsBefore, wsBeforeOpening, test, wsBeforeClosing, body, closingParens) {
+	        if (closingParens === void 0) { closingParens = ')'; }
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.WhileStatement;
 	        this.test = test;
 	        this.body = body;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeOpening = wsBeforeOpening;
+	        this.wsBeforeClosing = wsBeforeClosing;
+	        this.closingParens = closingParens;
 	    }
+	    WhileStatement.prototype.unparse = function (parent) {
+	        return this.wsBefore + 'while' + this.wsBeforeOpening +
+	            '(' + exports.unparseChild(this)(this.test) + this.wsBeforeClosing + this.closingParens +
+	            exports.unparseChild(this)(this.body) +
+	            this.wsAfter;
+	    };
 	    return WhileStatement;
 	}());
 	exports.WhileStatement = WhileStatement;
 	var WithStatement = /** @class */ (function () {
-	    function WithStatement(object, body) {
+	    function WithStatement(wsBefore, wsBeforeOpening, object, wsBeforeClosing, body, closingParens) {
+	        if (closingParens === void 0) { closingParens = ')'; }
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.WithStatement;
 	        this.object = object;
 	        this.body = body;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeOpening = wsBeforeOpening;
+	        this.closingParens = closingParens;
+	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
+	    WithStatement.prototype.unparse = function (parent) {
+	        return this.wsBefore + 'with' + this.wsBeforeOpening + '(' +
+	            exports.unparseChild(this)(this.object) + this.wsBeforeClosing + this.closingParens +
+	            exports.unparseChild(this)(this.body) +
+	            this.wsAfter;
+	    };
 	    return WithStatement;
 	}());
 	exports.WithStatement = WithStatement;
 	var YieldExpression = /** @class */ (function () {
-	    function YieldExpression(argument, delegate) {
+	    function YieldExpression(wsBefore, wsBeforeStar, argument, delegate, semicolon) {
+	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.YieldExpression;
 	        this.argument = argument;
 	        this.delegate = delegate;
+	        this.wsBefore = wsBefore;
+	        this.wsBeforeStar = wsBeforeStar;
+	        this.semicolon = semicolon;
 	    }
+	    YieldExpression.prototype.unparse = function (parent) {
+	        return this.wsBefore + 'yield' + (this.delegate ? this.wsBeforeStar + '*' : '') +
+	            (this.argument ? exports.unparseChild(this)(this.argument) : '') + this.semicolon + this.wsAfter;
+	    };
 	    return YieldExpression;
 	}());
 	exports.YieldExpression = YieldExpression;
@@ -1908,7 +2949,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            lineStart: 0,
 	            start: 0,
 	            end: 0,
-	            wsBefore: ""
+	            wsBefore: ''
 	        };
 	        this.hasLineTerminator = false;
 	        this.context = {
@@ -2090,6 +3131,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        }
 	        return t;
 	    };
+	    // Returns the previous token. Sets the .lookahead to the next token.
 	    Parser.prototype.nextToken = function () {
 	        var token = this.lookahead;
 	        this.lastMarker.index = this.scanner.index;
@@ -2098,7 +3140,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var wsStart = this.scanner.index;
 	        this.collectComments();
 	        var tokenStart = this.scanner.index;
-	        var ws = tokenStart == wsStart ? "" : this.scanner.source.substring(wsStart, tokenStart);
+	        var ws = tokenStart === wsStart ? '' : this.scanner.source.substring(wsStart, tokenStart);
 	        if (this.scanner.index !== this.startMarker.index) {
 	            this.startMarker.index = this.scanner.index;
 	            this.startMarker.line = this.scanner.lineNumber;
@@ -2117,11 +3159,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	        }
 	        return token;
 	    };
-	    Parser.prototype.nextRegexToken = function () {
-	        var wsStart = this.scanner.index;
+	    Parser.prototype.nextRegexToken = function (ws) {
 	        this.collectComments();
-	        var tokenStart = this.scanner.index;
-	        var ws = tokenStart == wsStart ? "" : this.scanner.source.substring(wsStart, tokenStart);
 	        var token = this.scanner.scanRegExp(ws);
 	        if (this.config.tokens) {
 	            // Pop the previous token, '/' or '/='
@@ -2198,24 +3237,27 @@ return /******/ (function(modules) { // webpackBootstrap
 	        if (token.type !== 7 /* Punctuator */ || token.value !== value) {
 	            this.throwUnexpectedToken(token);
 	        }
+	        return token.wsBefore;
 	    };
 	    // Quietly expect a comma when in tolerant mode, otherwise delegates to expect().
 	    Parser.prototype.expectCommaSeparator = function () {
 	        if (this.config.tolerant) {
 	            var token = this.lookahead;
 	            if (token.type === 7 /* Punctuator */ && token.value === ',') {
-	                this.nextToken();
+	                return this.nextToken().wsBefore + ',';
 	            }
 	            else if (token.type === 7 /* Punctuator */ && token.value === ';') {
-	                this.nextToken();
+	                var wsBefore = this.nextToken().wsBefore;
 	                this.tolerateUnexpectedToken(token);
+	                return wsBefore + ';';
 	            }
 	            else {
 	                this.tolerateUnexpectedToken(token, messages_1.Messages.UnexpectedToken);
+	                return '';
 	            }
 	        }
 	        else {
-	            this.expect(',');
+	            return this.expect(',') + ',';
 	        }
 	    };
 	    // Expect the next token to match the specified keyword.
@@ -2225,6 +3267,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        if (token.type !== 4 /* Keyword */ || token.value !== keyword) {
 	            this.throwUnexpectedToken(token);
 	        }
+	        return token.wsBefore;
 	    };
 	    // Return true if the next token matches the specified punctuator.
 	    Parser.prototype.match = function (value) {
@@ -2321,7 +3364,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	    };
 	    Parser.prototype.consumeSemicolon = function () {
 	        if (this.match(';')) {
-	            this.nextToken();
+	            var token = this.nextToken();
+	            return token.wsBefore + ';';
 	        }
 	        else if (!this.hasLineTerminator) {
 	            if (this.lookahead.type !== 2 /* EOF */ && !this.match('}')) {
@@ -2330,7 +3374,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	            this.lastMarker.index = this.startMarker.index;
 	            this.lastMarker.line = this.startMarker.line;
 	            this.lastMarker.column = this.startMarker.column;
+	            return '';
 	        }
+	        return '';
 	    };
 	    // https://tc39.github.io/ecma262/#sec-primary-expression
 	    Parser.prototype.parsePrimaryExpression = function () {
@@ -2342,7 +3388,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	                if ((this.context.isModule || this.context.await) && this.lookahead.value === 'await') {
 	                    this.tolerateUnexpectedToken(this.lookahead);
 	                }
-	                expr = this.matchAsyncFunction() ? this.parseFunctionExpression() : this.finalize(node, new Node.Identifier(this.nextToken().value));
+	                if (this.matchAsyncFunction()) {
+	                    expr = this.parseFunctionExpression();
+	                }
+	                else {
+	                    token = this.nextToken();
+	                    expr = this.finalize(node, new Node.Identifier(token.wsBefore, token.value, this.getTokenRaw(token)));
+	                }
 	                break;
 	            case 6 /* NumericLiteral */:
 	            case 8 /* StringLiteral */:
@@ -2353,24 +3405,24 @@ return /******/ (function(modules) { // webpackBootstrap
 	                this.context.isBindingElement = false;
 	                token = this.nextToken();
 	                raw = this.getTokenRaw(token);
-	                expr = this.finalize(node, new Node.Literal(token.value, raw));
+	                expr = this.finalize(node, new Node.Literal(token.wsBefore, token.value, raw));
 	                break;
 	            case 1 /* BooleanLiteral */:
 	                this.context.isAssignmentTarget = false;
 	                this.context.isBindingElement = false;
 	                token = this.nextToken();
 	                raw = this.getTokenRaw(token);
-	                expr = this.finalize(node, new Node.Literal(token.value === 'true', raw));
+	                expr = this.finalize(node, new Node.Literal(token.wsBefore, token.value === 'true', raw));
 	                break;
 	            case 5 /* NullLiteral */:
 	                this.context.isAssignmentTarget = false;
 	                this.context.isBindingElement = false;
 	                token = this.nextToken();
 	                raw = this.getTokenRaw(token);
-	                expr = this.finalize(node, new Node.Literal(null, raw));
+	                expr = this.finalize(node, new Node.Literal(token.wsBefore, null, raw));
 	                break;
 	            case 10 /* Template */:
-	                expr = this.parseTemplateLiteral();
+	                expr = this.parseTemplateLiteral(this.lookahead.wsBefore);
 	                break;
 	            case 7 /* Punctuator */:
 	                switch (this.lookahead.value) {
@@ -2389,9 +3441,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	                        this.context.isAssignmentTarget = false;
 	                        this.context.isBindingElement = false;
 	                        this.scanner.index = this.startMarker.index;
-	                        token = this.nextRegexToken();
+	                        token = this.nextRegexToken(this.lookahead.wsBefore);
 	                        raw = this.getTokenRaw(token);
-	                        expr = this.finalize(node, new Node.RegexLiteral(token.regex, raw, token.pattern, token.flags));
+	                        expr = this.finalize(node, new Node.RegexLiteral(token.wsBefore, token.regex, raw, token.pattern, token.flags));
 	                        break;
 	                    default:
 	                        expr = this.throwUnexpectedToken(this.nextToken());
@@ -2402,7 +3454,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	                    expr = this.parseIdentifierName();
 	                }
 	                else if (!this.context.strict && this.matchKeyword('let')) {
-	                    expr = this.finalize(node, new Node.Identifier(this.nextToken().value));
+	                    var letToken = this.nextToken();
+	                    expr = this.finalize(node, new Node.Identifier(letToken.wsBefore, letToken.value, this.getTokenRaw(letToken)));
 	                }
 	                else {
 	                    this.context.isAssignmentTarget = false;
@@ -2411,8 +3464,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	                        expr = this.parseFunctionExpression();
 	                    }
 	                    else if (this.matchKeyword('this')) {
-	                        this.nextToken();
-	                        expr = this.finalize(node, new Node.ThisExpression());
+	                        expr = this.finalize(node, new Node.ThisExpression(this.nextToken().wsBefore));
 	                    }
 	                    else if (this.matchKeyword('class')) {
 	                        expr = this.parseClassExpression();
@@ -2433,17 +3485,18 @@ return /******/ (function(modules) { // webpackBootstrap
 	    // https://tc39.github.io/ecma262/#sec-array-initializer
 	    Parser.prototype.parseSpreadElement = function () {
 	        var node = this.createNode();
-	        this.expect('...');
+	        var wsBefore = this.expect('...');
 	        var arg = this.inheritCoverGrammar(this.parseAssignmentExpression);
-	        return this.finalize(node, new Node.SpreadElement(arg));
+	        return this.finalize(node, new Node.SpreadElement(wsBefore, arg));
 	    };
 	    Parser.prototype.parseArrayInitializer = function () {
 	        var node = this.createNode();
 	        var elements = [];
-	        this.expect('[');
+	        var separators = [];
+	        var wsBefore = this.expect('[');
 	        while (!this.match(']')) {
 	            if (this.match(',')) {
-	                this.nextToken();
+	                separators.push(this.nextToken().wsBefore + ',');
 	                elements.push(null);
 	            }
 	            else if (this.match('...')) {
@@ -2451,19 +3504,20 @@ return /******/ (function(modules) { // webpackBootstrap
 	                if (!this.match(']')) {
 	                    this.context.isAssignmentTarget = false;
 	                    this.context.isBindingElement = false;
-	                    this.expect(',');
+	                    separators.push(this.expect(',') + ',');
 	                }
 	                elements.push(element);
 	            }
 	            else {
-	                elements.push(this.inheritCoverGrammar(this.parseAssignmentExpression));
+	                var arg = this.inheritCoverGrammar(this.parseAssignmentExpression);
+	                elements.push(arg);
 	                if (!this.match(']')) {
-	                    this.expect(',');
+	                    separators.push(this.expect(',') + ',');
 	                }
 	            }
 	        }
-	        this.expect(']');
-	        return this.finalize(node, new Node.ArrayExpression(elements));
+	        var wsBeforeClosing = this.expect(']');
+	        return this.finalize(node, new Node.ArrayExpression(wsBefore, elements, separators, wsBeforeClosing));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-object-initializer
 	    Parser.prototype.parsePropertyMethod = function (params) {
@@ -2491,9 +3545,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var params = this.parseFormalParameters();
 	        var method = this.parsePropertyMethod(params);
 	        this.context.allowYield = previousAllowYield;
-	        return this.finalize(node, new Node.FunctionExpression(null, params.params, method, isGenerator));
+	        return this.finalize(node, new Node.FunctionExpression('', '', null, params.wsBeforeOpening, params.params, params.separators, params.wsBeforeClosing, method, isGenerator));
 	    };
-	    Parser.prototype.parsePropertyMethodAsyncFunction = function () {
+	    // At this point, async was already consumed.
+	    Parser.prototype.parsePropertyMethodAsyncFunction = function (wsBeforeAsync) {
 	        var node = this.createNode();
 	        var previousAllowYield = this.context.allowYield;
 	        var previousAwait = this.context.await;
@@ -2503,12 +3558,15 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var method = this.parsePropertyMethod(params);
 	        this.context.allowYield = previousAllowYield;
 	        this.context.await = previousAwait;
-	        return this.finalize(node, new Node.AsyncFunctionExpression(null, params.params, method));
+	        return this.finalize(node, new Node.AsyncFunctionExpression(wsBeforeAsync, '', null, params.wsBeforeOpening, params.params, params.separators, params.wsBeforeClosing, method));
 	    };
 	    Parser.prototype.parseObjectPropertyKey = function () {
 	        var node = this.createNode();
 	        var token = this.nextToken();
 	        var key;
+	        var wsBeforeOpening = '';
+	        var wsBeforeClosing = '';
+	        var computed = false;
 	        switch (token.type) {
 	            case 8 /* StringLiteral */:
 	            case 6 /* NumericLiteral */:
@@ -2516,18 +3574,20 @@ return /******/ (function(modules) { // webpackBootstrap
 	                    this.tolerateUnexpectedToken(token, messages_1.Messages.StrictOctalLiteral);
 	                }
 	                var raw = this.getTokenRaw(token);
-	                key = this.finalize(node, new Node.Literal(token.value, raw));
+	                key = this.finalize(node, new Node.Literal(token.wsBefore, token.value, raw));
 	                break;
 	            case 3 /* Identifier */:
 	            case 1 /* BooleanLiteral */:
 	            case 5 /* NullLiteral */:
 	            case 4 /* Keyword */:
-	                key = this.finalize(node, new Node.Identifier(token.value));
+	                key = this.finalize(node, new Node.Identifier(token.wsBefore, token.value, this.getTokenRaw(token)));
 	                break;
 	            case 7 /* Punctuator */:
 	                if (token.value === '[') {
+	                    wsBeforeOpening = token.wsBefore;
 	                    key = this.isolateCoverGrammar(this.parseAssignmentExpression);
-	                    this.expect(']');
+	                    wsBeforeClosing = this.expect(']');
+	                    computed = true;
 	                }
 	                else {
 	                    key = this.throwUnexpectedToken(token);
@@ -2536,7 +3596,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            default:
 	                key = this.throwUnexpectedToken(token);
 	        }
-	        return key;
+	        return { key: key, wsBeforeOpening: wsBeforeOpening, wsBeforeClosing: wsBeforeClosing, computed: computed };
 	    };
 	    Parser.prototype.isPropertyKey = function (key, value) {
 	        return (key.type === syntax_1.Syntax.Identifier && key.name === value) ||
@@ -2552,40 +3612,70 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var method = false;
 	        var shorthand = false;
 	        var isAsync = false;
+	        var wsBeforeAsync = '';
+	        var wsBeforeStar = '';
+	        var wsBeforeColon = '';
+	        var wsBeforeGetSet = '';
+	        var wsBeforeOpening = '';
+	        var wsBeforeClosing = '';
+	        var objectPropertyKey;
 	        if (token.type === 3 /* Identifier */) {
 	            var id = token.value;
 	            this.nextToken();
-	            computed = this.match('[');
+	            // computed = this.match('['); // Not necessary anymore
 	            isAsync = !this.hasLineTerminator && (id === 'async') &&
 	                !this.match(':') && !this.match('(') && !this.match('*') && !this.match(',');
-	            key = isAsync ? this.parseObjectPropertyKey() : this.finalize(node, new Node.Identifier(id));
+	            wsBeforeAsync = isAsync ? token.wsBefore : '';
+	            objectPropertyKey = isAsync ? this.parseObjectPropertyKey() : { computed: false, wsBeforeOpening: '', wsBeforeClosing: '', key: this.finalize(node, new Node.Identifier(token.wsBefore, id, this.getTokenRaw(token))) };
+	            key = objectPropertyKey.key;
+	            wsBeforeOpening = objectPropertyKey.wsBeforeOpening;
+	            wsBeforeClosing = objectPropertyKey.wsBeforeClosing;
+	            computed = objectPropertyKey.computed;
 	        }
 	        else if (this.match('*')) {
-	            this.nextToken();
+	            wsBeforeStar = this.nextToken().wsBefore;
 	        }
 	        else {
 	            computed = this.match('[');
-	            key = this.parseObjectPropertyKey();
+	            objectPropertyKey = this.parseObjectPropertyKey();
+	            key = objectPropertyKey.key;
+	            wsBeforeOpening = objectPropertyKey.wsBeforeOpening;
+	            wsBeforeClosing = objectPropertyKey.wsBeforeClosing;
+	            computed = objectPropertyKey.computed;
 	        }
 	        var lookaheadPropertyKey = this.qualifiedPropertyName(this.lookahead);
 	        if (token.type === 3 /* Identifier */ && !isAsync && token.value === 'get' && lookaheadPropertyKey) {
 	            kind = 'get';
+	            wsBeforeGetSet = token.wsBefore;
 	            computed = this.match('[');
-	            key = this.parseObjectPropertyKey();
+	            objectPropertyKey = this.parseObjectPropertyKey();
+	            key = objectPropertyKey.key;
+	            wsBeforeOpening = objectPropertyKey.wsBeforeOpening;
+	            wsBeforeClosing = objectPropertyKey.wsBeforeClosing;
+	            computed = objectPropertyKey.computed;
 	            this.context.allowYield = false;
 	            value = this.parseGetterMethod();
 	        }
 	        else if (token.type === 3 /* Identifier */ && !isAsync && token.value === 'set' && lookaheadPropertyKey) {
 	            kind = 'set';
-	            computed = this.match('[');
-	            key = this.parseObjectPropertyKey();
+	            wsBeforeGetSet = token.wsBefore;
+	            // computed = this.match('['); // Not necessary anymore
+	            objectPropertyKey = this.parseObjectPropertyKey();
+	            key = objectPropertyKey.key;
+	            wsBeforeOpening = objectPropertyKey.wsBeforeOpening;
+	            wsBeforeClosing = objectPropertyKey.wsBeforeClosing;
+	            computed = objectPropertyKey.computed;
 	            value = this.parseSetterMethod();
 	        }
 	        else if (token.type === 7 /* Punctuator */ && token.value === '*' && lookaheadPropertyKey) {
 	            kind = 'init';
-	            computed = this.match('[');
-	            key = this.parseObjectPropertyKey();
-	            value = this.parseGeneratorMethod();
+	            // computed = this.match('['); // Not necessary anymore
+	            objectPropertyKey = this.parseObjectPropertyKey();
+	            key = objectPropertyKey.key;
+	            wsBeforeOpening = objectPropertyKey.wsBeforeOpening;
+	            wsBeforeClosing = objectPropertyKey.wsBeforeClosing;
+	            computed = objectPropertyKey.computed;
+	            value = this.parseGeneratorMethod(wsBeforeStar);
 	            method = true;
 	        }
 	        else {
@@ -2594,6 +3684,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            }
 	            kind = 'init';
 	            if (this.match(':') && !isAsync) {
+	                wsBeforeColon = this.lookahead.wsBefore;
 	                if (!computed && this.isPropertyKey(key, '__proto__')) {
 	                    if (hasProto.value) {
 	                        this.tolerateError(messages_1.Messages.DuplicateProtoProperty);
@@ -2604,17 +3695,17 @@ return /******/ (function(modules) { // webpackBootstrap
 	                value = this.inheritCoverGrammar(this.parseAssignmentExpression);
 	            }
 	            else if (this.match('(')) {
-	                value = isAsync ? this.parsePropertyMethodAsyncFunction() : this.parsePropertyMethodFunction();
+	                value = isAsync ? this.parsePropertyMethodAsyncFunction(wsBeforeAsync) : this.parsePropertyMethodFunction();
 	                method = true;
 	            }
 	            else if (token.type === 3 /* Identifier */) {
-	                var id = this.finalize(node, new Node.Identifier(token.value));
+	                var id = this.finalize(node, new Node.Identifier(token.wsBefore, token.value, this.getTokenRaw(token)));
 	                if (this.match('=')) {
 	                    this.context.firstCoverInitializedNameError = this.lookahead;
-	                    this.nextToken();
+	                    var wsBeforeEq = this.nextToken().wsBefore;
 	                    shorthand = true;
 	                    var init = this.isolateCoverGrammar(this.parseAssignmentExpression);
-	                    value = this.finalize(node, new Node.AssignmentPattern(id, init));
+	                    value = this.finalize(node, new Node.AssignmentPattern(id, wsBeforeEq, init));
 	                }
 	                else {
 	                    shorthand = true;
@@ -2625,21 +3716,22 @@ return /******/ (function(modules) { // webpackBootstrap
 	                this.throwUnexpectedToken(this.nextToken());
 	            }
 	        }
-	        return this.finalize(node, new Node.Property(kind, key, computed, value, method, shorthand));
+	        return this.finalize(node, new Node.Property(kind, key, wsBeforeGetSet, wsBeforeOpening, wsBeforeClosing, wsBeforeColon, computed, value, method, shorthand));
 	    };
 	    Parser.prototype.parseObjectInitializer = function () {
 	        var node = this.createNode();
-	        this.expect('{');
+	        var wsBefore = this.expect('{');
 	        var properties = [];
 	        var hasProto = { value: false };
+	        var separators = [];
 	        while (!this.match('}')) {
 	            properties.push(this.match('...') ? this.parseSpreadElement() : this.parseObjectProperty(hasProto));
 	            if (!this.match('}')) {
-	                this.expectCommaSeparator();
+	                separators.push(this.expectCommaSeparator());
 	            }
 	        }
-	        this.expect('}');
-	        return this.finalize(node, new Node.ObjectExpression(properties));
+	        var wsBeforeClosing = this.expect('}');
+	        return this.finalize(node, new Node.ObjectExpression(wsBefore, properties, separators, wsBeforeClosing));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-template-literals
 	    Parser.prototype.parseTemplateHead = function () {
@@ -2660,7 +3752,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var cooked = token.cooked;
 	        return this.finalize(node, new Node.TemplateElement({ raw: raw, cooked: cooked }, token.tail));
 	    };
-	    Parser.prototype.parseTemplateLiteral = function () {
+	    Parser.prototype.parseTemplateLiteral = function (wsBefore) {
 	        var node = this.createNode();
 	        var expressions = [];
 	        var quasis = [];
@@ -2671,7 +3763,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            quasi = this.parseTemplateElement();
 	            quasis.push(quasi);
 	        }
-	        return this.finalize(node, new Node.TemplateLiteral(quasis, expressions));
+	        return this.finalize(node, new Node.TemplateLiteral(wsBefore, quasis, expressions));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-grouping-operator
 	    Parser.prototype.reinterpretExpressionAsPattern = function (expr) {
@@ -2712,16 +3804,22 @@ return /******/ (function(modules) { // webpackBootstrap
 	    };
 	    Parser.prototype.parseGroupExpression = function () {
 	        var expr;
-	        this.expect('(');
+	        var wsBeforeOpening = this.expect('(');
+	        var wsBeforeClosing = '';
+	        var separators = [];
 	        if (this.match(')')) {
-	            this.nextToken();
+	            wsBeforeClosing = this.nextToken().wsBefore;
 	            if (!this.match('=>')) {
-	                this.expect('=>');
+	                this.expect('=>'); // Throws errors
 	            }
 	            expr = {
 	                type: ArrowParameterPlaceHolder,
 	                params: [],
-	                async: false
+	                async: false,
+	                wsBeforeOpening: wsBeforeOpening,
+	                wsBeforeClosing: wsBeforeClosing,
+	                separators: separators,
+	                noparens: false
 	            };
 	        }
 	        else {
@@ -2729,14 +3827,18 @@ return /******/ (function(modules) { // webpackBootstrap
 	            var params = [];
 	            if (this.match('...')) {
 	                expr = this.parseRestElement(params);
-	                this.expect(')');
+	                wsBeforeClosing = this.expect(')');
 	                if (!this.match('=>')) {
-	                    this.expect('=>');
+	                    this.expect('=>'); // Throws error
 	                }
 	                expr = {
 	                    type: ArrowParameterPlaceHolder,
 	                    params: [expr],
-	                    async: false
+	                    async: false,
+	                    wsBeforeOpening: wsBeforeOpening,
+	                    wsBeforeClosing: wsBeforeClosing,
+	                    sparators: separators,
+	                    noparens: false
 	                };
 	            }
 	            else {
@@ -2751,9 +3853,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	                        if (!this.match(',')) {
 	                            break;
 	                        }
-	                        this.nextToken();
-	                        if (this.match(')')) {
-	                            this.nextToken();
+	                        separators.push(this.nextToken().wsBefore + ',');
+	                        if (this.match(')')) { // Parenthesis following a comma indicates a parameter list.
+	                            wsBeforeClosing = this.nextToken().wsBefore;
 	                            for (var i = 0; i < expressions.length; i++) {
 	                                this.reinterpretExpressionAsPattern(expressions[i]);
 	                            }
@@ -2761,15 +3863,19 @@ return /******/ (function(modules) { // webpackBootstrap
 	                            expr = {
 	                                type: ArrowParameterPlaceHolder,
 	                                params: expressions,
-	                                async: false
+	                                async: false,
+	                                wsBeforeOpening: wsBeforeOpening,
+	                                separators: separators,
+	                                wsBeforeClosing: wsBeforeClosing,
+	                                noparens: false
 	                            };
 	                        }
-	                        else if (this.match('...')) {
+	                        else if (this.match('...')) { // spread indicates a parameter list
 	                            if (!this.context.isBindingElement) {
 	                                this.throwUnexpectedToken(this.lookahead);
 	                            }
 	                            expressions.push(this.parseRestElement(params));
-	                            this.expect(')');
+	                            wsBeforeClosing = this.expect(')');
 	                            if (!this.match('=>')) {
 	                                this.expect('=>');
 	                            }
@@ -2781,7 +3887,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	                            expr = {
 	                                type: ArrowParameterPlaceHolder,
 	                                params: expressions,
-	                                async: false
+	                                async: false,
+	                                wsBeforeOpening: wsBeforeOpening,
+	                                separators: separators,
+	                                wsBeforeClosing: wsBeforeClosing,
+	                                noparens: false
 	                            };
 	                        }
 	                        else {
@@ -2792,18 +3902,22 @@ return /******/ (function(modules) { // webpackBootstrap
 	                        }
 	                    }
 	                    if (!arrow) {
-	                        expr = this.finalize(this.startNode(startToken), new Node.SequenceExpression(expressions));
+	                        expr = this.finalize(this.startNode(startToken), new Node.SequenceExpression(false, '', expressions, separators, ''));
 	                    }
 	                }
 	                if (!arrow) {
-	                    this.expect(')');
+	                    wsBeforeClosing = this.expect(')');
 	                    if (this.match('=>')) {
 	                        if (expr.type === syntax_1.Syntax.Identifier && expr.name === 'yield') {
 	                            arrow = true;
 	                            expr = {
 	                                type: ArrowParameterPlaceHolder,
 	                                params: [expr],
-	                                async: false
+	                                async: false,
+	                                wsBeforeOpening: wsBeforeOpening,
+	                                separators: separators,
+	                                wsBeforeClosing: wsBeforeClosing,
+	                                noparens: false
 	                            };
 	                        }
 	                        if (!arrow) {
@@ -2822,9 +3936,18 @@ return /******/ (function(modules) { // webpackBootstrap
 	                            expr = {
 	                                type: ArrowParameterPlaceHolder,
 	                                params: parameters,
-	                                async: false
+	                                wsBeforeOpening: wsBeforeOpening,
+	                                separators: separators,
+	                                wsBeforeClosing: wsBeforeClosing,
+	                                async: false,
+	                                noparens: false
 	                            };
 	                        }
+	                    }
+	                    else {
+	                        // Add the parentheses to the whitespace before and after
+	                        expr.wsBefore = wsBeforeOpening + '(' + expr.wsBefore;
+	                        expr.wsAfter = expr.wsAfter + wsBeforeClosing + ')';
 	                    }
 	                    this.context.isBindingElement = false;
 	                }
@@ -2834,8 +3957,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	    };
 	    // https://tc39.github.io/ecma262/#sec-left-hand-side-expressions
 	    Parser.prototype.parseArguments = function () {
-	        this.expect('(');
+	        var wsBeforeOpening = this.expect('(');
 	        var args = [];
+	        var separators = [];
 	        if (!this.match(')')) {
 	            while (true) {
 	                var expr = this.match('...') ? this.parseSpreadElement() :
@@ -2844,14 +3968,18 @@ return /******/ (function(modules) { // webpackBootstrap
 	                if (this.match(')')) {
 	                    break;
 	                }
-	                this.expectCommaSeparator();
+	                separators.push(this.expectCommaSeparator());
 	                if (this.match(')')) {
 	                    break;
 	                }
 	            }
 	        }
-	        this.expect(')');
-	        return args;
+	        var wsBeforeClosing = this.expect(')');
+	        return { parentheses: true,
+	            wsBeforeOpening: wsBeforeOpening,
+	            args: args,
+	            separators: separators,
+	            wsBeforeClosing: wsBeforeClosing };
 	    };
 	    Parser.prototype.isIdentifierName = function (token) {
 	        return token.type === 3 /* Identifier */ ||
@@ -2865,7 +3993,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        if (!this.isIdentifierName(token)) {
 	            this.throwUnexpectedToken(token);
 	        }
-	        return this.finalize(node, new Node.Identifier(token.value));
+	        return this.finalize(node, new Node.Identifier(token.wsBefore, token.value, this.getTokenRaw(token)));
 	    };
 	    Parser.prototype.parseNewExpression = function () {
 	        var node = this.createNode();
@@ -2873,10 +4001,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	        assert_1.assert(id.name === 'new', 'New expression must start with `new`');
 	        var expr;
 	        if (this.match('.')) {
-	            this.nextToken();
+	            var wsBeforeDot = this.nextToken().wsBefore;
 	            if (this.lookahead.type === 3 /* Identifier */ && this.context.inFunctionBody && this.lookahead.value === 'target') {
 	                var property = this.parseIdentifierName();
-	                expr = new Node.MetaProperty(id, property);
+	                expr = new Node.MetaProperty(id, wsBeforeDot, property);
 	            }
 	            else {
 	                this.throwUnexpectedToken(this.lookahead);
@@ -2887,8 +4015,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	        }
 	        else {
 	            var callee = this.isolateCoverGrammar(this.parseLeftHandSideExpression);
-	            var args = this.match('(') ? this.parseArguments() : [];
-	            expr = new Node.NewExpression(callee, args);
+	            var args = this.match('(') ? this.parseArguments() : { parentheses: false, wsBeforeOpening: '', args: [], separators: [], wsBeforeClosing: '' };
+	            expr = new Node.NewExpression(id.wsBefore, callee, args.parentheses, args.wsBeforeOpening, args.args, args.separators, args.wsBeforeClosing);
 	            this.context.isAssignmentTarget = false;
 	            this.context.isBindingElement = false;
 	        }
@@ -2900,8 +4028,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	        return arg;
 	    };
 	    Parser.prototype.parseAsyncArguments = function () {
-	        this.expect('(');
+	        var wsBeforeOpening = this.expect('(');
 	        var args = [];
+	        var separators = [];
 	        if (!this.match(')')) {
 	            while (true) {
 	                var expr = this.match('...') ? this.parseSpreadElement() :
@@ -2910,14 +4039,18 @@ return /******/ (function(modules) { // webpackBootstrap
 	                if (this.match(')')) {
 	                    break;
 	                }
-	                this.expectCommaSeparator();
+	                separators.push(this.expectCommaSeparator());
 	                if (this.match(')')) {
 	                    break;
 	                }
 	            }
 	        }
-	        this.expect(')');
-	        return args;
+	        var wsBeforeClosing = this.expect(')');
+	        return { parentheses: true,
+	            wsBeforeOpening: wsBeforeOpening,
+	            args: args,
+	            separators: separators,
+	            wsBeforeClosing: wsBeforeClosing };
 	    };
 	    Parser.prototype.matchImportCall = function () {
 	        var match = this.matchKeyword('import');
@@ -2926,7 +4059,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            var wsStart = this.scanner.index;
 	            this.collectComments();
 	            var tokenStart = this.scanner.index;
-	            var ws = tokenStart == wsStart ? "" : this.scanner.source.substring(wsStart, tokenStart);
+	            var ws = tokenStart === wsStart ? '' : this.scanner.source.substring(wsStart, tokenStart);
 	            var next = this.scanner.lex(ws);
 	            this.scanner.restoreState(state);
 	            match = (next.type === 7 /* Punctuator */) && (next.value === '(');
@@ -2935,8 +4068,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	    };
 	    Parser.prototype.parseImportCall = function () {
 	        var node = this.createNode();
-	        this.expectKeyword('import');
-	        return this.finalize(node, new Node.Import());
+	        var wsBefore = this.expectKeyword('import');
+	        return this.finalize(node, new Node.Import(wsBefore));
 	    };
 	    Parser.prototype.parseLeftHandSideExpressionAllowCall = function () {
 	        var startToken = this.lookahead;
@@ -2945,9 +4078,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.context.allowIn = true;
 	        var expr;
 	        if (this.matchKeyword('super') && this.context.inFunctionBody) {
-	            expr = this.createNode();
-	            this.nextToken();
-	            expr = this.finalize(expr, new Node.Super());
+	            var node = this.createNode();
+	            var wsBefore = this.nextToken().wsBefore;
+	            expr = this.finalize(node, new Node.Super(wsBefore));
 	            if (!this.match('(') && !this.match('.') && !this.match('[')) {
 	                this.throwUnexpectedToken(this.lookahead);
 	            }
@@ -2959,40 +4092,44 @@ return /******/ (function(modules) { // webpackBootstrap
 	            if (this.match('.')) {
 	                this.context.isBindingElement = false;
 	                this.context.isAssignmentTarget = true;
-	                this.expect('.');
+	                var wsBeforeDot = this.expect('.');
 	                var property = this.parseIdentifierName();
-	                expr = this.finalize(this.startNode(startToken), new Node.StaticMemberExpression(expr, property));
+	                expr = this.finalize(this.startNode(startToken), new Node.StaticMemberExpression(expr, wsBeforeDot, property));
 	            }
 	            else if (this.match('(')) {
 	                var asyncArrow = maybeAsync && (startToken.lineNumber === this.lookahead.lineNumber);
 	                this.context.isBindingElement = false;
 	                this.context.isAssignmentTarget = false;
 	                var args = asyncArrow ? this.parseAsyncArguments() : this.parseArguments();
-	                if (expr.type === syntax_1.Syntax.Import && args.length !== 1) {
+	                if (expr.type === syntax_1.Syntax.Import && args.args.length !== 1) {
 	                    this.tolerateError(messages_1.Messages.BadImportCallArity);
 	                }
-	                expr = this.finalize(this.startNode(startToken), new Node.CallExpression(expr, args));
+	                expr = this.finalize(this.startNode(startToken), new Node.CallExpression(expr, args.wsBeforeOpening, args.args, args.separators, args.wsBeforeClosing));
 	                if (asyncArrow && this.match('=>')) {
-	                    for (var i = 0; i < args.length; ++i) {
-	                        this.reinterpretExpressionAsPattern(args[i]);
+	                    for (var i = 0; i < args.args.length; ++i) {
+	                        this.reinterpretExpressionAsPattern(args.args[i]);
 	                    }
 	                    expr = {
 	                        type: ArrowParameterPlaceHolder,
-	                        params: args,
-	                        async: true
+	                        params: args.args,
+	                        async: true,
+	                        wsBeforeOpening: args.wsBeforeOpening,
+	                        wsBeforeClosing: args.wsBeforeClosing,
+	                        separators: args.separators,
+	                        noparens: false
 	                    };
 	                }
 	            }
 	            else if (this.match('[')) {
 	                this.context.isBindingElement = false;
 	                this.context.isAssignmentTarget = true;
-	                this.expect('[');
+	                var wsBeforeOpening = this.expect('[');
 	                var property = this.isolateCoverGrammar(this.parseExpression);
-	                this.expect(']');
-	                expr = this.finalize(this.startNode(startToken), new Node.ComputedMemberExpression(expr, property));
+	                var wsBeforeClosing = this.expect(']');
+	                expr = this.finalize(this.startNode(startToken), new Node.ComputedMemberExpression(expr, wsBeforeOpening, property, wsBeforeClosing));
 	            }
 	            else if (this.lookahead.type === 10 /* Template */ && this.lookahead.head) {
-	                var quasi = this.parseTemplateLiteral();
+	                var quasi = this.parseTemplateLiteral(this.lookahead.wsBefore);
 	                expr = this.finalize(this.startNode(startToken), new Node.TaggedTemplateExpression(expr, quasi));
 	            }
 	            else {
@@ -3004,11 +4141,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	    };
 	    Parser.prototype.parseSuper = function () {
 	        var node = this.createNode();
-	        this.expectKeyword('super');
+	        var wsBefore = this.expectKeyword('super');
 	        if (!this.match('[') && !this.match('.')) {
 	            this.throwUnexpectedToken(this.lookahead);
 	        }
-	        return this.finalize(node, new Node.Super());
+	        return this.finalize(node, new Node.Super(wsBefore));
 	    };
 	    Parser.prototype.parseLeftHandSideExpression = function () {
 	        assert_1.assert(this.context.allowIn, 'callee of new expression always allow in keyword.');
@@ -3019,20 +4156,20 @@ return /******/ (function(modules) { // webpackBootstrap
 	            if (this.match('[')) {
 	                this.context.isBindingElement = false;
 	                this.context.isAssignmentTarget = true;
-	                this.expect('[');
+	                var wsBeforeOpening = this.expect('[');
 	                var property = this.isolateCoverGrammar(this.parseExpression);
-	                this.expect(']');
-	                expr = this.finalize(node, new Node.ComputedMemberExpression(expr, property));
+	                var wsBeforeClosing = this.expect(']');
+	                expr = this.finalize(node, new Node.ComputedMemberExpression(expr, wsBeforeOpening, property, wsBeforeClosing));
 	            }
 	            else if (this.match('.')) {
 	                this.context.isBindingElement = false;
 	                this.context.isAssignmentTarget = true;
-	                this.expect('.');
+	                var wsBeforeColon = this.expect('.');
 	                var property = this.parseIdentifierName();
-	                expr = this.finalize(node, new Node.StaticMemberExpression(expr, property));
+	                expr = this.finalize(node, new Node.StaticMemberExpression(expr, wsBeforeColon, property));
 	            }
 	            else if (this.lookahead.type === 10 /* Template */ && this.lookahead.head) {
-	                var quasi = this.parseTemplateLiteral();
+	                var quasi = this.parseTemplateLiteral(this.lookahead.wsBefore);
 	                expr = this.finalize(node, new Node.TaggedTemplateExpression(expr, quasi));
 	            }
 	            else {
@@ -3056,7 +4193,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	                this.tolerateError(messages_1.Messages.InvalidLHSInAssignment);
 	            }
 	            var prefix = true;
-	            expr = this.finalize(node, new Node.UpdateExpression(token.value, expr, prefix));
+	            expr = this.finalize(node, new Node.UpdateExpression(token.wsBefore, token.value, expr, prefix));
 	            this.context.isAssignmentTarget = false;
 	            this.context.isBindingElement = false;
 	        }
@@ -3072,9 +4209,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	                    }
 	                    this.context.isAssignmentTarget = false;
 	                    this.context.isBindingElement = false;
-	                    var operator = this.nextToken().value;
+	                    var operatorToken = this.nextToken();
+	                    var operator = operatorToken.value;
 	                    var prefix = false;
-	                    expr = this.finalize(this.startNode(startToken), new Node.UpdateExpression(operator, expr, prefix));
+	                    expr = this.finalize(this.startNode(startToken), new Node.UpdateExpression(operatorToken.wsBefore, operator, expr, prefix));
 	                }
 	            }
 	        }
@@ -3083,9 +4221,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	    // https://tc39.github.io/ecma262/#sec-unary-operators
 	    Parser.prototype.parseAwaitExpression = function () {
 	        var node = this.createNode();
-	        this.nextToken();
+	        var wsBefore = this.nextToken().wsBefore;
 	        var argument = this.parseUnaryExpression();
-	        return this.finalize(node, new Node.AwaitExpression(argument));
+	        return this.finalize(node, new Node.AwaitExpression(wsBefore, argument));
 	    };
 	    Parser.prototype.parseUnaryExpression = function () {
 	        var expr;
@@ -3093,8 +4231,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	            this.matchKeyword('delete') || this.matchKeyword('void') || this.matchKeyword('typeof')) {
 	            var node = this.startNode(this.lookahead);
 	            var token = this.nextToken();
+	            var wsBeforeOp = token.wsBefore;
 	            expr = this.inheritCoverGrammar(this.parseUnaryExpression);
-	            expr = this.finalize(node, new Node.UnaryExpression(token.value, expr));
+	            expr = this.finalize(node, new Node.UnaryExpression(wsBeforeOp, token.value, expr));
 	            if (this.context.strict && expr.operator === 'delete' && expr.argument.type === syntax_1.Syntax.Identifier) {
 	                this.tolerateError(messages_1.Messages.StrictDelete);
 	            }
@@ -3113,12 +4252,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var startToken = this.lookahead;
 	        var expr = this.inheritCoverGrammar(this.parseUnaryExpression);
 	        if (expr.type !== syntax_1.Syntax.UnaryExpression && this.match('**')) {
-	            this.nextToken();
+	            var wsBeforeOp = this.nextToken().wsBefore;
 	            this.context.isAssignmentTarget = false;
 	            this.context.isBindingElement = false;
 	            var left = expr;
 	            var right = this.isolateCoverGrammar(this.parseExponentiationExpression);
-	            expr = this.finalize(this.startNode(startToken), new Node.BinaryExpression('**', left, right));
+	            expr = this.finalize(this.startNode(startToken), new Node.BinaryExpression('**', left, right, wsBeforeOp));
 	        }
 	        return expr;
 	    };
@@ -3156,7 +4295,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            var markers = [startToken, this.lookahead];
 	            var left = expr;
 	            var right = this.isolateCoverGrammar(this.parseExponentiationExpression);
-	            var stack = [left, token.value, right];
+	            var stack = [left, token, right];
 	            var precedences = [prec];
 	            while (true) {
 	                prec = this.binaryPrecedence(this.lookahead);
@@ -3171,10 +4310,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	                    left = stack.pop();
 	                    markers.pop();
 	                    var node = this.startNode(markers[markers.length - 1]);
-	                    stack.push(this.finalize(node, new Node.BinaryExpression(operator, left, right)));
+	                    stack.push(this.finalize(node, new Node.BinaryExpression(operator.value, left, right, operator.wsBefore)));
 	                }
 	                // Shift.
-	                stack.push(this.nextToken().value);
+	                stack.push(this.nextToken());
 	                precedences.push(prec);
 	                markers.push(this.lookahead);
 	                stack.push(this.isolateCoverGrammar(this.parseExponentiationExpression));
@@ -3188,7 +4327,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	                var lastLineStart = lastMarker && lastMarker.lineStart;
 	                var node = this.startNode(marker, lastLineStart);
 	                var operator = stack[i - 1];
-	                expr = this.finalize(node, new Node.BinaryExpression(operator, stack[i - 2], expr));
+	                expr = this.finalize(node, new Node.BinaryExpression(operator.value, stack[i - 2], expr, operator.wsBefore));
 	                i -= 2;
 	                lastMarker = marker;
 	            }
@@ -3200,14 +4339,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var startToken = this.lookahead;
 	        var expr = this.inheritCoverGrammar(this.parseBinaryExpression);
 	        if (this.match('?')) {
-	            this.nextToken();
+	            var wsBeforeQuestion = this.nextToken().wsBefore;
 	            var previousAllowIn = this.context.allowIn;
 	            this.context.allowIn = true;
 	            var consequent = this.isolateCoverGrammar(this.parseAssignmentExpression);
 	            this.context.allowIn = previousAllowIn;
-	            this.expect(':');
+	            var wsBeforeColon = this.expect(':');
 	            var alternate = this.isolateCoverGrammar(this.parseAssignmentExpression);
-	            expr = this.finalize(this.startNode(startToken), new Node.ConditionalExpression(expr, consequent, alternate));
+	            expr = this.finalize(this.startNode(startToken), new Node.ConditionalExpression(expr, wsBeforeQuestion, consequent, wsBeforeColon, alternate));
 	            this.context.isAssignmentTarget = false;
 	            this.context.isBindingElement = false;
 	        }
@@ -3247,12 +4386,21 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var params = [expr];
 	        var options;
 	        var asyncArrow = false;
+	        var wsBeforeOpening = '';
+	        var wsBeforeClosing = '';
+	        var separators = [];
+	        var noparens = true;
 	        switch (expr.type) {
 	            case syntax_1.Syntax.Identifier:
+	                noparens = true;
 	                break;
 	            case ArrowParameterPlaceHolder:
 	                params = expr.params;
 	                asyncArrow = expr.async;
+	                wsBeforeOpening = expr.wsBeforeOpening;
+	                wsBeforeClosing = expr.wsBeforeClosing;
+	                separators = expr.separators;
+	                noparens = expr.noparens;
 	                break;
 	            default:
 	                return null;
@@ -3297,11 +4445,16 @@ return /******/ (function(modules) { // webpackBootstrap
 	            params: params,
 	            stricted: options.stricted,
 	            firstRestricted: options.firstRestricted,
-	            message: options.message
+	            message: options.message,
+	            wsBeforeOpening: wsBeforeOpening,
+	            wsBeforeClosing: wsBeforeClosing,
+	            separators: separators,
+	            noparens: noparens
 	        };
 	    };
 	    Parser.prototype.parseAssignmentExpression = function () {
 	        var expr;
+	        var wsBeforeAsync = '';
 	        if (!this.context.allowYield && this.matchKeyword('yield')) {
 	            expr = this.parseYieldExpression();
 	        }
@@ -3310,13 +4463,18 @@ return /******/ (function(modules) { // webpackBootstrap
 	            var token = startToken;
 	            expr = this.parseConditionalExpression();
 	            if (token.type === 3 /* Identifier */ && (token.lineNumber === this.lookahead.lineNumber) && token.value === 'async') {
+	                wsBeforeAsync = token.wsBefore;
 	                if (this.lookahead.type === 3 /* Identifier */ || this.matchKeyword('yield')) {
 	                    var arg = this.parsePrimaryExpression();
 	                    this.reinterpretExpressionAsPattern(arg);
 	                    expr = {
 	                        type: ArrowParameterPlaceHolder,
 	                        params: [arg],
-	                        async: true
+	                        async: true,
+	                        wsBeforeOpening: '',
+	                        wsBeforeClosing: '',
+	                        separators: [],
+	                        noparens: true
 	                    };
 	                }
 	            }
@@ -3339,7 +4497,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	                    this.context.allowYield = true;
 	                    this.context.await = isAsync;
 	                    var node = this.startNode(startToken);
-	                    this.expect('=>');
+	                    var wsBeforeArrow = this.expect('=>');
 	                    var body = void 0;
 	                    if (this.match('{')) {
 	                        var previousAllowIn = this.context.allowIn;
@@ -3357,8 +4515,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	                    if (this.context.strict && list.stricted) {
 	                        this.tolerateUnexpectedToken(list.stricted, list.message);
 	                    }
-	                    expr = isAsync ? this.finalize(node, new Node.AsyncArrowFunctionExpression(list.params, body, expression)) :
-	                        this.finalize(node, new Node.ArrowFunctionExpression(list.params, body, expression));
+	                    expr = isAsync ? this.finalize(node, new Node.AsyncArrowFunctionExpression(wsBeforeAsync, list.wsBeforeOpening, list.params, list.separators, list.wsBeforeClosing, list.noparens, wsBeforeArrow, body, expression)) :
+	                        this.finalize(node, new Node.ArrowFunctionExpression(list.wsBeforeOpening, list.params, list.separators, list.wsBeforeClosing, list.noparens, wsBeforeArrow, body, expression));
 	                    this.context.strict = previousStrict;
 	                    this.context.allowStrictDirective = previousAllowStrictDirective;
 	                    this.context.allowYield = previousAllowYield;
@@ -3388,8 +4546,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	                    }
 	                    token = this.nextToken();
 	                    var operator = token.value;
+	                    var wsBeforeOp = token.wsBefore;
 	                    var right = this.isolateCoverGrammar(this.parseAssignmentExpression);
-	                    expr = this.finalize(this.startNode(startToken), new Node.AssignmentExpression(operator, expr, right));
+	                    expr = this.finalize(this.startNode(startToken), new Node.AssignmentExpression(wsBeforeOp, operator, expr, right));
 	                    this.context.firstCoverInitializedNameError = null;
 	                }
 	            }
@@ -3400,6 +4559,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    Parser.prototype.parseExpression = function () {
 	        var startToken = this.lookahead;
 	        var expr = this.isolateCoverGrammar(this.parseAssignmentExpression);
+	        var separators = [];
 	        if (this.match(',')) {
 	            var expressions = [];
 	            expressions.push(expr);
@@ -3407,10 +4567,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	                if (!this.match(',')) {
 	                    break;
 	                }
-	                this.nextToken();
+	                separators.push(this.nextToken().wsBefore + ',');
 	                expressions.push(this.isolateCoverGrammar(this.parseAssignmentExpression));
 	            }
-	            expr = this.finalize(this.startNode(startToken), new Node.SequenceExpression(expressions));
+	            expr = this.finalize(this.startNode(startToken), new Node.SequenceExpression(false, '', expressions, separators, ''));
 	        }
 	        return expr;
 	    };
@@ -3462,7 +4622,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    };
 	    Parser.prototype.parseBlock = function () {
 	        var node = this.createNode();
-	        this.expect('{');
+	        var wsBefore = this.expect('{');
 	        var block = [];
 	        while (true) {
 	            if (this.match('}')) {
@@ -3470,14 +4630,15 @@ return /******/ (function(modules) { // webpackBootstrap
 	            }
 	            block.push(this.parseStatementListItem());
 	        }
-	        this.expect('}');
-	        return this.finalize(node, new Node.BlockStatement(block));
+	        var wsBeforeClosing = this.expect('}');
+	        return this.finalize(node, new Node.BlockStatement(wsBefore, block, wsBeforeClosing));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-let-and-const-declarations
 	    Parser.prototype.parseLexicalBinding = function (kind, options) {
 	        var node = this.createNode();
 	        var params = [];
 	        var id = this.parsePattern(params, kind);
+	        var wsBeforeEq = '';
 	        if (this.context.strict && id.type === syntax_1.Syntax.Identifier) {
 	            if (this.scanner.isRestrictedWord(id.name)) {
 	                this.tolerateError(messages_1.Messages.StrictVarName);
@@ -3487,7 +4648,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        if (kind === 'const') {
 	            if (!this.matchKeyword('in') && !this.matchContextualKeyword('of')) {
 	                if (this.match('=')) {
-	                    this.nextToken();
+	                    wsBeforeEq = this.nextToken().wsBefore;
 	                    init = this.isolateCoverGrammar(this.parseAssignmentExpression);
 	                }
 	                else {
@@ -3496,25 +4657,26 @@ return /******/ (function(modules) { // webpackBootstrap
 	            }
 	        }
 	        else if ((!options.inFor && id.type !== syntax_1.Syntax.Identifier) || this.match('=')) {
-	            this.expect('=');
+	            wsBeforeEq = this.expect('=');
 	            init = this.isolateCoverGrammar(this.parseAssignmentExpression);
 	        }
-	        return this.finalize(node, new Node.VariableDeclarator(id, init));
+	        return this.finalize(node, new Node.VariableDeclarator(id, wsBeforeEq, init));
 	    };
 	    Parser.prototype.parseBindingList = function (kind, options) {
 	        var list = [this.parseLexicalBinding(kind, options)];
+	        var separators = [];
 	        while (this.match(',')) {
-	            this.nextToken();
+	            separators.push(this.nextToken().wsBefore + ',');
 	            list.push(this.parseLexicalBinding(kind, options));
 	        }
-	        return list;
+	        return { declarations: list, separators: separators };
 	    };
 	    Parser.prototype.isLexicalDeclaration = function () {
 	        var state = this.scanner.saveState();
 	        var wsStart = this.scanner.index;
 	        this.collectComments();
 	        var tokenStart = this.scanner.index;
-	        var ws = tokenStart == wsStart ? "" : this.scanner.source.substring(wsStart, tokenStart);
+	        var ws = tokenStart === wsStart ? '' : this.scanner.source.substring(wsStart, tokenStart);
 	        var next = this.scanner.lex(ws);
 	        this.scanner.restoreState(state);
 	        return (next.type === 3 /* Identifier */) ||
@@ -3525,26 +4687,30 @@ return /******/ (function(modules) { // webpackBootstrap
 	    };
 	    Parser.prototype.parseLexicalDeclaration = function (options) {
 	        var node = this.createNode();
-	        var kind = this.nextToken().value;
+	        var kindToken = this.nextToken();
+	        var kind = kindToken.value;
 	        assert_1.assert(kind === 'let' || kind === 'const', 'Lexical declaration must be either let or const');
-	        var declarations = this.parseBindingList(kind, options);
-	        this.consumeSemicolon();
-	        return this.finalize(node, new Node.VariableDeclaration(declarations, kind));
+	        var bindingList = this.parseBindingList(kind, options);
+	        var declarations = bindingList.declarations;
+	        var separators = bindingList.separators;
+	        var semicolon = this.consumeSemicolon();
+	        return this.finalize(node, new Node.VariableDeclaration(kindToken.wsBefore, declarations, separators, kind, semicolon));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-destructuring-binding-patterns
 	    Parser.prototype.parseBindingRestElement = function (params, kind) {
 	        var node = this.createNode();
-	        this.expect('...');
+	        var wsBefore = this.expect('...');
 	        var arg = this.parsePattern(params, kind);
-	        return this.finalize(node, new Node.RestElement(arg));
+	        return this.finalize(node, new Node.RestElement(wsBefore, arg));
 	    };
 	    Parser.prototype.parseArrayPattern = function (params, kind) {
 	        var node = this.createNode();
-	        this.expect('[');
+	        var wsBeforeOpening = this.expect('[');
 	        var elements = [];
+	        var separators = [];
 	        while (!this.match(']')) {
 	            if (this.match(',')) {
-	                this.nextToken();
+	                separators.push(this.nextToken().wsBefore + ',');
 	                elements.push(null);
 	            }
 	            else {
@@ -3556,12 +4722,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	                    elements.push(this.parsePatternWithDefault(params, kind));
 	                }
 	                if (!this.match(']')) {
-	                    this.expect(',');
+	                    separators.push(this.expect(',') + ',');
 	                }
 	            }
 	        }
-	        this.expect(']');
-	        return this.finalize(node, new Node.ArrayPattern(elements));
+	        var wsBeforeClosing = this.expect(']');
+	        return this.finalize(node, new Node.ArrayPattern(wsBeforeOpening, elements, separators, wsBeforeClosing));
 	    };
 	    Parser.prototype.parsePropertyPattern = function (params, kind) {
 	        var node = this.createNode();
@@ -3570,16 +4736,20 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var method = false;
 	        var key;
 	        var value;
+	        var wsBeforeOpening = '';
+	        var wsBeforeClosing = '';
+	        var wsBeforeColon = '';
+	        var objectPropertyKey;
 	        if (this.lookahead.type === 3 /* Identifier */) {
 	            var keyToken = this.lookahead;
 	            key = this.parseVariableIdentifier();
-	            var init = this.finalize(node, new Node.Identifier(keyToken.value));
+	            var init = this.finalize(node, new Node.Identifier(keyToken.wsBefore, keyToken.value, this.getTokenRaw(keyToken)));
 	            if (this.match('=')) {
 	                params.push(keyToken);
 	                shorthand = true;
-	                this.nextToken();
+	                var wsBeforeOp = this.nextToken().wsBefore;
 	                var expr = this.parseAssignmentExpression();
-	                value = this.finalize(this.startNode(keyToken), new Node.AssignmentPattern(init, expr));
+	                value = this.finalize(this.startNode(keyToken), new Node.AssignmentPattern(init, wsBeforeOp, expr));
 	            }
 	            else if (!this.match(':')) {
 	                params.push(keyToken);
@@ -3587,21 +4757,25 @@ return /******/ (function(modules) { // webpackBootstrap
 	                value = init;
 	            }
 	            else {
-	                this.expect(':');
+	                wsBeforeColon = this.expect(':');
 	                value = this.parsePatternWithDefault(params, kind);
 	            }
 	        }
 	        else {
-	            computed = this.match('[');
-	            key = this.parseObjectPropertyKey();
-	            this.expect(':');
+	            // computed = this.match('['); // Not necessary anymore
+	            objectPropertyKey = this.parseObjectPropertyKey();
+	            key = objectPropertyKey.key;
+	            wsBeforeOpening = objectPropertyKey.wsBeforeOpening;
+	            wsBeforeClosing = objectPropertyKey.wsBeforeClosing;
+	            computed = objectPropertyKey.computed;
+	            wsBeforeColon = this.expect(':');
 	            value = this.parsePatternWithDefault(params, kind);
 	        }
-	        return this.finalize(node, new Node.Property('init', key, computed, value, method, shorthand));
+	        return this.finalize(node, new Node.Property('init', key, '', wsBeforeOpening, wsBeforeClosing, wsBeforeColon, computed, value, method, shorthand));
 	    };
 	    Parser.prototype.parseRestProperty = function (params, kind) {
 	        var node = this.createNode();
-	        this.expect('...');
+	        var wsBefore = this.expect('...');
 	        var arg = this.parsePattern(params);
 	        if (this.match('=')) {
 	            this.throwError(messages_1.Messages.DefaultRestProperty);
@@ -3609,20 +4783,21 @@ return /******/ (function(modules) { // webpackBootstrap
 	        if (!this.match('}')) {
 	            this.throwError(messages_1.Messages.PropertyAfterRestProperty);
 	        }
-	        return this.finalize(node, new Node.RestElement(arg));
+	        return this.finalize(node, new Node.RestElement(wsBefore, arg));
 	    };
 	    Parser.prototype.parseObjectPattern = function (params, kind) {
 	        var node = this.createNode();
 	        var properties = [];
-	        this.expect('{');
+	        var wsBeforeOpening = this.expect('{');
+	        var separators = [];
 	        while (!this.match('}')) {
 	            properties.push(this.match('...') ? this.parseRestProperty(params, kind) : this.parsePropertyPattern(params, kind));
 	            if (!this.match('}')) {
-	                this.expect(',');
+	                separators.push(this.expect(',') + ',');
 	            }
 	        }
-	        this.expect('}');
-	        return this.finalize(node, new Node.ObjectPattern(properties));
+	        var wsBeforeClosing = this.expect('}');
+	        return this.finalize(node, new Node.ObjectPattern(wsBeforeOpening, properties, separators, wsBeforeClosing));
 	    };
 	    Parser.prototype.parsePattern = function (params, kind) {
 	        var pattern;
@@ -3645,12 +4820,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var startToken = this.lookahead;
 	        var pattern = this.parsePattern(params, kind);
 	        if (this.match('=')) {
-	            this.nextToken();
+	            var wsBeforeEq = this.nextToken().wsBefore;
 	            var previousAllowYield = this.context.allowYield;
 	            this.context.allowYield = true;
 	            var right = this.isolateCoverGrammar(this.parseAssignmentExpression);
 	            this.context.allowYield = previousAllowYield;
-	            pattern = this.finalize(this.startNode(startToken), new Node.AssignmentPattern(pattern, right));
+	            pattern = this.finalize(this.startNode(startToken), new Node.AssignmentPattern(pattern, wsBeforeEq, right));
 	        }
 	        return pattern;
 	    };
@@ -3679,7 +4854,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        else if ((this.context.isModule || this.context.await) && token.type === 3 /* Identifier */ && token.value === 'await') {
 	            this.tolerateUnexpectedToken(token);
 	        }
-	        return this.finalize(node, new Node.Identifier(token.value));
+	        return this.finalize(node, new Node.Identifier(token.wsBefore, token.value, this.getTokenRaw(token)));
 	    };
 	    Parser.prototype.parseVariableDeclaration = function (options) {
 	        var node = this.createNode();
@@ -3691,44 +4866,48 @@ return /******/ (function(modules) { // webpackBootstrap
 	            }
 	        }
 	        var init = null;
+	        var wsBeforeEq = '';
 	        if (this.match('=')) {
-	            this.nextToken();
+	            wsBeforeEq = this.nextToken().wsBefore;
 	            init = this.isolateCoverGrammar(this.parseAssignmentExpression);
 	        }
 	        else if (id.type !== syntax_1.Syntax.Identifier && !options.inFor) {
-	            this.expect('=');
+	            wsBeforeEq = this.expect('=');
 	        }
-	        return this.finalize(node, new Node.VariableDeclarator(id, init));
+	        return this.finalize(node, new Node.VariableDeclarator(id, wsBeforeEq, init));
 	    };
 	    Parser.prototype.parseVariableDeclarationList = function (options) {
 	        var opt = { inFor: options.inFor };
 	        var list = [];
 	        list.push(this.parseVariableDeclaration(opt));
+	        var separators = [];
 	        while (this.match(',')) {
-	            this.nextToken();
+	            separators.push(this.nextToken().wsBefore + ',');
 	            list.push(this.parseVariableDeclaration(opt));
 	        }
-	        return list;
+	        return { declarations: list, separators: separators };
 	    };
 	    Parser.prototype.parseVariableStatement = function () {
 	        var node = this.createNode();
-	        this.expectKeyword('var');
-	        var declarations = this.parseVariableDeclarationList({ inFor: false });
-	        this.consumeSemicolon();
-	        return this.finalize(node, new Node.VariableDeclaration(declarations, 'var'));
+	        var wsBefore = this.expectKeyword('var');
+	        var bindingList = this.parseVariableDeclarationList({ inFor: false });
+	        var declarations = bindingList.declarations;
+	        var separators = bindingList.separators;
+	        var semicolon = this.consumeSemicolon();
+	        return this.finalize(node, new Node.VariableDeclaration(wsBefore, declarations, separators, 'var', semicolon));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-empty-statement
 	    Parser.prototype.parseEmptyStatement = function () {
 	        var node = this.createNode();
-	        this.expect(';');
-	        return this.finalize(node, new Node.EmptyStatement());
+	        var wsBefore = this.expect(';');
+	        return this.finalize(node, new Node.EmptyStatement(wsBefore));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-expression-statement
 	    Parser.prototype.parseExpressionStatement = function () {
 	        var node = this.createNode();
 	        var expr = this.parseExpression();
-	        this.consumeSemicolon();
-	        return this.finalize(node, new Node.ExpressionStatement(expr));
+	        var semicolon = this.consumeSemicolon();
+	        return this.finalize(node, new Node.ExpressionStatement(expr, semicolon));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-if-statement
 	    Parser.prototype.parseIfClause = function () {
@@ -3741,64 +4920,83 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var node = this.createNode();
 	        var consequent;
 	        var alternate = null;
-	        this.expectKeyword('if');
-	        this.expect('(');
+	        var ifraw = this.getTokenRaw(this.lookahead);
+	        var wsBefore = this.expectKeyword('if');
+	        var wsBeforeOpening = this.expect('(');
+	        var wsBeforeElse = '';
 	        var test = this.parseExpression();
+	        var wsBeforeClosing = '';
+	        var closingParens = ')';
 	        if (!this.match(')') && this.config.tolerant) {
-	            this.tolerateUnexpectedToken(this.nextToken());
-	            consequent = this.finalize(this.createNode(), new Node.EmptyStatement());
+	            var unexpectedToken = this.nextToken();
+	            wsBeforeClosing = unexpectedToken.wsBefore;
+	            closingParens = this.getTokenRaw(unexpectedToken);
+	            this.tolerateUnexpectedToken(unexpectedToken);
+	            consequent = this.finalize(this.createNode(), new Node.EmptyStatement('', ''));
 	        }
 	        else {
-	            this.expect(')');
+	            wsBeforeClosing = this.expect(')');
 	            consequent = this.parseIfClause();
 	            if (this.matchKeyword('else')) {
-	                this.nextToken();
+	                wsBeforeElse = this.nextToken().wsBefore;
 	                alternate = this.parseIfClause();
 	            }
 	        }
-	        return this.finalize(node, new Node.IfStatement(test, consequent, alternate));
+	        return this.finalize(node, new Node.IfStatement(wsBefore, ifraw, wsBeforeOpening, test, wsBeforeClosing, consequent, wsBeforeElse, alternate, closingParens));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-do-while-statement
 	    Parser.prototype.parseDoWhileStatement = function () {
 	        var node = this.createNode();
-	        this.expectKeyword('do');
+	        var wsBeforeDo = this.expectKeyword('do');
 	        var previousInIteration = this.context.inIteration;
 	        this.context.inIteration = true;
 	        var body = this.parseStatement();
 	        this.context.inIteration = previousInIteration;
-	        this.expectKeyword('while');
-	        this.expect('(');
+	        var wsBeforeWhile = this.expectKeyword('while');
+	        var wsBeforeOpening = this.expect('(');
 	        var test = this.parseExpression();
+	        var semicolon = '';
+	        var wsBeforeClosing = '';
+	        var closingParens = ')';
 	        if (!this.match(')') && this.config.tolerant) {
-	            this.tolerateUnexpectedToken(this.nextToken());
+	            var unexpectedToken = this.nextToken();
+	            wsBeforeClosing = unexpectedToken.wsBefore;
+	            closingParens = this.getTokenRaw(unexpectedToken);
+	            this.tolerateUnexpectedToken(unexpectedToken);
 	        }
 	        else {
-	            this.expect(')');
+	            wsBeforeClosing = this.expect(')');
 	            if (this.match(';')) {
-	                this.nextToken();
+	                var semicolonToken = this.nextToken();
+	                semicolon = semicolonToken.wsBefore + ';';
 	            }
 	        }
-	        return this.finalize(node, new Node.DoWhileStatement(body, test));
+	        return this.finalize(node, new Node.DoWhileStatement(wsBeforeDo, body, wsBeforeWhile, wsBeforeOpening, test, wsBeforeClosing, semicolon, closingParens));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-while-statement
 	    Parser.prototype.parseWhileStatement = function () {
 	        var node = this.createNode();
 	        var body;
-	        this.expectKeyword('while');
-	        this.expect('(');
+	        var wsBeforeWhile = this.expectKeyword('while');
+	        var wsBeforeOpening = this.expect('(');
 	        var test = this.parseExpression();
+	        var wsBeforeClosing = '';
+	        var closingParens = ')';
 	        if (!this.match(')') && this.config.tolerant) {
-	            this.tolerateUnexpectedToken(this.nextToken());
-	            body = this.finalize(this.createNode(), new Node.EmptyStatement());
+	            var unexpectedToken = this.nextToken();
+	            wsBeforeClosing = unexpectedToken.wsBefore;
+	            closingParens = this.getTokenRaw(unexpectedToken);
+	            this.tolerateUnexpectedToken(unexpectedToken);
+	            body = this.finalize(this.createNode(), new Node.EmptyStatement('', ''));
 	        }
 	        else {
-	            this.expect(')');
+	            wsBeforeClosing = this.expect(')');
 	            var previousInIteration = this.context.inIteration;
 	            this.context.inIteration = true;
 	            body = this.parseStatement();
 	            this.context.inIteration = previousInIteration;
 	        }
-	        return this.finalize(node, new Node.WhileStatement(test, body));
+	        return this.finalize(node, new Node.WhileStatement(wsBeforeWhile, wsBeforeOpening, test, wsBeforeClosing, body, closingParens));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-for-statement
 	    // https://tc39.github.io/ecma262/#sec-for-in-and-for-of-statements
@@ -3809,49 +5007,55 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var forIn = true;
 	        var left, right;
 	        var node = this.createNode();
-	        this.expectKeyword('for');
-	        this.expect('(');
+	        var wsBeforeFor = this.expectKeyword('for');
+	        var wsBeforeOpening = this.expect('(');
+	        var wsBeforeSemicolon1 = '';
+	        var wsBeforeSemicolon2 = '';
+	        var wsBeforeKeyword = ''; // 'in' or 'of'
 	        if (this.match(';')) {
-	            this.nextToken();
+	            wsBeforeSemicolon1 = this.nextToken().wsBefore;
 	        }
 	        else {
 	            if (this.matchKeyword('var')) {
 	                init = this.createNode();
-	                this.nextToken();
+	                var wsBeforeVar = this.nextToken().wsBefore;
 	                var previousAllowIn = this.context.allowIn;
 	                this.context.allowIn = false;
-	                var declarations = this.parseVariableDeclarationList({ inFor: true });
+	                var bindingList = this.parseVariableDeclarationList({ inFor: true });
+	                var declarations = bindingList.declarations;
+	                var separators = bindingList.separators;
 	                this.context.allowIn = previousAllowIn;
 	                if (declarations.length === 1 && this.matchKeyword('in')) {
 	                    var decl = declarations[0];
 	                    if (decl.init && (decl.id.type === syntax_1.Syntax.ArrayPattern || decl.id.type === syntax_1.Syntax.ObjectPattern || this.context.strict)) {
 	                        this.tolerateError(messages_1.Messages.ForInOfLoopInitializer, 'for-in');
 	                    }
-	                    init = this.finalize(init, new Node.VariableDeclaration(declarations, 'var'));
-	                    this.nextToken();
+	                    init = this.finalize(init, new Node.VariableDeclaration(wsBeforeVar, declarations, separators, 'var', ''));
+	                    wsBeforeKeyword = this.nextToken().wsBefore;
 	                    left = init;
 	                    right = this.parseExpression();
 	                    init = null;
 	                }
 	                else if (declarations.length === 1 && declarations[0].init === null && this.matchContextualKeyword('of')) {
-	                    init = this.finalize(init, new Node.VariableDeclaration(declarations, 'var'));
-	                    this.nextToken();
+	                    init = this.finalize(init, new Node.VariableDeclaration(wsBeforeVar, declarations, separators, 'var', ''));
+	                    wsBeforeKeyword = this.nextToken().wsBefore;
 	                    left = init;
 	                    right = this.parseAssignmentExpression();
 	                    init = null;
 	                    forIn = false;
 	                }
 	                else {
-	                    init = this.finalize(init, new Node.VariableDeclaration(declarations, 'var'));
-	                    this.expect(';');
+	                    init = this.finalize(init, new Node.VariableDeclaration(wsBeforeVar, declarations, separators, 'var', ''));
+	                    wsBeforeSemicolon1 = this.expect(';');
 	                }
 	            }
 	            else if (this.matchKeyword('const') || this.matchKeyword('let')) {
 	                init = this.createNode();
-	                var kind = this.nextToken().value;
+	                var kindToken = this.nextToken();
+	                var kind = kindToken.value;
 	                if (!this.context.strict && this.lookahead.value === 'in') {
-	                    init = this.finalize(init, new Node.Identifier(kind));
-	                    this.nextToken();
+	                    init = this.finalize(init, new Node.Identifier(kindToken.wsBefore, kind, this.getTokenRaw(kindToken)));
+	                    wsBeforeKeyword = this.nextToken().wsBefore;
 	                    left = init;
 	                    right = this.parseExpression();
 	                    init = null;
@@ -3859,26 +5063,29 @@ return /******/ (function(modules) { // webpackBootstrap
 	                else {
 	                    var previousAllowIn = this.context.allowIn;
 	                    this.context.allowIn = false;
-	                    var declarations = this.parseBindingList(kind, { inFor: true });
+	                    var bindingList = this.parseBindingList(kind, { inFor: true });
+	                    var declarations = bindingList.declarations;
+	                    var separators = bindingList.separators;
 	                    this.context.allowIn = previousAllowIn;
 	                    if (declarations.length === 1 && declarations[0].init === null && this.matchKeyword('in')) {
-	                        init = this.finalize(init, new Node.VariableDeclaration(declarations, kind));
-	                        this.nextToken();
+	                        init = this.finalize(init, new Node.VariableDeclaration(kindToken.wsBefore, declarations, separators, kind, ''));
+	                        wsBeforeKeyword = this.nextToken().wsBefore;
 	                        left = init;
 	                        right = this.parseExpression();
 	                        init = null;
 	                    }
 	                    else if (declarations.length === 1 && declarations[0].init === null && this.matchContextualKeyword('of')) {
-	                        init = this.finalize(init, new Node.VariableDeclaration(declarations, kind));
-	                        this.nextToken();
+	                        init = this.finalize(init, new Node.VariableDeclaration(kindToken.wsBefore, declarations, separators, kind, ''));
+	                        wsBeforeKeyword = this.nextToken().wsBefore;
 	                        left = init;
 	                        right = this.parseAssignmentExpression();
 	                        init = null;
 	                        forIn = false;
 	                    }
 	                    else {
-	                        this.consumeSemicolon();
-	                        init = this.finalize(init, new Node.VariableDeclaration(declarations, kind));
+	                        wsBeforeSemicolon1 = this.consumeSemicolon();
+	                        wsBeforeSemicolon1 = wsBeforeSemicolon1.substring(0, wsBeforeSemicolon1.length - 2);
+	                        init = this.finalize(init, new Node.VariableDeclaration(kindToken.wsBefore, declarations, separators, kind, ''));
 	                    }
 	                }
 	            }
@@ -3892,7 +5099,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	                    if (!this.context.isAssignmentTarget || init.type === syntax_1.Syntax.AssignmentExpression) {
 	                        this.tolerateError(messages_1.Messages.InvalidLHSInForIn);
 	                    }
-	                    this.nextToken();
+	                    wsBeforeKeyword = this.nextToken().wsBefore;
 	                    this.reinterpretExpressionAsPattern(init);
 	                    left = init;
 	                    right = this.parseExpression();
@@ -3902,7 +5109,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	                    if (!this.context.isAssignmentTarget || init.type === syntax_1.Syntax.AssignmentExpression) {
 	                        this.tolerateError(messages_1.Messages.InvalidLHSInForLoop);
 	                    }
-	                    this.nextToken();
+	                    wsBeforeKeyword = this.nextToken().wsBefore;
 	                    this.reinterpretExpressionAsPattern(init);
 	                    left = init;
 	                    right = this.parseAssignmentExpression();
@@ -3912,13 +5119,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	                else {
 	                    if (this.match(',')) {
 	                        var initSeq = [init];
+	                        var separators = [];
 	                        while (this.match(',')) {
-	                            this.nextToken();
+	                            separators.push(this.nextToken().wsBefore + ',');
 	                            initSeq.push(this.isolateCoverGrammar(this.parseAssignmentExpression));
 	                        }
-	                        init = this.finalize(this.startNode(initStartToken), new Node.SequenceExpression(initSeq));
+	                        init = this.finalize(this.startNode(initStartToken), new Node.SequenceExpression(false, '', initSeq, separators, ''));
 	                    }
-	                    this.expect(';');
+	                    wsBeforeSemicolon1 = this.expect(';');
 	                }
 	            }
 	        }
@@ -3926,32 +5134,37 @@ return /******/ (function(modules) { // webpackBootstrap
 	            if (!this.match(';')) {
 	                test = this.parseExpression();
 	            }
-	            this.expect(';');
+	            wsBeforeSemicolon2 = this.expect(';');
 	            if (!this.match(')')) {
 	                update = this.parseExpression();
 	            }
 	        }
 	        var body;
+	        var wsBeforeClosing = '';
+	        var closingParens = ')';
 	        if (!this.match(')') && this.config.tolerant) {
-	            this.tolerateUnexpectedToken(this.nextToken());
-	            body = this.finalize(this.createNode(), new Node.EmptyStatement());
+	            var unexpectedToken = this.nextToken();
+	            wsBeforeClosing = unexpectedToken.wsBefore;
+	            closingParens = this.getTokenRaw(unexpectedToken);
+	            this.tolerateUnexpectedToken(unexpectedToken);
+	            body = this.finalize(this.createNode(), new Node.EmptyStatement('', ''));
 	        }
 	        else {
-	            this.expect(')');
+	            wsBeforeClosing = this.expect(')');
 	            var previousInIteration = this.context.inIteration;
 	            this.context.inIteration = true;
 	            body = this.isolateCoverGrammar(this.parseStatement);
 	            this.context.inIteration = previousInIteration;
 	        }
 	        return (typeof left === 'undefined') ?
-	            this.finalize(node, new Node.ForStatement(init, test, update, body)) :
-	            forIn ? this.finalize(node, new Node.ForInStatement(left, right, body)) :
-	                this.finalize(node, new Node.ForOfStatement(left, right, body));
+	            this.finalize(node, new Node.ForStatement(wsBeforeFor, wsBeforeOpening, init, wsBeforeSemicolon1, test, wsBeforeSemicolon2, update, wsBeforeClosing, body, closingParens)) :
+	            forIn ? this.finalize(node, new Node.ForInStatement(wsBeforeFor, wsBeforeOpening, left, wsBeforeKeyword, right, wsBeforeClosing, body, closingParens)) :
+	                this.finalize(node, new Node.ForOfStatement(wsBeforeFor, wsBeforeOpening, left, wsBeforeKeyword, right, wsBeforeClosing, body, closingParens));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-continue-statement
 	    Parser.prototype.parseContinueStatement = function () {
 	        var node = this.createNode();
-	        this.expectKeyword('continue');
+	        var wsBefore = this.expectKeyword('continue');
 	        var label = null;
 	        if (this.lookahead.type === 3 /* Identifier */ && !this.hasLineTerminator) {
 	            var id = this.parseVariableIdentifier();
@@ -3961,16 +5174,16 @@ return /******/ (function(modules) { // webpackBootstrap
 	                this.throwError(messages_1.Messages.UnknownLabel, id.name);
 	            }
 	        }
-	        this.consumeSemicolon();
+	        var semicolon = this.consumeSemicolon();
 	        if (label === null && !this.context.inIteration) {
 	            this.throwError(messages_1.Messages.IllegalContinue);
 	        }
-	        return this.finalize(node, new Node.ContinueStatement(label));
+	        return this.finalize(node, new Node.ContinueStatement(wsBefore, label, semicolon));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-break-statement
 	    Parser.prototype.parseBreakStatement = function () {
 	        var node = this.createNode();
-	        this.expectKeyword('break');
+	        var wsBefore = this.expectKeyword('break');
 	        var label = null;
 	        if (this.lookahead.type === 3 /* Identifier */ && !this.hasLineTerminator) {
 	            var id = this.parseVariableIdentifier();
@@ -3980,11 +5193,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	            }
 	            label = id;
 	        }
-	        this.consumeSemicolon();
+	        var semicolon = this.consumeSemicolon();
 	        if (label === null && !this.context.inIteration && !this.context.inSwitch) {
 	            this.throwError(messages_1.Messages.IllegalBreak);
 	        }
-	        return this.finalize(node, new Node.BreakStatement(label));
+	        return this.finalize(node, new Node.BreakStatement(wsBefore, label, semicolon));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-return-statement
 	    Parser.prototype.parseReturnStatement = function () {
@@ -3992,14 +5205,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	            this.tolerateError(messages_1.Messages.IllegalReturn);
 	        }
 	        var node = this.createNode();
-	        this.expectKeyword('return');
+	        var wsBefore = this.expectKeyword('return');
 	        var hasArgument = (!this.match(';') && !this.match('}') &&
 	            !this.hasLineTerminator && this.lookahead.type !== 2 /* EOF */) ||
 	            this.lookahead.type === 8 /* StringLiteral */ ||
 	            this.lookahead.type === 10 /* Template */;
 	        var argument = hasArgument ? this.parseExpression() : null;
-	        this.consumeSemicolon();
-	        return this.finalize(node, new Node.ReturnStatement(argument));
+	        var semicolon = this.consumeSemicolon();
+	        return this.finalize(node, new Node.ReturnStatement(wsBefore, argument, semicolon));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-with-statement
 	    Parser.prototype.parseWithStatement = function () {
@@ -4008,32 +5221,38 @@ return /******/ (function(modules) { // webpackBootstrap
 	        }
 	        var node = this.createNode();
 	        var body;
-	        this.expectKeyword('with');
-	        this.expect('(');
+	        var wsBeforeWith = this.expectKeyword('with');
+	        var wsBeforeOpening = this.expect('(');
 	        var object = this.parseExpression();
+	        var wsBeforeClosing = '';
+	        var closingParens = ')';
 	        if (!this.match(')') && this.config.tolerant) {
-	            this.tolerateUnexpectedToken(this.nextToken());
-	            body = this.finalize(this.createNode(), new Node.EmptyStatement());
+	            var unexpectedToken = this.nextToken();
+	            wsBeforeClosing = unexpectedToken.wsBefore;
+	            closingParens = this.getTokenRaw(unexpectedToken);
+	            this.tolerateUnexpectedToken(unexpectedToken);
+	            body = this.finalize(this.createNode(), new Node.EmptyStatement('', ''));
 	        }
 	        else {
-	            this.expect(')');
+	            wsBeforeClosing = this.expect(')');
 	            body = this.parseStatement();
 	        }
-	        return this.finalize(node, new Node.WithStatement(object, body));
+	        return this.finalize(node, new Node.WithStatement(wsBeforeWith, wsBeforeOpening, object, wsBeforeClosing, body, closingParens));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-switch-statement
 	    Parser.prototype.parseSwitchCase = function () {
 	        var node = this.createNode();
 	        var test;
+	        var wsBefore = '';
 	        if (this.matchKeyword('default')) {
-	            this.nextToken();
+	            wsBefore = this.nextToken().wsBefore;
 	            test = null;
 	        }
 	        else {
-	            this.expectKeyword('case');
+	            wsBefore = this.expectKeyword('case');
 	            test = this.parseExpression();
 	        }
-	        this.expect(':');
+	        var wsBeforeColon = this.expect(':');
 	        var consequent = [];
 	        while (true) {
 	            if (this.match('}') || this.matchKeyword('default') || this.matchKeyword('case')) {
@@ -4041,19 +5260,19 @@ return /******/ (function(modules) { // webpackBootstrap
 	            }
 	            consequent.push(this.parseStatementListItem());
 	        }
-	        return this.finalize(node, new Node.SwitchCase(test, consequent));
+	        return this.finalize(node, new Node.SwitchCase(wsBefore, test, wsBeforeColon, consequent));
 	    };
 	    Parser.prototype.parseSwitchStatement = function () {
 	        var node = this.createNode();
-	        this.expectKeyword('switch');
-	        this.expect('(');
+	        var wsBeforeSwitch = this.expectKeyword('switch');
+	        var wsBeforeOpening = this.expect('(');
 	        var discriminant = this.parseExpression();
-	        this.expect(')');
+	        var wsBeforeClosing = this.expect(')');
 	        var previousInSwitch = this.context.inSwitch;
 	        this.context.inSwitch = true;
 	        var cases = [];
 	        var defaultFound = false;
-	        this.expect('{');
+	        var wsBeforeBlockOpening = this.expect('{');
 	        while (true) {
 	            if (this.match('}')) {
 	                break;
@@ -4067,9 +5286,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	            }
 	            cases.push(clause);
 	        }
-	        this.expect('}');
+	        var wsBeforeBlockClosing = this.expect('}');
 	        this.context.inSwitch = previousInSwitch;
-	        return this.finalize(node, new Node.SwitchStatement(discriminant, cases));
+	        return this.finalize(node, new Node.SwitchStatement(wsBeforeSwitch, wsBeforeOpening, discriminant, wsBeforeClosing, wsBeforeBlockOpening, cases, wsBeforeBlockClosing));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-labelled-statements
 	    Parser.prototype.parseLabelledStatement = function () {
@@ -4077,7 +5296,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var expr = this.parseExpression();
 	        var statement;
 	        if ((expr.type === syntax_1.Syntax.Identifier) && this.match(':')) {
-	            this.nextToken();
+	            var wsBeforeColon = this.nextToken().wsBefore;
 	            var id = expr;
 	            var key = '$' + id.name;
 	            if (Object.prototype.hasOwnProperty.call(this.context.labelSet, key)) {
@@ -4104,30 +5323,30 @@ return /******/ (function(modules) { // webpackBootstrap
 	                body = this.parseStatement();
 	            }
 	            delete this.context.labelSet[key];
-	            statement = new Node.LabeledStatement(id, body);
+	            statement = new Node.LabeledStatement(id, wsBeforeColon, body);
 	        }
 	        else {
-	            this.consumeSemicolon();
-	            statement = new Node.ExpressionStatement(expr);
+	            var semicolon = this.consumeSemicolon();
+	            statement = new Node.ExpressionStatement(expr, semicolon);
 	        }
 	        return this.finalize(node, statement);
 	    };
 	    // https://tc39.github.io/ecma262/#sec-throw-statement
 	    Parser.prototype.parseThrowStatement = function () {
 	        var node = this.createNode();
-	        this.expectKeyword('throw');
+	        var wsBefore = this.expectKeyword('throw');
 	        if (this.hasLineTerminator) {
 	            this.throwError(messages_1.Messages.NewlineAfterThrow);
 	        }
 	        var argument = this.parseExpression();
-	        this.consumeSemicolon();
-	        return this.finalize(node, new Node.ThrowStatement(argument));
+	        var semicolon = this.consumeSemicolon();
+	        return this.finalize(node, new Node.ThrowStatement(wsBefore, argument, semicolon));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-try-statement
 	    Parser.prototype.parseCatchClause = function () {
 	        var node = this.createNode();
-	        this.expectKeyword('catch');
-	        this.expect('(');
+	        var wsBeforeCatch = this.expectKeyword('catch');
+	        var wsBeforeOpening = this.expect('(');
 	        if (this.match(')')) {
 	            this.throwUnexpectedToken(this.lookahead);
 	        }
@@ -4146,31 +5365,31 @@ return /******/ (function(modules) { // webpackBootstrap
 	                this.tolerateError(messages_1.Messages.StrictCatchVariable);
 	            }
 	        }
-	        this.expect(')');
+	        var wsBeforeClosing = this.expect(')');
 	        var body = this.parseBlock();
-	        return this.finalize(node, new Node.CatchClause(param, body));
+	        return this.finalize(node, new Node.CatchClause(wsBeforeCatch, wsBeforeOpening, param, wsBeforeClosing, body));
 	    };
 	    Parser.prototype.parseFinallyClause = function () {
-	        this.expectKeyword('finally');
-	        return this.parseBlock();
+	        var wsBeforeFinally = this.expectKeyword('finally');
+	        return { content: this.parseBlock(), wsBeforeFinally: wsBeforeFinally };
 	    };
 	    Parser.prototype.parseTryStatement = function () {
 	        var node = this.createNode();
-	        this.expectKeyword('try');
+	        var wsBeforeTry = this.expectKeyword('try');
 	        var block = this.parseBlock();
 	        var handler = this.matchKeyword('catch') ? this.parseCatchClause() : null;
-	        var finalizer = this.matchKeyword('finally') ? this.parseFinallyClause() : null;
-	        if (!handler && !finalizer) {
+	        var finalizer = this.matchKeyword('finally') ? this.parseFinallyClause() : { wsBeforeFinally: '', content: null };
+	        if (!handler && !finalizer.content) {
 	            this.throwError(messages_1.Messages.NoCatchOrFinally);
 	        }
-	        return this.finalize(node, new Node.TryStatement(block, handler, finalizer));
+	        return this.finalize(node, new Node.TryStatement(wsBeforeTry, block, handler, finalizer.wsBeforeFinally, finalizer.content));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-debugger-statement
 	    Parser.prototype.parseDebuggerStatement = function () {
 	        var node = this.createNode();
-	        this.expectKeyword('debugger');
-	        this.consumeSemicolon();
-	        return this.finalize(node, new Node.DebuggerStatement());
+	        var wsBefore = this.expectKeyword('debugger');
+	        var semicolon = this.consumeSemicolon();
+	        return this.finalize(node, new Node.DebuggerStatement(wsBefore, semicolon));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-ecmascript-language-statements-and-declarations
 	    Parser.prototype.parseStatement = function () {
@@ -4259,7 +5478,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    // https://tc39.github.io/ecma262/#sec-function-definitions
 	    Parser.prototype.parseFunctionSourceElements = function () {
 	        var node = this.createNode();
-	        this.expect('{');
+	        var wsBeforeOpening = this.expect('{');
 	        var body = this.parseDirectivePrologues();
 	        var previousLabelSet = this.context.labelSet;
 	        var previousInIteration = this.context.inIteration;
@@ -4275,12 +5494,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	            }
 	            body.push(this.parseStatementListItem());
 	        }
-	        this.expect('}');
+	        var wsBeforeClosing = this.expect('}');
 	        this.context.labelSet = previousLabelSet;
 	        this.context.inIteration = previousInIteration;
 	        this.context.inSwitch = previousInSwitch;
 	        this.context.inFunctionBody = previousInFunctionBody;
-	        return this.finalize(node, new Node.BlockStatement(body));
+	        return this.finalize(node, new Node.BlockStatement(wsBeforeOpening, body, wsBeforeClosing));
 	    };
 	    Parser.prototype.validateParam = function (options, param, name) {
 	        var key = '$' + name;
@@ -4318,7 +5537,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    };
 	    Parser.prototype.parseRestElement = function (params) {
 	        var node = this.createNode();
-	        this.expect('...');
+	        var wsBefore = this.expect('...');
 	        var arg = this.parsePattern(params);
 	        if (this.match('=')) {
 	            this.throwError(messages_1.Messages.DefaultRestParameter);
@@ -4326,7 +5545,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        if (!this.match(')')) {
 	            this.throwError(messages_1.Messages.ParameterAfterRestParameter);
 	        }
-	        return this.finalize(node, new Node.RestElement(arg));
+	        return this.finalize(node, new Node.RestElement(wsBefore, arg));
 	    };
 	    Parser.prototype.parseFormalParameter = function (options) {
 	        var params = [];
@@ -4344,7 +5563,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	            params: [],
 	            firstRestricted: firstRestricted
 	        };
-	        this.expect('(');
+	        var wsBeforeOpening = this.expect('(');
+	        var separators = [];
 	        if (!this.match(')')) {
 	            options.paramSet = {};
 	            while (this.lookahead.type !== 2 /* EOF */) {
@@ -4352,19 +5572,22 @@ return /******/ (function(modules) { // webpackBootstrap
 	                if (this.match(')')) {
 	                    break;
 	                }
-	                this.expect(',');
+	                separators.push(this.expect(',') + ',');
 	                if (this.match(')')) {
 	                    break;
 	                }
 	            }
 	        }
-	        this.expect(')');
+	        var wsBeforeClosing = this.expect(')');
 	        return {
 	            simple: options.simple,
 	            params: options.params,
 	            stricted: options.stricted,
 	            firstRestricted: options.firstRestricted,
-	            message: options.message
+	            message: options.message,
+	            wsBeforeOpening: wsBeforeOpening,
+	            wsBeforeClosing: wsBeforeClosing,
+	            separators: separators
 	        };
 	    };
 	    Parser.prototype.matchAsyncFunction = function () {
@@ -4374,7 +5597,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            var wsStart = this.scanner.index;
 	            this.scanner.scanComments();
 	            var tokenStart = this.scanner.index;
-	            var ws = tokenStart == wsStart ? "" : this.scanner.source.substring(wsStart, tokenStart);
+	            var ws = tokenStart === wsStart ? '' : this.scanner.source.substring(wsStart, tokenStart);
 	            var next = this.scanner.lex(ws);
 	            this.scanner.restoreState(state);
 	            match = (state.lineNumber === next.lineNumber) && (next.type === 4 /* Keyword */) && (next.value === 'function');
@@ -4384,13 +5607,15 @@ return /******/ (function(modules) { // webpackBootstrap
 	    Parser.prototype.parseFunctionDeclaration = function (identifierIsOptional) {
 	        var node = this.createNode();
 	        var isAsync = this.matchContextualKeyword('async');
+	        var wsBeforeAsync = '';
 	        if (isAsync) {
-	            this.nextToken();
+	            wsBeforeAsync = this.nextToken().wsBefore;
 	        }
-	        this.expectKeyword('function');
+	        var wsBefore = this.expectKeyword('function');
 	        var isGenerator = isAsync ? false : this.match('*');
+	        var wsBeforeStar = '';
 	        if (isGenerator) {
-	            this.nextToken();
+	            wsBeforeStar = this.nextToken().wsBefore;
 	        }
 	        var message;
 	        var id = null;
@@ -4420,6 +5645,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.context.allowYield = !isGenerator;
 	        var formalParameters = this.parseFormalParameters(firstRestricted);
 	        var params = formalParameters.params;
+	        var separators = formalParameters.separators;
+	        var wsBeforeOpening = formalParameters.wsBeforeOpening;
+	        var wsBeforeClosing = formalParameters.wsBeforeClosing;
 	        var stricted = formalParameters.stricted;
 	        firstRestricted = formalParameters.firstRestricted;
 	        if (formalParameters.message) {
@@ -4439,19 +5667,21 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.context.allowStrictDirective = previousAllowStrictDirective;
 	        this.context.await = previousAllowAwait;
 	        this.context.allowYield = previousAllowYield;
-	        return isAsync ? this.finalize(node, new Node.AsyncFunctionDeclaration(id, params, body)) :
-	            this.finalize(node, new Node.FunctionDeclaration(id, params, body, isGenerator));
+	        return isAsync ? this.finalize(node, new Node.AsyncFunctionDeclaration(wsBeforeAsync, wsBefore, id, wsBeforeOpening, params, separators, wsBeforeClosing, body)) :
+	            this.finalize(node, new Node.FunctionDeclaration(wsBefore, wsBeforeStar, id, wsBeforeOpening, params, separators, wsBeforeClosing, body, isGenerator));
 	    };
 	    Parser.prototype.parseFunctionExpression = function () {
 	        var node = this.createNode();
 	        var isAsync = this.matchContextualKeyword('async');
+	        var wsBeforeAsync = '';
 	        if (isAsync) {
-	            this.nextToken();
+	            wsBeforeAsync = this.nextToken().wsBefore;
 	        }
-	        this.expectKeyword('function');
+	        var wsBefore = this.expectKeyword('function');
 	        var isGenerator = isAsync ? false : this.match('*');
+	        var wsBeforeStar = '';
 	        if (isGenerator) {
-	            this.nextToken();
+	            wsBeforeStar = this.nextToken().wsBefore;
 	        }
 	        var message;
 	        var id = null;
@@ -4481,6 +5711,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	        }
 	        var formalParameters = this.parseFormalParameters(firstRestricted);
 	        var params = formalParameters.params;
+	        var separators = formalParameters.separators;
+	        var wsBeforeOpening = formalParameters.wsBeforeOpening;
+	        var wsBeforeClosing = formalParameters.wsBeforeClosing;
 	        var stricted = formalParameters.stricted;
 	        firstRestricted = formalParameters.firstRestricted;
 	        if (formalParameters.message) {
@@ -4500,8 +5733,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.context.allowStrictDirective = previousAllowStrictDirective;
 	        this.context.await = previousAllowAwait;
 	        this.context.allowYield = previousAllowYield;
-	        return isAsync ? this.finalize(node, new Node.AsyncFunctionExpression(id, params, body)) :
-	            this.finalize(node, new Node.FunctionExpression(id, params, body, isGenerator));
+	        return isAsync ? this.finalize(node, new Node.AsyncFunctionExpression(wsBeforeAsync, wsBefore, id, wsBeforeOpening, params, separators, wsBeforeClosing, body)) :
+	            this.finalize(node, new Node.FunctionExpression(wsBefore, wsBeforeStar, id, wsBeforeOpening, params, separators, wsBeforeClosing, body, isGenerator));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-directive-prologues-and-the-use-strict-directive
 	    Parser.prototype.parseDirective = function () {
@@ -4509,8 +5742,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var node = this.createNode();
 	        var expr = this.parseExpression();
 	        var directive = (expr.type === syntax_1.Syntax.Literal) ? this.getTokenRaw(token).slice(1, -1) : null;
-	        this.consumeSemicolon();
-	        return this.finalize(node, directive ? new Node.Directive(expr, directive) : new Node.ExpressionStatement(expr));
+	        var semicolon = this.consumeSemicolon();
+	        return this.finalize(node, directive ? new Node.Directive(expr, directive, semicolon) : new Node.ExpressionStatement(expr, semicolon));
 	    };
 	    Parser.prototype.parseDirectivePrologues = function () {
 	        var firstRestricted = null;
@@ -4571,7 +5804,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        }
 	        var method = this.parsePropertyMethod(formalParameters);
 	        this.context.allowYield = previousAllowYield;
-	        return this.finalize(node, new Node.FunctionExpression(null, formalParameters.params, method, isGenerator));
+	        return this.finalize(node, new Node.FunctionExpression('', '', null, formalParameters.wsBeforeOpening, formalParameters.params, formalParameters.separators, formalParameters.wsBeforeClosing, method, isGenerator));
 	    };
 	    Parser.prototype.parseSetterMethod = function () {
 	        var node = this.createNode();
@@ -4587,18 +5820,18 @@ return /******/ (function(modules) { // webpackBootstrap
 	        }
 	        var method = this.parsePropertyMethod(formalParameters);
 	        this.context.allowYield = previousAllowYield;
-	        return this.finalize(node, new Node.FunctionExpression(null, formalParameters.params, method, isGenerator));
+	        return this.finalize(node, new Node.FunctionExpression('', '', null, formalParameters.wsBeforeOpening, formalParameters.params, formalParameters.separators, formalParameters.wsBeforeClosing, method, isGenerator));
 	    };
-	    Parser.prototype.parseGeneratorMethod = function () {
+	    Parser.prototype.parseGeneratorMethod = function (wsBeforeStar) {
 	        var node = this.createNode();
 	        var isGenerator = true;
 	        var previousAllowYield = this.context.allowYield;
 	        this.context.allowYield = true;
-	        var params = this.parseFormalParameters();
+	        var formalParameters = this.parseFormalParameters();
 	        this.context.allowYield = false;
-	        var method = this.parsePropertyMethod(params);
+	        var method = this.parsePropertyMethod(formalParameters.params);
 	        this.context.allowYield = previousAllowYield;
-	        return this.finalize(node, new Node.FunctionExpression(null, params.params, method, isGenerator));
+	        return this.finalize(node, new Node.FunctionExpression('', wsBeforeStar, null, formalParameters.wsBeforeOpening, formalParameters.params, formalParameters.separators, formalParameters.wsBeforeClosing, method, isGenerator));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-generator-function-definitions
 	    Parser.prototype.isStartOfExpression = function () {
@@ -4625,7 +5858,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	    };
 	    Parser.prototype.parseYieldExpression = function () {
 	        var node = this.createNode();
-	        this.expectKeyword('yield');
+	        var wsBefore = this.expectKeyword('yield');
+	        var wsBeforeStar = '';
 	        var argument = null;
 	        var delegate = false;
 	        if (!this.hasLineTerminator) {
@@ -4633,7 +5867,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            this.context.allowYield = false;
 	            delegate = this.match('*');
 	            if (delegate) {
-	                this.nextToken();
+	                wsBeforeStar = this.nextToken().wsBefore;
 	                argument = this.parseAssignmentExpression();
 	            }
 	            else if (this.isStartOfExpression()) {
@@ -4641,7 +5875,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            }
 	            this.context.allowYield = previousAllowYield;
 	        }
-	        return this.finalize(node, new Node.YieldExpression(argument, delegate));
+	        return this.finalize(node, new Node.YieldExpression(wsBefore, wsBeforeStar, argument, delegate, ''));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-class-definitions
 	    Parser.prototype.parseClassElement = function (hasConstructor) {
@@ -4654,22 +5888,39 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var method = false;
 	        var isStatic = false;
 	        var isAsync = false;
+	        var wsBeforeStar = '';
+	        var wsBeforeAsync = '';
+	        var wsBeforeStatic = '';
+	        var wsBeforeOpening = '';
+	        var wsBeforeClosing = '';
+	        var wsBeforeGetSet = '';
+	        var objectPropertyKey;
 	        if (this.match('*')) {
-	            this.nextToken();
+	            wsBeforeStar = this.nextToken().wsBefore;
 	        }
 	        else {
-	            computed = this.match('[');
-	            key = this.parseObjectPropertyKey();
+	            // computed = this.match('['); // Not necessary anymore
+	            objectPropertyKey = this.parseObjectPropertyKey();
+	            key = objectPropertyKey.key;
+	            wsBeforeOpening = objectPropertyKey.wsBeforeOpening;
+	            wsBeforeClosing = objectPropertyKey.wsBeforeClosing;
+	            computed = objectPropertyKey.computed;
 	            var id = key;
 	            if (id.name === 'static' && (this.qualifiedPropertyName(this.lookahead) || this.match('*'))) {
+	                wsBeforeStatic = id.wsBefore;
 	                token = this.lookahead;
 	                isStatic = true;
 	                computed = this.match('[');
 	                if (this.match('*')) {
-	                    this.nextToken();
+	                    wsBeforeStar = this.nextToken().wsBefore;
 	                }
 	                else {
-	                    key = this.parseObjectPropertyKey();
+	                    // computed = this.match('['); // Not necessary anymore
+	                    objectPropertyKey = this.parseObjectPropertyKey();
+	                    key = objectPropertyKey.key;
+	                    wsBeforeOpening = objectPropertyKey.wsBeforeOpening;
+	                    wsBeforeClosing = objectPropertyKey.wsBeforeClosing;
+	                    computed = objectPropertyKey.computed;
 	                }
 	            }
 	            if ((token.type === 3 /* Identifier */) && !this.hasLineTerminator && (token.value === 'async')) {
@@ -4677,7 +5928,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	                if (punctuator !== ':' && punctuator !== '(' && punctuator !== '*') {
 	                    isAsync = true;
 	                    token = this.lookahead;
-	                    key = this.parseObjectPropertyKey();
+	                    wsBeforeAsync = token.wsBefore;
+	                    objectPropertyKey = this.parseObjectPropertyKey();
+	                    key = objectPropertyKey.key;
+	                    wsBeforeOpening = objectPropertyKey.wsBeforeOpening;
+	                    wsBeforeClosing = objectPropertyKey.wsBeforeClosing;
+	                    computed = objectPropertyKey.computed;
 	                    if (token.type === 3 /* Identifier */ && token.value === 'constructor') {
 	                        this.tolerateUnexpectedToken(token, messages_1.Messages.ConstructorIsAsync);
 	                    }
@@ -4688,31 +5944,45 @@ return /******/ (function(modules) { // webpackBootstrap
 	        if (token.type === 3 /* Identifier */) {
 	            if (token.value === 'get' && lookaheadPropertyKey) {
 	                kind = 'get';
-	                computed = this.match('[');
-	                key = this.parseObjectPropertyKey();
+	                wsBeforeGetSet = token.wsBefore;
+	                // computed = this.match('['); // Not necessary anymore
+	                objectPropertyKey = this.parseObjectPropertyKey();
+	                key = objectPropertyKey.key;
+	                wsBeforeOpening = objectPropertyKey.wsBeforeOpening;
+	                wsBeforeClosing = objectPropertyKey.wsBeforeClosing;
+	                computed = objectPropertyKey.computed;
 	                this.context.allowYield = false;
 	                value = this.parseGetterMethod();
 	            }
 	            else if (token.value === 'set' && lookaheadPropertyKey) {
 	                kind = 'set';
-	                computed = this.match('[');
-	                key = this.parseObjectPropertyKey();
+	                wsBeforeGetSet = token.wsBefore;
+	                // computed = this.match('['); // Not necessary anymore
+	                objectPropertyKey = this.parseObjectPropertyKey();
+	                key = objectPropertyKey.key;
+	                wsBeforeOpening = objectPropertyKey.wsBeforeOpening;
+	                wsBeforeClosing = objectPropertyKey.wsBeforeClosing;
+	                computed = objectPropertyKey.computed;
 	                value = this.parseSetterMethod();
 	            }
 	        }
 	        else if (token.type === 7 /* Punctuator */ && token.value === '*' && lookaheadPropertyKey) {
 	            kind = 'init';
-	            computed = this.match('[');
-	            key = this.parseObjectPropertyKey();
-	            value = this.parseGeneratorMethod();
+	            // computed = this.match('['); // Not necessary anymore
+	            objectPropertyKey = this.parseObjectPropertyKey();
+	            key = objectPropertyKey.key;
+	            wsBeforeOpening = objectPropertyKey.wsBeforeOpening;
+	            wsBeforeClosing = objectPropertyKey.wsBeforeClosing;
+	            computed = objectPropertyKey.computed;
+	            value = this.parseGeneratorMethod(wsBeforeStar);
 	            method = true;
 	        }
 	        if (!kind && key && this.match('(')) {
 	            kind = 'init';
-	            value = isAsync ? this.parsePropertyMethodAsyncFunction() : this.parsePropertyMethodFunction();
+	            value = isAsync ? this.parsePropertyMethodAsyncFunction(wsBeforeAsync) : this.parsePropertyMethodFunction();
 	            method = true;
 	        }
-	        if (!kind) {
+	        if (!kind || !key) { // || !key is not mandatory because !kinds implies !key
 	            this.throwUnexpectedToken(this.lookahead);
 	        }
 	        if (kind === 'init') {
@@ -4735,57 +6005,67 @@ return /******/ (function(modules) { // webpackBootstrap
 	                kind = 'constructor';
 	            }
 	        }
-	        return this.finalize(node, new Node.MethodDefinition(key, computed, value, kind, isStatic));
+	        return this.finalize(node, new Node.MethodDefinition(wsBeforeStatic, wsBeforeGetSet, key, computed, wsBeforeOpening, wsBeforeClosing, value, kind, isStatic));
 	    };
 	    Parser.prototype.parseClassElementList = function () {
 	        var body = [];
 	        var hasConstructor = { value: false };
-	        this.expect('{');
+	        var wsBeforeOpening = this.expect('{');
+	        var separators = [];
+	        var wsAfterOpening = '';
 	        while (!this.match('}')) {
 	            if (this.match(';')) {
-	                this.nextToken();
+	                var moreWs = this.nextToken().wsBefore + ';';
+	                if (body.length > 0) {
+	                    body[body.length - 1].wsAfter += moreWs;
+	                }
+	                else {
+	                    wsAfterOpening += moreWs;
+	                }
 	            }
 	            else {
 	                body.push(this.parseClassElement(hasConstructor));
 	            }
 	        }
-	        this.expect('}');
-	        return body;
+	        var wsBeforeClosing = this.expect('}');
+	        return { wsBeforeOpening: wsBeforeOpening, wsAfterOpening: wsAfterOpening, properties: body, wsBeforeClosing: wsBeforeClosing };
 	    };
 	    Parser.prototype.parseClassBody = function () {
 	        var node = this.createNode();
-	        var elementList = this.parseClassElementList();
-	        return this.finalize(node, new Node.ClassBody(elementList));
+	        var cel = this.parseClassElementList();
+	        return this.finalize(node, new Node.ClassBody(cel.wsBeforeOpening, cel.wsAfterOpening, cel.properties, cel.wsBeforeClosing));
 	    };
 	    Parser.prototype.parseClassDeclaration = function (identifierIsOptional) {
 	        var node = this.createNode();
 	        var previousStrict = this.context.strict;
 	        this.context.strict = true;
-	        this.expectKeyword('class');
+	        var wsBefore = this.expectKeyword('class');
 	        var id = (identifierIsOptional && (this.lookahead.type !== 3 /* Identifier */)) ? null : this.parseVariableIdentifier();
 	        var superClass = null;
+	        var wsBeforeExtends = '';
 	        if (this.matchKeyword('extends')) {
-	            this.nextToken();
+	            wsBeforeExtends = this.nextToken().wsBefore;
 	            superClass = this.isolateCoverGrammar(this.parseLeftHandSideExpressionAllowCall);
 	        }
 	        var classBody = this.parseClassBody();
 	        this.context.strict = previousStrict;
-	        return this.finalize(node, new Node.ClassDeclaration(id, superClass, classBody));
+	        return this.finalize(node, new Node.ClassDeclaration(wsBefore, id, wsBeforeExtends, superClass, classBody));
 	    };
 	    Parser.prototype.parseClassExpression = function () {
 	        var node = this.createNode();
 	        var previousStrict = this.context.strict;
 	        this.context.strict = true;
-	        this.expectKeyword('class');
+	        var wsBefore = this.expectKeyword('class');
 	        var id = (this.lookahead.type === 3 /* Identifier */) ? this.parseVariableIdentifier() : null;
 	        var superClass = null;
+	        var wsBeforeExtends = '';
 	        if (this.matchKeyword('extends')) {
-	            this.nextToken();
+	            wsBeforeExtends = this.nextToken().wsBefore;
 	            superClass = this.isolateCoverGrammar(this.parseLeftHandSideExpressionAllowCall);
 	        }
 	        var classBody = this.parseClassBody();
 	        this.context.strict = previousStrict;
-	        return this.finalize(node, new Node.ClassExpression(id, superClass, classBody));
+	        return this.finalize(node, new Node.ClassExpression(wsBefore, id, wsBeforeExtends, superClass, classBody));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-scripts
 	    // https://tc39.github.io/ecma262/#sec-modules
@@ -4798,7 +6078,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        while (this.lookahead.type !== 2 /* EOF */) {
 	            body.push(this.parseStatementListItem());
 	        }
-	        return this.finalize(node, new Node.Module(body));
+	        return this.finalize(node, new Node.Module(body, this.lookahead.wsBefore));
 	    };
 	    Parser.prototype.parseScript = function () {
 	        var node = this.createNode();
@@ -4806,7 +6086,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        while (this.lookahead.type !== 2 /* EOF */) {
 	            body.push(this.parseStatementListItem());
 	        }
-	        return this.finalize(node, new Node.Script(body));
+	        return this.finalize(node, new Node.Script(body, this.lookahead.wsBefore));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-imports
 	    Parser.prototype.parseModuleSpecifier = function () {
@@ -4816,18 +6096,21 @@ return /******/ (function(modules) { // webpackBootstrap
 	        }
 	        var token = this.nextToken();
 	        var raw = this.getTokenRaw(token);
-	        return this.finalize(node, new Node.Literal(token.value, raw));
+	        return this.finalize(node, new Node.Literal(token.wsBefore, token.value, raw));
 	    };
 	    // import {<foo as bar>} ...;
 	    Parser.prototype.parseImportSpecifier = function () {
 	        var node = this.createNode();
 	        var imported;
 	        var local;
+	        var wsBeforeAs = '';
+	        var asPresent = false;
 	        if (this.lookahead.type === 3 /* Identifier */) {
 	            imported = this.parseVariableIdentifier();
 	            local = imported;
 	            if (this.matchContextualKeyword('as')) {
-	                this.nextToken();
+	                wsBeforeAs = this.nextToken().wsBefore;
+	                asPresent = true;
 	                local = this.parseVariableIdentifier();
 	            }
 	        }
@@ -4835,27 +6118,29 @@ return /******/ (function(modules) { // webpackBootstrap
 	            imported = this.parseIdentifierName();
 	            local = imported;
 	            if (this.matchContextualKeyword('as')) {
-	                this.nextToken();
+	                wsBeforeAs = this.nextToken().wsBefore;
+	                asPresent = true;
 	                local = this.parseVariableIdentifier();
 	            }
 	            else {
 	                this.throwUnexpectedToken(this.nextToken());
 	            }
 	        }
-	        return this.finalize(node, new Node.ImportSpecifier(local, imported));
+	        return this.finalize(node, new Node.ImportSpecifier(local, asPresent, wsBeforeAs, imported));
 	    };
 	    // {foo, bar as bas}
 	    Parser.prototype.parseNamedImports = function () {
-	        this.expect('{');
+	        var wsBeforeOpening = this.expect('{');
 	        var specifiers = [];
+	        var separators = [];
 	        while (!this.match('}')) {
 	            specifiers.push(this.parseImportSpecifier());
 	            if (!this.match('}')) {
-	                this.expect(',');
+	                separators.push(this.expect(',') + ',');
 	            }
 	        }
-	        this.expect('}');
-	        return specifiers;
+	        var wsBeforeClosing = this.expect('}');
+	        return { wsBeforeOpening: wsBeforeOpening, specifiers: specifiers, separators: separators, wsBeforeClosing: wsBeforeClosing };
 	    };
 	    // import <foo> ...;
 	    Parser.prototype.parseImportDefaultSpecifier = function () {
@@ -4866,22 +6151,27 @@ return /******/ (function(modules) { // webpackBootstrap
 	    // import <* as foo> ...;
 	    Parser.prototype.parseImportNamespaceSpecifier = function () {
 	        var node = this.createNode();
-	        this.expect('*');
+	        var wsBeforeStar = this.expect('*');
 	        if (!this.matchContextualKeyword('as')) {
 	            this.throwError(messages_1.Messages.NoAsAfterImportNamespace);
 	        }
-	        this.nextToken();
+	        var wsBeforeAs = this.nextToken().wsBefore;
 	        var local = this.parseIdentifierName();
-	        return this.finalize(node, new Node.ImportNamespaceSpecifier(local));
+	        return this.finalize(node, new Node.ImportNamespaceSpecifier(wsBeforeStar, wsBeforeAs, local));
 	    };
 	    Parser.prototype.parseImportDeclaration = function () {
 	        if (this.context.inFunctionBody) {
 	            this.throwError(messages_1.Messages.IllegalImportDeclaration);
 	        }
 	        var node = this.createNode();
-	        this.expectKeyword('import');
+	        var wsBefore = this.expectKeyword('import');
 	        var src;
 	        var specifiers = [];
+	        var separators = [];
+	        var wsBeforeFrom = '';
+	        var wsBeforeOpening = '';
+	        var wsBeforeClosing = '';
+	        var hasBrackets = false;
 	        if (this.lookahead.type === 8 /* StringLiteral */) {
 	            // import 'foo';
 	            src = this.parseModuleSpecifier();
@@ -4889,7 +6179,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	        else {
 	            if (this.match('{')) {
 	                // import {bar}
-	                specifiers = specifiers.concat(this.parseNamedImports());
+	                hasBrackets = true;
+	                var namedImports = this.parseNamedImports();
+	                wsBeforeOpening = namedImports.wsBeforeOpening;
+	                separators = separators.concat(namedImports.separators);
+	                specifiers = specifiers.concat(namedImports.specifiers);
+	                wsBeforeClosing = namedImports.wsBeforeClosing;
 	            }
 	            else if (this.match('*')) {
 	                // import * as foo
@@ -4899,14 +6194,19 @@ return /******/ (function(modules) { // webpackBootstrap
 	                // import foo
 	                specifiers.push(this.parseImportDefaultSpecifier());
 	                if (this.match(',')) {
-	                    this.nextToken();
+	                    separators.push(this.nextToken().wsBefore + ',');
 	                    if (this.match('*')) {
 	                        // import foo, * as foo
 	                        specifiers.push(this.parseImportNamespaceSpecifier());
 	                    }
 	                    else if (this.match('{')) {
 	                        // import foo, {bar}
-	                        specifiers = specifiers.concat(this.parseNamedImports());
+	                        hasBrackets = true;
+	                        var namedImports = this.parseNamedImports();
+	                        wsBeforeOpening = namedImports.wsBeforeOpening;
+	                        separators = separators.concat(namedImports.separators);
+	                        specifiers = specifiers.concat(namedImports.specifiers);
+	                        wsBeforeClosing = namedImports.wsBeforeClosing;
 	                    }
 	                    else {
 	                        this.throwUnexpectedToken(this.lookahead);
@@ -4920,50 +6220,54 @@ return /******/ (function(modules) { // webpackBootstrap
 	                var message = this.lookahead.value ? messages_1.Messages.UnexpectedToken : messages_1.Messages.MissingFromClause;
 	                this.throwError(message, this.lookahead.value);
 	            }
-	            this.nextToken();
+	            wsBeforeFrom = this.nextToken().wsBefore;
 	            src = this.parseModuleSpecifier();
 	        }
-	        this.consumeSemicolon();
-	        return this.finalize(node, new Node.ImportDeclaration(specifiers, src));
+	        var semicolon = this.consumeSemicolon();
+	        return this.finalize(node, new Node.ImportDeclaration(wsBefore, wsBeforeOpening, hasBrackets, specifiers, separators, wsBeforeClosing, wsBeforeFrom, src, semicolon));
 	    };
 	    // https://tc39.github.io/ecma262/#sec-exports
 	    Parser.prototype.parseExportSpecifier = function () {
 	        var node = this.createNode();
 	        var local = this.parseIdentifierName();
 	        var exported = local;
+	        var wsBeforeAs = '';
+	        var noAs = true;
 	        if (this.matchContextualKeyword('as')) {
-	            this.nextToken();
+	            wsBeforeAs = this.nextToken().wsBefore;
 	            exported = this.parseIdentifierName();
+	            noAs = false;
 	        }
-	        return this.finalize(node, new Node.ExportSpecifier(local, exported));
+	        return this.finalize(node, new Node.ExportSpecifier(local, noAs, wsBeforeAs, exported));
 	    };
 	    Parser.prototype.parseExportDeclaration = function () {
 	        if (this.context.inFunctionBody) {
 	            this.throwError(messages_1.Messages.IllegalExportDeclaration);
 	        }
 	        var node = this.createNode();
-	        this.expectKeyword('export');
+	        var wsBeforeExport = this.expectKeyword('export');
 	        var exportDeclaration;
+	        var wsBeforeDefault = '';
 	        if (this.matchKeyword('default')) {
 	            // export default ...
-	            this.nextToken();
+	            wsBeforeDefault = this.nextToken().wsBefore;
 	            if (this.matchKeyword('function')) {
 	                // export default function foo () {}
 	                // export default function () {}
 	                var declaration = this.parseFunctionDeclaration(true);
-	                exportDeclaration = this.finalize(node, new Node.ExportDefaultDeclaration(declaration));
+	                exportDeclaration = this.finalize(node, new Node.ExportDefaultDeclaration(wsBeforeExport, wsBeforeDefault, declaration));
 	            }
 	            else if (this.matchKeyword('class')) {
 	                // export default class foo {}
 	                var declaration = this.parseClassDeclaration(true);
-	                exportDeclaration = this.finalize(node, new Node.ExportDefaultDeclaration(declaration));
+	                exportDeclaration = this.finalize(node, new Node.ExportDefaultDeclaration(wsBeforeExport, wsBeforeDefault, declaration));
 	            }
 	            else if (this.matchContextualKeyword('async')) {
 	                // export default async function f () {}
 	                // export default async function () {}
 	                // export default async x => x
 	                var declaration = this.matchAsyncFunction() ? this.parseFunctionDeclaration(true) : this.parseAssignmentExpression();
-	                exportDeclaration = this.finalize(node, new Node.ExportDefaultDeclaration(declaration));
+	                exportDeclaration = this.finalize(node, new Node.ExportDefaultDeclaration(wsBeforeExport, wsBeforeDefault, declaration));
 	            }
 	            else {
 	                if (this.matchContextualKeyword('from')) {
@@ -4974,21 +6278,21 @@ return /******/ (function(modules) { // webpackBootstrap
 	                // export default (1 + 2);
 	                var declaration = this.match('{') ? this.parseObjectInitializer() :
 	                    this.match('[') ? this.parseArrayInitializer() : this.parseAssignmentExpression();
-	                this.consumeSemicolon();
-	                exportDeclaration = this.finalize(node, new Node.ExportDefaultDeclaration(declaration));
+	                var semicolon = this.consumeSemicolon();
+	                exportDeclaration = this.finalize(node, new Node.ExportDefaultDeclaration(wsBeforeExport, wsBeforeDefault, declaration, semicolon));
 	            }
 	        }
 	        else if (this.match('*')) {
 	            // export * from 'foo';
-	            this.nextToken();
+	            var wsBeforeStar = this.nextToken().wsBefore;
 	            if (!this.matchContextualKeyword('from')) {
 	                var message = this.lookahead.value ? messages_1.Messages.UnexpectedToken : messages_1.Messages.MissingFromClause;
 	                this.throwError(message, this.lookahead.value);
 	            }
-	            this.nextToken();
+	            var wsBeforeFrom = this.nextToken().wsBefore;
 	            var src = this.parseModuleSpecifier();
-	            this.consumeSemicolon();
-	            exportDeclaration = this.finalize(node, new Node.ExportAllDeclaration(src));
+	            var semicolon = this.consumeSemicolon();
+	            exportDeclaration = this.finalize(node, new Node.ExportAllDeclaration(wsBeforeExport, wsBeforeStar, wsBeforeFrom, src, semicolon));
 	        }
 	        else if (this.lookahead.type === 4 /* Keyword */) {
 	            // export var f = 1;
@@ -5006,31 +6310,34 @@ return /******/ (function(modules) { // webpackBootstrap
 	                default:
 	                    this.throwUnexpectedToken(this.lookahead);
 	            }
-	            exportDeclaration = this.finalize(node, new Node.ExportNamedDeclaration(declaration, [], null));
+	            exportDeclaration = this.finalize(node, new Node.ExportNamedDeclaration(wsBeforeExport, declaration, false, '', [], [], '', '', null));
 	        }
 	        else if (this.matchAsyncFunction()) {
 	            var declaration = this.parseFunctionDeclaration();
-	            exportDeclaration = this.finalize(node, new Node.ExportNamedDeclaration(declaration, [], null));
+	            exportDeclaration = this.finalize(node, new Node.ExportNamedDeclaration(wsBeforeExport, declaration, false, '', [], [], '', '', null));
 	        }
 	        else {
 	            var specifiers = [];
 	            var source = null;
 	            var isExportFromIdentifier = false;
-	            this.expect('{');
+	            var wsBeforeOpening = this.expect('{');
+	            var separators = [];
 	            while (!this.match('}')) {
 	                isExportFromIdentifier = isExportFromIdentifier || this.matchKeyword('default');
 	                specifiers.push(this.parseExportSpecifier());
 	                if (!this.match('}')) {
-	                    this.expect(',');
+	                    separators.push(this.expect(',') + ',');
 	                }
 	            }
-	            this.expect('}');
+	            var wsBeforeClosing = this.expect('}');
+	            var semicolon = '';
+	            var wsBeforeFrom = '';
 	            if (this.matchContextualKeyword('from')) {
 	                // export {default} from 'foo';
 	                // export {foo} from 'foo';
-	                this.nextToken();
+	                wsBeforeFrom = this.nextToken().wsBefore;
 	                source = this.parseModuleSpecifier();
-	                this.consumeSemicolon();
+	                semicolon = this.consumeSemicolon();
 	            }
 	            else if (isExportFromIdentifier) {
 	                // export {default}; // missing fromClause
@@ -5039,9 +6346,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	            }
 	            else {
 	                // export {foo};
-	                this.consumeSemicolon();
+	                semicolon = this.consumeSemicolon();
 	            }
-	            exportDeclaration = this.finalize(node, new Node.ExportNamedDeclaration(null, specifiers, source));
+	            exportDeclaration = this.finalize(node, new Node.ExportNamedDeclaration(wsBeforeExport, null, true, wsBeforeOpening, specifiers, separators, wsBeforeClosing, wsBeforeFrom, source, semicolon));
 	        }
 	        return exportDeclaration;
 	    };
@@ -6749,7 +8056,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            var wsStart = this.scanner.index;
 	            var comments = this.scanner.scanComments();
 	            var tokenStart = this.scanner.index;
-	            var ws = tokenStart == wsStart ? "" : this.scanner.source.substring(wsStart, tokenStart);
+	            var ws = tokenStart === wsStart ? '' : this.scanner.source.substring(wsStart, tokenStart);
 	            if (this.scanner.trackComment) {
 	                for (var i = 0; i < comments.length; ++i) {
 	                    var e = comments[i];
