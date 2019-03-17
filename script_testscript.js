@@ -1,11 +1,11 @@
 var fs = require("fs");
 var o = (s) => fs.readFileSync(s, "utf8");
-eval(o("esprima.js"));
+eval(o("add-on/esprima.js"));
 esprima = module.exports;
 Syntax = esprima.Syntax;
 Node = esprima.Node;
 eval([
-  "Utils.js",
-  "RegexUtils.js",
-  "Update.js"].map(o).join("\n\n"));
+  "add-on/Utils.js",
+  "add-on/RegexUtils.js",
+  "add-on/Update.js"].map(o).join("\n\n"));
 eval(o("test_update.js"));

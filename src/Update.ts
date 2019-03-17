@@ -1,37 +1,56 @@
-// Test
+import * as syntax from './syntax';
+import * as Node from './nodes';
+import * as esprima from './esprima';
+var Syntax = syntax.Syntax;
 
-function updateDirect(env, oldNode, newValue) {
+type Ok<a> = { ctor: 'Ok', _0: a}
+type Err<a> = { ctor: 'Err', _0: a}
+type Res<err,ok> = Err<err> | Ok<ok> 
+declare function Ok<a>(arg: a): Ok<a>;
+declare function Err<a>(arg: a): Err<a>;
+declare function resultCase<err,ok,a>(arg: Res<err,ok>, cb1: ((e: err) => a), cb2: ((o: ok) => a)): a;
+type Env = undefined | { head: {name: string, value: EnvValue}, tail: Env}
+type EnvValue = { v_: any, vName_: any, expr: any, env: Env}
+declare function updateVar_(env: Env, name: string, cb: (oldv: EnvValue) => EnvValue): Env
+type AnyNode = Node.ExportableDefaultDeclaration
+type Prog = [Env, AnyNode]
+type UpdateResult = Res<string,Prog>
+declare let Logger: { log: (content: any) => any };
+
+function updateDirect(env: Env, oldNode: AnyNode, newValue: any): Res<string,Prog> {
   if(oldNode.type == Syntax.Program) {
-    if(oldNode.body.length != 1) {
-      return Err("Reversion currently supports only 1 directive in program, got " + oldNode.body.length)
+    let script: Node.Script = oldNode as Node.Script;
+    if(script.body.length != 1) {
+      return Err("Reversion currently supports only 1 directive in program, got " + script.body.length)
     }
-    var e = oldNode.body[0];
+    var e = script.body[0];
     if(e.type != Syntax.ExpressionStatement) {
       return Err("Reversion currently supports only expression statements, got " + e.type);
     }
-    var x = e.expression;
+    var x = (e as Node.ExpressionStatement).expression;
     return resultCase(
-      updateDirect(env, x, newValue), function(err) { return Err(err) },
-      function(envX) {
-        var newNode = Object.create(oldNode);
+      updateDirect(env, x, newValue), function(err: string):UpdateResult { return Err(err) },
+      function(envX: Prog):UpdateResult {
+        let newNode = Object.create(oldNode);
         newNode.body[0].expression = envX[1];
-        return Ok([envX[0], newNode])
+        return Ok<Prog>([envX[0], newNode as AnyNode])
       }
     )
   }
   if(oldNode.type == Syntax.Literal) {
     var newNode = Object.create(oldNode);
     newNode.value = newValue;
-    return Ok([env, newNode]);
+    return Ok<Prog>([env, newNode]);
   }
+
   if(oldNode.type == Syntax.Identifier) {
-    var newEnv = updateVar_(env, oldNode.name, function(oldValue) {
+    var newEnv = updateVar_(env, (oldNode as Node.Identifier).name, function(oldValue: EnvValue): EnvValue {
       return {v_: newValue,
               vName_: typeof oldValue.vName_ != "undefined" ? newValue : undefined,
               expr: oldValue.expr, // Will be updated later.
               env: oldValue.env};
     });
-    return Ok([newEnv, oldNode]);
+    return Ok<Prog>([newEnv, oldNode]);
   }
   if(oldNode.type == Syntax.ArrayExpression) {
     // For arrays of size 2 where
@@ -39,8 +58,8 @@ function updateDirect(env, oldNode, newValue) {
     // - and the first one is a string
     // it is possible to push back a string (the object is copied)
     // 
-    var subExpressions = oldNode.
-    return;
+    //var subExpressions = oldNode.
+    //return ;
   }
   return Err("Reversion does not currently support nodes of type " + oldNode.type);
 }
@@ -48,72 +67,16 @@ function updateDirect(env, oldNode, newValue) {
 // Given the old formula and the new value, try to generate a new formula.
 // If fails, return false
 // update_: (Env, StringFormula) -> StringValue -> (Ok([Env (updated with flags), StringFormula]) | Err(msg))
-function update_(env, oldFormula) {
+function update_(env, oldFormula): (newOutput: any) => Res<string, Prog> {
   var oldNode = esprima.parseScript(oldFormula);
-  return function(newOutput) {
-    var updated = updateDirect(env, oldNode, newOutput);
+  return function(newOutput: any):Res<string, Prog> {
+    var updated: Res<string, Prog> = updateDirect(env, oldNode, newOutput);
     return resultCase(updated, function(x) { return Err(x); },
-      function(envNode) {
-        return Ok([envNode[0], envNode[1].unparse()]);
+      function(prog: Prog): Res<string, Prog> {
+        return Ok<Prog>([prog[0], prog[1].unparse()]);
       }
     )
   }
-  return jsFormulaCase(oldFormula, {
-    whitespaces: function(wsBefore, content, wsAfter) {
-      return function(newOutput) {
-        return resultCase(
-          update_(env, content)(newOutput), Err,
-          function(envX) {
-            return Ok([envX[0], wsBefore + envX[1] + wsAfter])
-          });
-      }},
-    string: function(string) {
-        var charDelim = string[0];
-        return function(newOutput) {
-          return Ok([env, toExpString(newOutput, charDelim)]);
-        } 
-      },
-    number: function(numberValue, numberString) {
-        return function(newOutput) {
-          return Ok([env, numberValue == newOutput ? numberString : "" + newOutput]);
-        }
-      },
-    boolean: function(boolValue) {
-        return function(newOutput) {
-          return Ok([env, "" + newOutput]);
-        }
-      },
-    parentheses: function(content) {
-        return function(newOutput) {
-          return resultCase(
-            update_(env, content)(newOutput), Err,
-            function(envX) {
-              return Ok([envX[0], "(" + envX[1] + ")"]);
-            });
-        };
-      },
-    variable: function(name) {
-        return function(newOutput) {
-          var newEnv = updateVar_(env, name, function(oldValue) {
-            return {v_: newOutput,
-                    vName_: typeof oldValue.vName_ != "undefined" ? newOutput : undefined,
-                    expr: oldValue.expr,
-                    env: oldValue.env};
-          });
-          return Ok([newEnv, name]);
-        };
-      },
-    operator: function(left, ws, op, right) {
-        return function(newOutput) {
-          return Err("Cannot back-propagate changes through operator " + op + " yet");
-        }
-      },
-    orElse: function(formula) {
-        return function(newOutput) {
-          return Err("could not update " + formula + " with " + newOutput + ", no rule found");
-        }
-      }
-  });
 }
 
 function testUpdate() {

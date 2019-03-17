@@ -1,11 +1,15 @@
 {
 	"compilerOptions": {
 		"target": "ES5",
-		"module": "commonjs",
 		"noImplicitAny": false,
-		"strict": true
+    "allowJs": true,
+    "noImplicitUseStrict": true,
+    "noResolve": true
 	},
 	"files": [
+    "esprima.d.ts",
+    "syntax.d.ts",
+    "nodes.d.ts",
 		"Update.ts"
 	]
 }
