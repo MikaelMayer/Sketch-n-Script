@@ -91,18 +91,19 @@ If you don't want that clasp push some files or folders, note that `clasp` ignor
 * That don't have an accepted file extension
 * That are ignored (filename matches a glob pattern in the `.claspignore` file)
 
-## Updating the javascript parser:
+## Working with typescript files
 
-If running the first time, run:
+If running the first time, install the necessary dependencies:
 
-    npm install -s pegjs
-    npm install uglify-js -g
+    npm install
 
-Then:
+Typescripts files are located in `src/`. To convert them to javascript files in the `add-on` folder, run
 
-    make buildjsparser
+    npm run compile
 
-This will create the file `update/jsparser-min.js`
+## Run tests
+
+    npm run test
 
 ## Publishing the add-on (for authors only)
 
