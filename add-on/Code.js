@@ -801,7 +801,8 @@ function updateLetExprs_(doc, env, letExprs) {
         newOutput = mergeValues(oldOutput, updatedNewEnv.head.value.v_, newOutput);
         updatedEnv1 = updatedNewEnv.tail;
       }
-      if(areDifferentValues_(oldOutput, newOutput)) {
+      if(typeof expr.oldOutput !== "undefined" &&
+         areDifferentValues_(oldOutput, newOutput)) {
         // Here the value was changed directly or indiretly, or a merge of both.
         formulaEnvUpdate = update_(env, formula)(newOutput);
       }
@@ -875,7 +876,7 @@ function extractExprs_(doc, maybeFinalExpr) {
     var newOutput = "";
     var numOfElements = 0;
     function addToOutput(newValue) {
-      if(numOfElements == 1 && !Array.isArray(newOutput) || (!isRichText(newOutput) && !isElement(newOutput))) {
+      if(numOfElements == 1 && !Array.isArray(newOutput) || (!isRichText_(newOutput) && !isElement_(newOutput))) {
         newOutput = [newOutput]; // Force a list of elements.
       }
       if(numOfElements >= 1) {
@@ -993,7 +994,8 @@ function updateNamedRanges_(doc, env, exprs) {
   var changed = false;
   List.foreach(exprs, function(expr) {
     var to = typeof expr.newOutput
-    if(areDifferentValues_(expr.oldOutput, expr.newOutput)) {
+    if(typeof expr.oldOutput !== "undefined" &&
+       areDifferentValues_(expr.oldOutput, expr.newOutput)) {
       changed = expr.name || expr.source;
       return changed;
     }

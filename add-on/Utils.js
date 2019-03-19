@@ -525,8 +525,8 @@ function reconcileAsMuchAsPossible_(computedValues, oldValues) {
   }
   if(typeof computedValues == "object" && typeof oldValues === "object" &&
      Array.isArray(computedValues) && Array.isArray(oldValues) &&
-    !isRichText(computedValues) && !isRichText(oldValues) &&
-    !isElement(computedValues) && !isElement(oldValues)
+    !isRichText_(computedValues) && !isRichText_(oldValues) &&
+    !isElement_(computedValues) && !isElement_(oldValues)
     ) {
       if(computedValues.length == oldValues.length) {
         return computedValues.map(function(computedValue, k) {

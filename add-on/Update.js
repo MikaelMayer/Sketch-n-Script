@@ -1,4 +1,3 @@
-syntax = typeof syntax == "undefined" ? this : syntax;
 var __assign = (this && this.__assign) || function () {
     __assign = Object.assign || function(t) {
         for (var s, i = 1, n = arguments.length; i < n; i++) {
@@ -10,6 +9,10 @@ var __assign = (this && this.__assign) || function () {
     };
     return __assign.apply(this, arguments);
 };
+Object.defineProperty(exports, "__esModule", { value: true });
+var syntax = require("./syntax");
+var Node = require("./nodes");
+var esprima = require("./esprima");
 var DType;
 (function (DType) {
     DType["Clone"] = "Clone";
@@ -220,9 +223,25 @@ function processClones(prog, updateData, otherwise) {
         return undefined;
     }).filter(function (x) { return typeof x !== "undefined"; }));
 }
+function newCall(Cls, args) {
+    return (function () {
+        function F(args) {
+            return Cls.apply(this, args);
+        }
+        F.prototype = Cls.prototype;
+        return function () {
+            return new F(arguments);
+        };
+    })();
+}
 function uniqueNewValOf(diffs) {
-    var construct = Node[diffs[0].kind.nodeCtor];
-    return new (construct.bind.apply(construct, [void 0].concat(diffs[0].kind.arguments)))();
+    var construct = esprima.Node[diffs[0].kind.nodeCtor];
+    /*Logger.log(uneval_(construct))
+    Logger.log("(construct.prototype.unparse)");
+    Logger.log(uneval_(construct.prototype.unparse))*/
+    var result = newCall(construct, [void 0].concat(diffs[0].kind.arguments));
+    result.unparse = construct.prototype.unparse; // TODO: Figure out why this is needed.
+    return result;
 }
 function updateForeach(env, collection, callbackIterator, gather) {
     var aux = function (envSoFar, nodesSoFar, diffsSoFar, i) {
@@ -352,7 +371,22 @@ function allClonePaths_(complexVal, simpleVal) {
     }
     return [];
 }
-
+function isRichText_(value) {
+    return typeof value == "object" &&
+        Array.isArray(value) &&
+        value.length === 2 &&
+        typeof value[0] == "string" &&
+        typeof value[1] == "object";
+}
+function isElement_(value) {
+    return typeof value == "object" &&
+        Array.isArray(value) &&
+        value.length === 3 &&
+        typeof value[0] == "string" &&
+        typeof value[1] == "object" &&
+        typeof value[2] == "object" &&
+        Array.isArray(value[2]);
+}
 // Later, we could include the context while computing diffs to recover up clones.
 function computeDiffs_(oldVal, newVal) {
     var o = typeof oldVal;

@@ -250,9 +250,26 @@ function processClones(prog: Prog, updateData: UpdateData,
   }).filter(x => typeof x !== "undefined"));
 }
 
+function newCall(Cls, args) {
+  return (function() {
+    function F(args) {
+      return Cls.apply(this, args);
+    }
+    F.prototype = Cls.prototype;
+    
+    return function() {
+      return new F(arguments);
+    }
+  })();
+}
 function uniqueNewValOf(diffs: DUpdate[]): AnyNode {
-  var construct = (Node as any)[(diffs[0].kind as {nodeCtor: string}).nodeCtor];
-  return new construct(...(diffs[0].kind as {arguments: any[]}).arguments);
+  var construct = esprima.Node[diffs[0].kind.nodeCtor];
+  /*Logger.log(uneval_(construct))
+  Logger.log("(construct.prototype.unparse)");
+  Logger.log(uneval_(construct.prototype.unparse))*/
+  var result = newCall(construct, [void 0].concat(diffs[0].kind.arguments));
+  result.unparse = construct.prototype.unparse; // TODO: Figure out why this is needed.
+  return result;
 }
 
 function updateForeach<elem>(env: Env,
