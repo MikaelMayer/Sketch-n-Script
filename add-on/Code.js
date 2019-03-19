@@ -343,21 +343,6 @@ function computeValue_(doc, $$value$$$) { // Strange name to prevent override wh
   return $$value$$$;
 }
 
-// From a list environment, builds an object environment suitable for with(result) { eval...}
-// Caches every environment.
-function buildEnvJS_(env) {
-  if(typeof env !== "object") return {};
-  if(typeof env.cache !== "undefined") return env.cache;
-  var result = {};
-  List.foreach(env, function(head) {
-    result[head.name] =
-      typeof head.value.vName_ != "undefined" ?
-        head.value.vName_ : head.value.v_;
-  });
-  env.cache = result;
-  return result;
-}
-
 // If the formula sets a name, returns the name
 // If the comment is /*name()*/ return nmae
 function nameOf_(formula) {
@@ -1023,33 +1008,6 @@ function updateNamedRanges_(doc, env, exprs) {
 function isInserable_(v) {
   return typeof v == "string" || typeof v == "number" || typeof v == "boolean" ||
          typeof v == "object" && v.length == 2 && (typeof v[0] == "string" || typeof v[0] == "number" || typeof v[0] == "boolean") && typeof v[1] == "object";
-}
-
-function uneval_(x) {
-  if(typeof x == "string") {
-    return toExpString(x);
-  }
-  if(typeof x == "number" || typeof x == "boolean") {
-    return "" + x;
-  }
-  if(typeof x == "object" && x == null) {
-    return "null";
-  }
-  if(typeof x == "object" && typeof x.length == "number") { // Arrays
-    var result = [];
-    for(var i = 0; i < x.length; i++) {
-      result.push(uneval_(x[i]));
-    }
-    return "[" + result.join(",") + "]";
-  }
-  if(typeof x == "object") {
-    var result = [];
-    for(var k in x) {
-      result.push(k + ":" + uneval_(x[k]));
-    }
-    return "{" + result.join(",") + "}";
-  }
-  return "" + x;
 }
 
 // Splits an element an the given insertion position

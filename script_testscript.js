@@ -4,6 +4,7 @@ eval(o("add-on/esprima.js"));
 esprima = module.exports;
 Syntax = esprima.Syntax;
 Node = esprima.Node;
+syntax = { Syntax: Syntax};
 eval([
   "add-on/Utils.js",
   "add-on/RegexUtils.js",

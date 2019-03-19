@@ -2300,13 +2300,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	    Literal.prototype.unparse = function (parent) {
 	        return this.wsBefore +
 	            (this.original === this.value ? this.raw :
-	                typeof this.value === 'string' && typeof this.original == 'string' ?
+	                typeof this.value === 'string' && typeof this.original === 'string' ?
 	                    toExpString(this.value, this.raw) :
 	                    typeof this.value === 'object' ?
 	                        this.value === null ?
 	                            'null' :
 	                            uneval(this.value) :
-	                        '' + this.value) + this.wsAfter;
+	                        uneval(this.value)) + this.wsAfter;
 	    };
 	    return Literal;
 	}());

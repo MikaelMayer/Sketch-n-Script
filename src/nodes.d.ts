@@ -30,625 +30,625 @@ export declare type UnparsableOrNull = Unparsable | null;
 export declare let unparseChildren: (parent?: any, join?: string | string[], defaultJoin?: string) => (children: UnparsableOrNull[]) => string;
 export declare let unparseChild: (parent?: any) => (node: UnparsableOrNull) => string;
 export declare class ArrayExpression {
-    readonly type: string;
-    readonly elements: ArrayExpressionElement[];
-    readonly wsBefore: string;
-    readonly wsBeforeClosing: string;
-    readonly separators: string[];
+    type: string;
+    elements: ArrayExpressionElement[];
+    wsBefore: string;
+    wsBeforeClosing: string;
+    separators: string[];
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, elements: ArrayExpressionElement[], separators: string[], wsBeforeClosing: string);
 }
 export declare class ArrayPattern {
-    readonly type: string;
-    readonly elements: ArrayPatternElement[];
-    readonly wsBefore: string;
-    readonly wsBeforeClosing: string;
-    readonly separators: string[];
+    type: string;
+    elements: ArrayPatternElement[];
+    wsBefore: string;
+    wsBeforeClosing: string;
+    separators: string[];
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, elements: ArrayPatternElement[], separators: string[], wsBeforeClosing: string);
 }
 export declare class ArrowFunctionExpression {
-    readonly type: string;
-    readonly id: Identifier | null;
-    readonly params: FunctionParameter[];
-    readonly body: BlockStatement | Expression;
-    readonly generator: boolean;
-    readonly expression: boolean;
-    readonly async: boolean;
-    readonly noparens: boolean;
+    type: string;
+    id: Identifier | null;
+    params: FunctionParameter[];
+    body: BlockStatement | Expression;
+    generator: boolean;
+    expression: boolean;
+    async: boolean;
+    noparens: boolean;
     wsBefore: string;
-    readonly wsBeforeAsync: string;
-    readonly wsBeforeOpening: string;
-    readonly separators: string[];
-    readonly wsBeforeClosing: string;
-    readonly wsBeforeArrow: string;
-    readonly arrow: string;
+    wsBeforeAsync: string;
+    wsBeforeOpening: string;
+    separators: string[];
+    wsBeforeClosing: string;
+    wsBeforeArrow: string;
+    arrow: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBeforeOpening: string, params: FunctionParameter[], separators: string[], wsBeforeClosing: string, noparens: boolean, wsBeforeArrow: string, body: BlockStatement | Expression, expression: boolean);
 }
 export declare class AssignmentExpression {
-    readonly type: string;
-    readonly operator: string;
-    readonly left: Expression;
-    readonly right: Expression;
+    type: string;
+    operator: string;
+    left: Expression;
+    right: Expression;
     wsBefore: string;
-    readonly wsBeforeOp: string;
+    wsBeforeOp: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBeforeOp: string, operator: string, left: Expression, right: Expression);
 }
 export declare class AssignmentPattern {
-    readonly type: string;
-    readonly left: BindingIdentifier | BindingPattern;
-    readonly right: Expression;
+    type: string;
+    left: BindingIdentifier | BindingPattern;
+    right: Expression;
     wsBefore: string;
-    readonly wsBeforeOp: string;
+    wsBeforeOp: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(left: BindingIdentifier | BindingPattern, wsBeforeOp: string, right: Expression);
 }
 export declare class AsyncArrowFunctionExpression {
-    readonly type: string;
-    readonly id: Identifier | null;
-    readonly params: FunctionParameter[];
-    readonly body: BlockStatement | Expression;
-    readonly generator: boolean;
-    readonly expression: boolean;
-    readonly async: boolean;
-    readonly noparens: boolean;
+    type: string;
+    id: Identifier | null;
+    params: FunctionParameter[];
+    body: BlockStatement | Expression;
+    generator: boolean;
+    expression: boolean;
+    async: boolean;
+    noparens: boolean;
     wsBefore: string;
-    readonly wsBeforeAsync: string;
-    readonly wsBeforeOpening: string;
-    readonly separators: string[];
-    readonly wsBeforeClosing: string;
-    readonly wsBeforeArrow: string;
-    readonly arrow: string;
+    wsBeforeAsync: string;
+    wsBeforeOpening: string;
+    separators: string[];
+    wsBeforeClosing: string;
+    wsBeforeArrow: string;
+    arrow: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBeforeAsync: string, wsBeforeOpening: string, params: FunctionParameter[], separators: string[], wsBeforeClosing: string, noparens: boolean, wsBeforeArrow: string, body: BlockStatement | Expression, expression: boolean);
 }
 export declare type AnyFunctionExpression = AsyncFunctionDeclaration | FunctionDeclaration | AsyncFunctionExpression | FunctionExpression;
 export declare class AsyncFunctionDeclaration {
-    readonly type: string;
-    readonly id: Identifier | null;
-    readonly params: FunctionParameter[];
-    readonly body: BlockStatement;
-    readonly generator: boolean;
-    readonly expression: boolean;
-    readonly async: boolean;
+    type: string;
+    id: Identifier | null;
+    params: FunctionParameter[];
+    body: BlockStatement;
+    generator: boolean;
+    expression: boolean;
+    async: boolean;
     wsBefore: string;
-    readonly wsBeforeAsync: string;
-    readonly wsBeforeFunction: string;
-    readonly wsBeforeStar: string;
-    readonly wsBeforeParams: string;
-    readonly separators: string[];
-    readonly wsBeforeEndParams: string;
+    wsBeforeAsync: string;
+    wsBeforeFunction: string;
+    wsBeforeStar: string;
+    wsBeforeParams: string;
+    separators: string[];
+    wsBeforeEndParams: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBeforeAsync: string, wsBeforeFunction: string, id: Identifier | null, wsBeforeParams: string, params: FunctionParameter[], separators: string[], wsBeforeEndParams: string, body: BlockStatement);
 }
 export declare class AsyncFunctionExpression {
-    readonly type: string;
-    readonly id: Identifier | null;
-    readonly params: FunctionParameter[];
-    readonly body: BlockStatement;
-    readonly generator: boolean;
-    readonly expression: boolean;
-    readonly async: boolean;
+    type: string;
+    id: Identifier | null;
+    params: FunctionParameter[];
+    body: BlockStatement;
+    generator: boolean;
+    expression: boolean;
+    async: boolean;
     wsBefore: string;
-    readonly wsBeforeAsync: string;
-    readonly wsBeforeFunction: string;
-    readonly wsBeforeStar: string;
-    readonly wsBeforeParams: string;
-    readonly separators: string[];
-    readonly wsBeforeEndParams: string;
+    wsBeforeAsync: string;
+    wsBeforeFunction: string;
+    wsBeforeStar: string;
+    wsBeforeParams: string;
+    separators: string[];
+    wsBeforeEndParams: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBeforeAsync: string, wsBeforeFunction: string, id: Identifier | null, wsBeforeParams: string, params: FunctionParameter[], separators: string[], wsBeforeEndParams: string, body: BlockStatement);
 }
 export declare class AwaitExpression {
-    readonly type: string;
-    readonly argument: Expression;
+    type: string;
+    argument: Expression;
     wsBefore: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, argument: Expression);
 }
 export declare class BinaryExpression {
-    readonly type: string;
-    readonly operator: string;
-    readonly left: Expression;
-    readonly right: Expression;
+    type: string;
+    operator: string;
+    left: Expression;
+    right: Expression;
     wsBefore: string;
-    readonly wsBeforeOp: string;
+    wsBeforeOp: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(operator: string, left: Expression, right: Expression, wsBeforeOp: string);
 }
 export declare class BlockStatement {
-    readonly type: string;
-    readonly body: StatementListItem[];
+    type: string;
+    body: StatementListItem[];
     wsBefore: string;
-    readonly wsBeforeEnd: string;
+    wsBeforeEnd: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, body: StatementListItem[], wsBeforeEnd: string);
 }
 export declare class BreakStatement {
-    readonly type: string;
-    readonly label: Identifier | null;
+    type: string;
+    label: Identifier | null;
     wsBefore: string;
-    readonly semicolon: string;
+    semicolon: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, label: Identifier | null, semicolon: string);
 }
 export declare class CallExpression {
-    readonly type: string;
-    readonly callee: Expression | Import;
-    readonly arguments: ArgumentListElement[];
+    type: string;
+    callee: Expression | Import;
+    arguments: ArgumentListElement[];
     wsBefore: string;
-    readonly wsBeforeArgs: string;
-    readonly separators: string[];
-    readonly wsBeforeEndArgs: string;
+    wsBeforeArgs: string;
+    separators: string[];
+    wsBeforeEndArgs: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(callee: Expression | Import, wsBeforeArgs: string, args: ArgumentListElement[], separators: string[], wsBeforeEndArgs: string);
 }
 export declare class CatchClause {
-    readonly type: string;
-    readonly param: BindingIdentifier | BindingPattern;
-    readonly body: BlockStatement;
+    type: string;
+    param: BindingIdentifier | BindingPattern;
+    body: BlockStatement;
     wsBefore: string;
-    readonly wsBeforeOpening: string;
-    readonly wsBeforeClosing: string;
+    wsBeforeOpening: string;
+    wsBeforeClosing: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, wsBeforeOpening: string, param: BindingIdentifier | BindingPattern, wsBeforeClosing: string, body: BlockStatement);
 }
 export declare class ClassBody {
-    readonly type: string;
-    readonly body: Property[];
+    type: string;
+    body: Property[];
     wsBefore: string;
-    readonly wsBeforeOpening: string;
-    readonly wsAfterOpening: string;
-    readonly wsBeforeClosing: string;
+    wsBeforeOpening: string;
+    wsAfterOpening: string;
+    wsBeforeClosing: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBeforeOpening: string, wsAfterOpening: string, body: Property[], wsBeforeClosing: string);
 }
 export declare class ClassDeclaration {
-    readonly type: string;
-    readonly id: Identifier | null;
-    readonly superClass: Identifier | null;
-    readonly body: ClassBody;
+    type: string;
+    id: Identifier | null;
+    superClass: Identifier | null;
+    body: ClassBody;
     wsBefore: string;
-    readonly wsBeforeExtends: string;
+    wsBeforeExtends: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, id: Identifier | null, wsBeforeExtends: string, superClass: Identifier | null, body: ClassBody);
 }
 export declare class ClassExpression {
-    readonly type: string;
-    readonly id: Identifier | null;
-    readonly superClass: Identifier | null;
-    readonly body: ClassBody;
+    type: string;
+    id: Identifier | null;
+    superClass: Identifier | null;
+    body: ClassBody;
     wsBefore: string;
-    readonly wsBeforeExtends: string;
+    wsBeforeExtends: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, id: Identifier | null, wsBeforeExtends: string, superClass: Identifier | null, body: ClassBody);
 }
 export declare class ComputedMemberExpression {
-    readonly type: string;
-    readonly computed: boolean;
-    readonly object: Expression;
-    readonly property: Expression;
+    type: string;
+    computed: boolean;
+    object: Expression;
+    property: Expression;
     wsBefore: string;
-    readonly wsBeforeOpening: string;
-    readonly wsBeforeClosing: string;
+    wsBeforeOpening: string;
+    wsBeforeClosing: string;
     wsAfter: string;
     unparse(): any;
     constructor(object: Expression, wsBeforeOpening: string, property: Expression, wsBeforeClosing: string);
 }
 export declare class ConditionalExpression {
-    readonly type: string;
-    readonly test: Expression;
-    readonly consequent: Expression;
-    readonly alternate: Expression;
+    type: string;
+    test: Expression;
+    consequent: Expression;
+    alternate: Expression;
     wsBefore: string;
-    readonly wsBeforeQues: string;
-    readonly wsBeforeColon: string;
+    wsBeforeQues: string;
+    wsBeforeColon: string;
     wsAfter: string;
     unparse(): any;
     constructor(test: Expression, wsBeforeQues: string, consequent: Expression, wsBeforeColon: string, alternate: Expression);
 }
 export declare class ContinueStatement {
-    readonly type: string;
-    readonly label: Identifier | null;
+    type: string;
+    label: Identifier | null;
     wsBefore: string;
-    readonly semicolon: string;
+    semicolon: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, label: Identifier | null, semicolon: string);
 }
 export declare class DebuggerStatement {
-    readonly type: string;
+    type: string;
     wsBefore: string;
-    readonly semicolon: string;
+    semicolon: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, semicolon: string);
 }
 export declare class Directive {
-    readonly type: string;
-    readonly expression: Expression;
-    readonly directive: string;
+    type: string;
+    expression: Expression;
+    directive: string;
     wsBefore: string;
-    readonly semicolon: string;
+    semicolon: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(expression: Expression, directive: string, semicolon: string);
 }
 export declare class DoWhileStatement {
-    readonly type: string;
-    readonly body: Statement;
-    readonly test: Expression;
+    type: string;
+    body: Statement;
+    test: Expression;
     wsBefore: string;
-    readonly wsBeforeWhile: string;
-    readonly wsBeforeOpening: string;
-    readonly wsBeforeClosing: string;
-    readonly closingParens: string;
-    readonly semicolon: string;
+    wsBeforeWhile: string;
+    wsBeforeOpening: string;
+    wsBeforeClosing: string;
+    closingParens: string;
+    semicolon: string;
     wsAfter: string;
     unparse(): any;
     constructor(wsBefore: string, body: Statement, wsBeforeWhile: string, wsBeforeOpening: string, test: Expression, wsBeforeClosing: string, semicolon: string, closingParens?: string);
 }
 export declare class EmptyStatement {
-    readonly type: string;
+    type: string;
     wsBefore: string;
-    readonly semicolon: string;
+    semicolon: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, semicolon?: string);
 }
 export declare class ExportAllDeclaration {
-    readonly type: string;
-    readonly source: Literal;
+    type: string;
+    source: Literal;
     wsBefore: string;
-    readonly wsBeforeStar: string;
-    readonly wsBeforeFrom: string;
-    readonly semicolon: string;
+    wsBeforeStar: string;
+    wsBeforeFrom: string;
+    semicolon: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, wsBeforeStar: string, wsBeforeFrom: string, source: Literal, semicolon?: string);
 }
 export declare class ExportDefaultDeclaration {
-    readonly type: string;
-    readonly declaration: ExportableDefaultDeclaration;
-    readonly wsBefore: string;
-    readonly wsBeforeDefault: string;
-    readonly semicolon: string;
+    type: string;
+    declaration: ExportableDefaultDeclaration;
+    wsBefore: string;
+    wsBeforeDefault: string;
+    semicolon: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, wsBeforeDefault: string, declaration: ExportableDefaultDeclaration, semicolon?: string);
 }
 export declare class ExportNamedDeclaration {
-    readonly type: string;
-    readonly declaration: ExportableNamedDeclaration | null;
-    readonly specifiers: ExportSpecifier[];
-    readonly source: Literal | null;
+    type: string;
+    declaration: ExportableNamedDeclaration | null;
+    specifiers: ExportSpecifier[];
+    source: Literal | null;
     wsBefore: string;
-    readonly hasBrackets: boolean;
-    readonly wsBeforeOpening: string;
-    readonly separators: string[];
-    readonly wsBeforeClosing: string;
-    readonly wsBeforeFrom: string;
-    readonly semicolon: string;
+    hasBrackets: boolean;
+    wsBeforeOpening: string;
+    separators: string[];
+    wsBeforeClosing: string;
+    wsBeforeFrom: string;
+    semicolon: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, declaration: ExportableNamedDeclaration | null, hasBrackets: boolean, wsBeforeOpening: string, specifiers: ExportSpecifier[], separators: string[], wsBeforeClosing: string, wsBeforeFrom: string, source: Literal | null, semicolon?: string);
 }
 export declare class ExportSpecifier {
-    readonly type: string;
-    readonly exported: Identifier;
-    readonly local: Identifier;
-    readonly noAs: boolean;
+    type: string;
+    exported: Identifier;
+    local: Identifier;
+    noAs: boolean;
     wsBefore: string;
-    readonly wsBeforeAs: string;
+    wsBeforeAs: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(local: Identifier, noAs: boolean, wsBeforeAs: string, exported: Identifier);
 }
 export declare class ExpressionStatement {
-    readonly type: string;
-    readonly expression: Expression;
-    readonly semicolon: string;
+    type: string;
+    expression: Expression;
+    semicolon: string;
     wsBefore: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(expression: Expression, semicolon: string);
 }
 export declare class ForInStatement {
-    readonly type: string;
-    readonly left: Expression;
-    readonly right: Expression;
-    readonly body: Statement;
-    readonly each: boolean;
+    type: string;
+    left: Expression;
+    right: Expression;
+    body: Statement;
+    each: boolean;
     wsBefore: string;
-    readonly wsBeforeFor: string;
-    readonly wsBeforeOpening: string;
-    readonly wsBeforeKeyword: string;
-    readonly wsBeforeClosing: string;
-    readonly closingParens: string;
+    wsBeforeFor: string;
+    wsBeforeOpening: string;
+    wsBeforeKeyword: string;
+    wsBeforeClosing: string;
+    closingParens: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBeforeFor: string, wsBeforeOpening: string, left: Expression, wsBeforeKeyword: string, right: Expression, wsBeforeClosing: string, body: Statement, closingParens?: string);
 }
 export declare class ForOfStatement {
-    readonly type: string;
-    readonly left: Expression;
-    readonly right: Expression;
-    readonly body: Statement;
+    type: string;
+    left: Expression;
+    right: Expression;
+    body: Statement;
     wsBefore: string;
-    readonly wsBeforeFor: string;
-    readonly wsBeforeOpening: string;
-    readonly wsBeforeKeyword: string;
-    readonly wsBeforeClosing: string;
-    readonly closingParens: string;
+    wsBeforeFor: string;
+    wsBeforeOpening: string;
+    wsBeforeKeyword: string;
+    wsBeforeClosing: string;
+    closingParens: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBeforeFor: string, wsBeforeOpening: string, left: Expression, wsBeforeKeyword: string, right: Expression, wsBeforeClosing: string, body: Statement, closingParens?: string);
 }
 export declare class ForStatement {
-    readonly type: string;
-    readonly init: Expression | null;
-    readonly test: Expression | null;
-    readonly update: Expression | null;
+    type: string;
+    init: Expression | null;
+    test: Expression | null;
+    update: Expression | null;
     body: Statement;
     wsBefore: string;
-    readonly wsBeforeFor: string;
-    readonly wsBeforeOpening: string;
-    readonly wsBeforeSemicolon1: string;
-    readonly wsBeforeSemicolon2: string;
-    readonly wsBeforeClosing: string;
-    readonly closingParens: string;
+    wsBeforeFor: string;
+    wsBeforeOpening: string;
+    wsBeforeSemicolon1: string;
+    wsBeforeSemicolon2: string;
+    wsBeforeClosing: string;
+    closingParens: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBeforeFor: string, wsBeforeOpening: string, init: Expression | null, wsBeforeSemicolon1: string, test: Expression | null, wsBeforeSemicolon2: string, update: Expression | null, wsBeforeClosing: string, body: Statement, closingParens?: string);
 }
 export declare class FunctionDeclaration {
-    readonly type: string;
-    readonly id: Identifier | null;
-    readonly params: FunctionParameter[];
-    readonly body: BlockStatement;
-    readonly generator: boolean;
-    readonly expression: boolean;
-    readonly async: boolean;
+    type: string;
+    id: Identifier | null;
+    params: FunctionParameter[];
+    body: BlockStatement;
+    generator: boolean;
+    expression: boolean;
+    async: boolean;
     wsBefore: string;
-    readonly wsBeforeAsync: string;
-    readonly wsBeforeFunction: string;
-    readonly wsBeforeStar: string;
-    readonly wsBeforeParams: string;
-    readonly separators: string[];
-    readonly wsBeforeEndParams: string;
+    wsBeforeAsync: string;
+    wsBeforeFunction: string;
+    wsBeforeStar: string;
+    wsBeforeParams: string;
+    separators: string[];
+    wsBeforeEndParams: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBeforeFunction: string, wsBeforeStar: string, id: Identifier | null, wsBeforeParams: string, params: FunctionParameter[], separators: string[], wsBeforeEndParams: string, body: BlockStatement, generator: boolean);
 }
 export declare class FunctionExpression {
-    readonly type: string;
-    readonly id: Identifier | null;
-    readonly params: FunctionParameter[];
-    readonly body: BlockStatement;
-    readonly generator: boolean;
-    readonly expression: boolean;
-    readonly async: boolean;
+    type: string;
+    id: Identifier | null;
+    params: FunctionParameter[];
+    body: BlockStatement;
+    generator: boolean;
+    expression: boolean;
+    async: boolean;
     wsBefore: string;
-    readonly wsBeforeAsync: string;
-    readonly wsBeforeFunction: string;
-    readonly wsBeforeStar: string;
-    readonly wsBeforeParams: string;
-    readonly separators: string[];
-    readonly wsBeforeEndParams: string;
+    wsBeforeAsync: string;
+    wsBeforeFunction: string;
+    wsBeforeStar: string;
+    wsBeforeParams: string;
+    separators: string[];
+    wsBeforeEndParams: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBeforeFunction: string, wsBeforeStar: string, id: Identifier | null, wsBeforeParams: string, params: FunctionParameter[], separators: string[], wsBeforeEndParams: string, body: BlockStatement, generator: boolean);
 }
 export declare class Identifier {
-    readonly type: string;
-    readonly name: string;
-    readonly original: string;
-    readonly nameRaw: string;
+    type: string;
+    name: string;
+    original: string;
+    nameRaw: string;
     wsBefore: string;
-    readonly wsAfter: string;
+    wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, name: string, nameRaw: string);
 }
 export declare class IfStatement {
-    readonly type: string;
-    readonly ifKeyword: string;
-    readonly test: Expression;
-    readonly consequent: Statement;
-    readonly alternate: Statement | null;
+    type: string;
+    ifKeyword: string;
+    test: Expression;
+    consequent: Statement;
+    alternate: Statement | null;
     wsBefore: string;
-    readonly wsBeforeOpening: string;
-    readonly wsBeforeClosing: string;
-    readonly closingParens: string;
-    readonly wsBeforeElse: string;
+    wsBeforeOpening: string;
+    wsBeforeClosing: string;
+    closingParens: string;
+    wsBeforeElse: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, ifKeyword: string, wsBeforeOpening: string, test: Expression, wsBeforeClosing: string, consequent: Statement, wsBeforeElse: string, alternate: Statement | null, closingParens?: string);
 }
 export declare class Import {
-    readonly type: string;
+    type: string;
     wsBefore: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: any);
 }
 export declare class ImportDeclaration {
-    readonly type: string;
-    readonly specifiers: ImportDeclarationSpecifier[];
-    readonly source: Literal;
+    type: string;
+    specifiers: ImportDeclarationSpecifier[];
+    source: Literal;
     wsBefore: string;
-    readonly hasBrackets: boolean;
-    readonly separators: string[];
-    readonly wsBeforeOpening: string;
-    readonly wsBeforeClosing: string;
-    readonly wsBeforeFrom: string;
-    readonly semicolon: string;
+    hasBrackets: boolean;
+    separators: string[];
+    wsBeforeOpening: string;
+    wsBeforeClosing: string;
+    wsBeforeFrom: string;
+    semicolon: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, wsBeforeOpening: string, hasBrackets: boolean, specifiers: ImportDeclarationSpecifier[], separators: string[], wsBeforeClosing: string, wsBeforeFrom: string, source: any, semicolon?: string);
 }
 export declare class ImportDefaultSpecifier {
-    readonly type: string;
-    readonly local: Identifier;
+    type: string;
+    local: Identifier;
     wsBefore: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(local: Identifier);
 }
 export declare class ImportNamespaceSpecifier {
-    readonly type: string;
-    readonly local: Identifier;
+    type: string;
+    local: Identifier;
     wsBefore: string;
-    readonly wsBeforeAs: string;
+    wsBeforeAs: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, wsBeforeAs: string, local: Identifier);
 }
 export declare class ImportSpecifier {
-    readonly type: string;
-    readonly local: Identifier;
-    readonly imported: Identifier;
-    readonly asPresent: boolean;
+    type: string;
+    local: Identifier;
+    imported: Identifier;
+    asPresent: boolean;
     wsBefore: string;
-    readonly wsBeforeAs: string;
+    wsBeforeAs: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(local: Identifier, asPresent: boolean, wsBeforeAs: string, imported: Identifier);
 }
 export declare class LabeledStatement {
-    readonly type: string;
-    readonly label: Identifier;
-    readonly body: Statement | ClassDeclaration;
+    type: string;
+    label: Identifier;
+    body: Statement | ClassDeclaration;
     wsBefore: string;
-    readonly wsBeforeColon: string;
+    wsBeforeColon: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(label: Identifier, wsBeforeColon: string, body: Statement | ClassDeclaration);
 }
 export declare function uneval(x: any): string;
 export declare class Literal {
-    readonly type: string;
-    readonly value: boolean | number | string | null;
-    readonly raw: string;
-    readonly original: boolean | number | string | null;
+    type: string;
+    value: boolean | number | string | null;
+    raw: string;
+    original: boolean | number | string | null;
     wsBefore: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, value: boolean | number | string | null, raw: string);
 }
 export declare class MetaProperty {
-    readonly type: string;
-    readonly meta: Identifier;
-    readonly property: Identifier;
+    type: string;
+    meta: Identifier;
+    property: Identifier;
     wsBefore: string;
-    readonly wsBeforeDot: string;
+    wsBeforeDot: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(meta: Identifier, wsBeforeDot: string, property: Identifier);
 }
 export declare class MethodDefinition {
-    readonly type: string;
-    readonly key: Expression;
-    readonly computed: boolean;
-    readonly value: AsyncFunctionExpression | FunctionExpression | null;
-    readonly kind: 'init' | 'method' | 'constructor' | 'set' | 'get';
-    readonly static: boolean;
+    type: string;
+    key: Expression;
+    computed: boolean;
+    value: AsyncFunctionExpression | FunctionExpression | null;
+    kind: 'init' | 'method' | 'constructor' | 'set' | 'get';
+    static: boolean;
     wsBefore: string;
-    readonly wsBeforeGetSet: string;
-    readonly wsBeforeOpening: string;
-    readonly wsBeforeClosing: string;
-    readonly wsBeforeStatic: string;
+    wsBeforeGetSet: string;
+    wsBeforeOpening: string;
+    wsBeforeClosing: string;
+    wsBeforeStatic: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBeforeStatic: string, wsBeforeGetSet: any, key: Expression, computed: boolean, wsBeforeOpening: string, wsBeforeClosing: string, value: AsyncFunctionExpression | FunctionExpression | null, kind: 'init' | 'method' | 'constructor' | 'set' | 'get', isStatic: boolean);
 }
 export declare class Module {
-    readonly type: string;
-    readonly body: StatementListItem[];
-    readonly sourceType: string;
+    type: string;
+    body: StatementListItem[];
+    sourceType: string;
     wsBefore: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(body: StatementListItem[], wsAfter: string);
 }
 export declare class NewExpression {
-    readonly type: string;
-    readonly callee: Expression;
-    readonly arguments: ArgumentListElement[];
+    type: string;
+    callee: Expression;
+    arguments: ArgumentListElement[];
     wsBefore: string;
-    readonly wsBeforeNew: string;
-    readonly parentheses: boolean;
-    readonly wsBeforeOpening: string;
-    readonly separators: string[];
-    readonly wsBeforeClosing: string;
+    wsBeforeNew: string;
+    parentheses: boolean;
+    wsBeforeOpening: string;
+    separators: string[];
+    wsBeforeClosing: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBeforeNew: string, callee: Expression, parentheses: boolean, wsBeforeOpening: string, args: ArgumentListElement[], separators: string[], wsBeforeClosing: string);
 }
 export declare class ObjectExpression {
-    readonly type: string;
-    readonly properties: ObjectExpressionProperty[];
+    type: string;
+    properties: ObjectExpressionProperty[];
     wsBefore: string;
-    readonly wsBeforeClosing: string;
-    readonly separators: string[];
+    wsBeforeClosing: string;
+    separators: string[];
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, properties: ObjectExpressionProperty[], separators: string[], wsBeforeClosing: string);
 }
 export declare class ObjectPattern {
-    readonly type: string;
-    readonly properties: ObjectPatternProperty[];
+    type: string;
+    properties: ObjectPatternProperty[];
     wsBefore: string;
-    readonly separators: string[];
-    readonly wsBeforeClosing: string;
+    separators: string[];
+    wsBeforeClosing: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, properties: ObjectPatternProperty[], separators: string[], wsBeforeClosing: string);
 }
 export declare class Property {
-    readonly type: string;
-    readonly key: PropertyKey;
-    readonly computed: boolean;
-    readonly value: PropertyValue | null;
-    readonly kind: 'init' | 'get' | 'set';
-    readonly method: boolean;
-    readonly shorthand: boolean;
+    type: string;
+    key: PropertyKey;
+    computed: boolean;
+    value: PropertyValue | null;
+    kind: 'init' | 'get' | 'set';
+    method: boolean;
+    shorthand: boolean;
     wsBefore: string;
-    readonly wsBeforeOpening: string;
-    readonly wsBeforeClosing: string;
-    readonly wsBeforeGetSet: string;
-    readonly wsBeforeColon: string;
+    wsBeforeOpening: string;
+    wsBeforeClosing: string;
+    wsBeforeGetSet: string;
+    wsBeforeColon: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(kind: 'init' | 'get' | 'set', key: PropertyKey, wsBeforeGetSet: string, wsBeforeOpening: string, wsBeforeClosing: string, wsBeforeColon: string, computed: boolean, value: PropertyValue | null, method: boolean, shorthand: boolean);
 }
 export declare class RegexLiteral {
-    readonly type: string;
-    readonly value: RegExp;
-    readonly raw: string;
-    readonly regex: {
+    type: string;
+    value: RegExp;
+    raw: string;
+    regex: {
         pattern: string;
         flags: string;
     };
-    readonly original: {
+    original: {
         pattern: string;
         flags: string;
     };
@@ -658,97 +658,97 @@ export declare class RegexLiteral {
     constructor(wsBefore: string, value: RegExp, raw: string, pattern: string, flags: string);
 }
 export declare class RestElement {
-    readonly type: string;
-    readonly argument: BindingIdentifier | BindingPattern;
+    type: string;
+    argument: BindingIdentifier | BindingPattern;
     wsBefore: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, argument: BindingIdentifier | BindingPattern);
 }
 export declare class ReturnStatement {
-    readonly type: string;
-    readonly argument: Expression | null;
+    type: string;
+    argument: Expression | null;
     wsBefore: string;
-    readonly semicolon: string;
+    semicolon: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, argument: Expression | null, semicolon: string);
 }
 export declare class Script {
-    readonly type: string;
-    readonly body: StatementListItem[];
-    readonly sourceType: string;
+    type: string;
+    body: StatementListItem[];
+    sourceType: string;
     wsBefore: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(body: StatementListItem[], wsAfter: string);
 }
 export declare class SequenceExpression {
-    readonly type: string;
-    readonly expressions: Expression[];
+    type: string;
+    expressions: Expression[];
     wsBefore: string;
-    readonly wsBeforeOpening: string;
-    readonly wsBeforeClosing: string;
-    readonly parentheses: boolean;
-    readonly separators: string[];
+    wsBeforeOpening: string;
+    wsBeforeClosing: string;
+    parentheses: boolean;
+    separators: string[];
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(parentheses: boolean, wsBeforeOpening: string, expressions: Expression[], separators: string[], wsBeforeClosing: string);
 }
 export declare class SpreadElement {
-    readonly type: string;
-    readonly argument: Expression;
+    type: string;
+    argument: Expression;
     wsBefore: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, argument: Expression);
 }
 export declare class StaticMemberExpression {
-    readonly type: string;
-    readonly computed: boolean;
-    readonly object: Expression;
-    readonly property: Expression;
+    type: string;
+    computed: boolean;
+    object: Expression;
+    property: Expression;
     wsBefore: string;
-    readonly wsBeforeOpening: string;
-    readonly wsBeforeClosing: string;
+    wsBeforeOpening: string;
+    wsBeforeClosing: string;
     wsAfter: string;
     unparse(): any;
     constructor(object: Expression, wsBeforeOpening: string, property: Expression);
 }
 export declare class Super {
-    readonly type: string;
+    type: string;
     wsBefore: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string);
 }
 export declare class SwitchCase {
-    readonly type: string;
-    readonly test: Expression | null;
-    readonly consequent: StatementListItem[];
+    type: string;
+    test: Expression | null;
+    consequent: StatementListItem[];
     wsBefore: string;
-    readonly wsBeforeColon: string;
+    wsBeforeColon: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, test: Expression, wsBeforeColon: string, consequent: StatementListItem[]);
 }
 export declare class SwitchStatement {
-    readonly type: string;
-    readonly discriminant: Expression;
-    readonly cases: SwitchCase[];
+    type: string;
+    discriminant: Expression;
+    cases: SwitchCase[];
     wsBefore: string;
-    readonly wsBeforeOpening: string;
-    readonly wsBeforeClosing: string;
-    readonly wsBeforeBlockOpening: string;
-    readonly wsBeforeBlockClosing: string;
+    wsBeforeOpening: string;
+    wsBeforeClosing: string;
+    wsBeforeBlockOpening: string;
+    wsBeforeBlockClosing: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, wsBeforeOpening: string, discriminant: Expression, wsBeforeClosing: string, wsBeforeBlockOpening: string, cases: SwitchCase[], wsBeforeBlockClosing: string);
 }
 export declare class TaggedTemplateExpression {
-    readonly type: string;
-    readonly tag: Expression;
-    readonly quasi: TemplateLiteral;
+    type: string;
+    tag: Expression;
+    quasi: TemplateLiteral;
     wsBefore: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
@@ -759,123 +759,123 @@ interface TemplateElementValue {
     raw: string;
 }
 export declare class TemplateElement {
-    readonly type: string;
-    readonly value: TemplateElementValue;
-    readonly originalCooked: string;
-    readonly tail: boolean;
+    type: string;
+    value: TemplateElementValue;
+    originalCooked: string;
+    tail: boolean;
     wsBefore: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(value: TemplateElementValue, tail: boolean);
 }
 export declare class TemplateLiteral {
-    readonly type: string;
-    readonly quasis: TemplateElement[];
-    readonly expressions: Expression[];
+    type: string;
+    quasis: TemplateElement[];
+    expressions: Expression[];
     wsBefore: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, quasis: TemplateElement[], expressions: Expression[]);
 }
 export declare class ThisExpression {
-    readonly type: string;
+    type: string;
     wsBefore: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string);
 }
 export declare class ThrowStatement {
-    readonly type: string;
-    readonly argument: Expression;
+    type: string;
+    argument: Expression;
     wsBefore: string;
-    readonly semicolon: string;
+    semicolon: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, argument: Expression, semicolon: string);
 }
 export declare class TryStatement {
-    readonly type: string;
-    readonly block: BlockStatement;
-    readonly handler: CatchClause | null;
-    readonly finalizer: BlockStatement | null;
+    type: string;
+    block: BlockStatement;
+    handler: CatchClause | null;
+    finalizer: BlockStatement | null;
     wsBefore: string;
-    readonly wsBeforeFinally: string;
+    wsBeforeFinally: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, block: BlockStatement, handler: CatchClause | null, wsBeforeFinally: string, finalizer: BlockStatement | null);
 }
 export declare class UnaryExpression {
-    readonly type: string;
-    readonly operator: string;
-    readonly argument: Expression;
-    readonly prefix: boolean;
+    type: string;
+    operator: string;
+    argument: Expression;
+    prefix: boolean;
     wsBefore: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, operator: any, argument: any);
 }
 export declare class UpdateExpression {
-    readonly type: string;
-    readonly operator: string;
-    readonly argument: Expression;
-    readonly prefix: boolean;
+    type: string;
+    operator: string;
+    argument: Expression;
+    prefix: boolean;
     wsBefore: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, operator: any, argument: any, prefix: any);
 }
 export declare class VariableDeclaration {
-    readonly type: string;
-    readonly declarations: VariableDeclarator[];
-    readonly kind: string;
+    type: string;
+    declarations: VariableDeclarator[];
+    kind: string;
     wsBefore: string;
-    readonly separators: string[];
-    readonly semicolon: string;
+    separators: string[];
+    semicolon: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, declarations: VariableDeclarator[], separators: string[], kind: string, semicolon: string);
 }
 export declare class VariableDeclarator {
-    readonly type: string;
-    readonly id: BindingIdentifier | BindingPattern;
-    readonly init: Expression | null;
+    type: string;
+    id: BindingIdentifier | BindingPattern;
+    init: Expression | null;
     wsBefore: string;
-    readonly wsBeforeEq: string;
+    wsBeforeEq: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(id: BindingIdentifier | BindingPattern, wsBeforeEq: string, init: Expression | null);
 }
 export declare class WhileStatement {
-    readonly type: string;
-    readonly test: Expression;
-    readonly body: Statement;
+    type: string;
+    test: Expression;
+    body: Statement;
     wsBefore: string;
-    readonly wsBeforeOpening: string;
-    readonly wsBeforeClosing: string;
-    readonly closingParens: string;
+    wsBeforeOpening: string;
+    wsBeforeClosing: string;
+    closingParens: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, wsBeforeOpening: string, test: Expression, wsBeforeClosing: string, body: Statement, closingParens?: string);
 }
 export declare class WithStatement {
-    readonly type: string;
-    readonly object: Expression;
-    readonly body: Statement;
+    type: string;
+    object: Expression;
+    body: Statement;
     wsBefore: string;
-    readonly wsBeforeOpening: string;
-    readonly wsBeforeClosing: string;
-    readonly closingParens: string;
+    wsBeforeOpening: string;
+    wsBeforeClosing: string;
+    closingParens: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, wsBeforeOpening: string, object: Expression, wsBeforeClosing: string, body: Statement, closingParens?: string);
 }
 export declare class YieldExpression {
-    readonly type: string;
-    readonly argument: Expression | null;
-    readonly delegate: boolean;
+    type: string;
+    argument: Expression | null;
+    delegate: boolean;
     wsBefore: string;
-    readonly wsBeforeStar: string;
-    readonly semicolon: string;
+    wsBeforeStar: string;
+    semicolon: string;
     wsAfter: string;
     unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, wsBeforeStar: string, argument: Expression | null, delegate: boolean, semicolon: string);

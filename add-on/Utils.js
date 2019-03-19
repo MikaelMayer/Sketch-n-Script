@@ -53,7 +53,8 @@ var List = {
   // A foreach which stops if the callback returns true
   foreach: function(list, callback) {
     while(list && list.head) {
-      if(callback(list.head)) return;
+      var c = callback(list.head);
+      if(c) return c;
       list = list.tail;
     }
   }
@@ -124,6 +125,57 @@ function updateVar_(env, name, oldValueToNewValue) {
     }
   }
   return rebuildEnv(env); 
+}
+
+function evaluate_(env, $$source$$$) {
+  var envJS = buildEnvJS_(env);
+  with(envJS) {
+    return eval($$source$$$);
+  }
+}
+
+
+// From a list environment, builds an object environment suitable for with(result) { eval...}
+// Caches every environment.
+function buildEnvJS_(env) {
+  if(typeof env !== "object") return {};
+  if(typeof env.cache !== "undefined") return env.cache;
+  var result = {};
+  List.foreach(env, function(head) {
+    result[head.name] =
+      typeof head.value.vName_ != "undefined" ?
+        head.value.vName_ : head.value.v_;
+  });
+  env.cache = result;
+  return result;
+}
+
+
+function uneval_(x) {
+  if(typeof x == "string") {
+    return toExpString(x);
+  }
+  if(typeof x == "number" || typeof x == "boolean") {
+    return "" + x;
+  }
+  if(typeof x == "object" && x == null) {
+    return "null";
+  }
+  if(typeof x == "object" && Array.isArray(x)) { // Arrays
+    var result = [];
+    for(var i = 0; i < x.length; i++) {
+      result.push(uneval_(x[i]));
+    }
+    return "[" + result.join(",") + "]";
+  }
+  if(typeof x == "object") {
+    var result = [];
+    for(var k in x) {
+      result.push(k + ":" + uneval_(x[k]));
+    }
+    return "{" + result.join(",") + "}";
+  }
+  return "" + x;
 }
 
 
