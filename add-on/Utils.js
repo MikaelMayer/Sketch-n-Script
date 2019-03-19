@@ -444,3 +444,132 @@ function jsFormulaCase(formula, cases) {
     }*/
   return cases.orElse(formula);
 }
+
+
+function isRichText_(value) {
+    return typeof value == "object" &&
+        Array.isArray(value) &&
+        value.length === 2 &&
+        typeof value[0] == "string" &&
+        typeof value[1] == "object";
+}
+function isElement_(value) {
+    return typeof value == "object" &&
+        Array.isArray(value) &&
+        value.length === 3 &&
+        typeof value[0] == "string" &&
+        typeof value[1] == "object";
+}
+
+
+function testReconcile() {
+  Logger.log(uneval_(reconcileAsMuchAsPossible_(["hallo"], "hello")));
+  Logger.log(uneval_(reconcileAsMuchAsPossible_("hallo", ["hello", {italic: true}])));
+  Logger.log(uneval_(reconcileAsMuchAsPossible_(["p", {}, ["hallo"]], ["paragraph", {blah: 1}, "hello"])))
+  Logger.log(uneval_(reconcileAsMuchAsPossible_(["table", {}, [["hallo"]]], ["TABLE", {blah: 1}, "hello"])))
+  Logger.log(uneval_(reconcileAsMuchAsPossible_(["img", {}, []], ["image", {src: "blah"}, ["unused"]])))
+}
+
+// Here oldValues is an expression as simple as possible.
+// computedValues is a value obtained from the document,
+// so it does not contain integers, booleans, and might wrap texts in paragraphs for example. 
+// Cf. function valuesToElementsToInsert_
+function reconcileAsMuchAsPossible_(computedValues, oldValues) {
+  //Logger.log("reconcileAsMuchAsPossible_(" + uneval_(computedValues) + ", " + uneval_(oldValues) + ")")
+  if(typeof oldValues === "undefined") return computedValues;
+  if(( typeof computedValues == "string" ||
+       typeof computedValues == "number" ||
+       typeof computedValues == "boolean") &&
+     (typeof oldValues == "string" ||
+      typeof oldValues == "number" ||
+      typeof oldValues == "boolean")) {
+    return computedValues;
+  }
+  if((isElement_(oldValues) ||
+     typeof oldValues == "string" ||
+     typeof oldValues == "number" ||
+     typeof oldValues == "boolean" ||
+     isRichText_(oldValues)) &&
+     Array.isArray(computedValues) && computedValues.length == 1
+    ) {
+    return reconcileAsMuchAsPossible_(computedValues[0], oldValues); 
+  }
+  // We copy the attributes there so that they are not considered a difference
+  if(isRichText_(oldValues) && isRichText_(computedValues)) {
+    return [computedValues[0], oldValues[1]];
+  }
+  if(isRichText_(oldValues) && typeof computedValues === "string") {
+    return [computedValues, oldValues[1]];
+  }
+  if(isElement_(oldValues) && isElement_(computedValues)) {
+    // If tags are compatible, make sure we propagate the correct one.
+    var oldTag = oldValues[0];
+    var newTag = computedValues[0];
+    if((oldTag.toLowerCase() == "img" || oldTag.toLowerCase() == "image") &&
+      (newTag.toLowerCase() == "img")) {
+        return [oldTag, oldValues[1], oldValues[2]];
+      }
+    if((oldTag.toLowerCase() == "paragraph" || oldTag.toLowerCase() == "p") &&
+      (newTag.toLowerCase() == "p")) {
+        return [oldTag, oldValues[1], reconcileAsMuchAsPossible_(computedValues[2], oldValues[2])];
+      }
+    if((oldTag.toLowerCase() == "listitem" || oldTag.toLowerCase() == "li") &&
+      (newTag.toLowerCase() == "li")) {
+        return [oldTag, oldValues[1], reconcileAsMuchAsPossible_(computedValues[2], oldValues[2])];
+      }
+    if(oldTag.toLowerCase() == "table" && newTag.toLowerCase() == "table") {
+      var oldRows = valuestoArray_(oldValues[2]);
+      return [oldTag, oldValues[1],
+              reconcileAsMuchAsPossible_(computedValues[2], oldValues[2])]
+    }
+  }
+  if(typeof computedValues == "object" && typeof oldValues === "object" &&
+     Array.isArray(computedValues) && Array.isArray(oldValues) &&
+    !isRichText(computedValues) && !isRichText(oldValues) &&
+    !isElement(computedValues) && !isElement(oldValues)
+    ) {
+      if(computedValues.length == oldValues.length) {
+        return computedValues.map(function(computedValue, k) {
+          return reconcileAsMuchAsPossible_(computedValue, oldValues[k]);
+        })
+      } else {
+        // TODO : Find insertions, deletions and/or reorderings.
+        return computedValues;
+      }
+  }
+  return computedValues;
+}
+
+
+function testAreDifferentValues() {
+  Logger.log(areDifferentValues_(1, '1')); // true
+  Logger.log(areDifferentValues_(0, '')); // true
+  Logger.log(areDifferentValues_([1, 2], [1, 2])); // false
+  Logger.log(areDifferentValues_([1, 2], [1, 2, 3])); // true
+  Logger.log(areDifferentValues_([1, 2, 3], [1, 2])); // true
+  Logger.log(areDifferentValues_({a: 1}, {a: 1, b: 2})); // true
+  Logger.log(areDifferentValues_({a: 1, b: 2}, {a: 1})); // true
+  Logger.log(areDifferentValues_({a: 1, b: 2}, {a: 1, b: 3})); // true
+  Logger.log(areDifferentValues_({a: 1, b: 2}, {a: 1, b: 2})); // false
+}
+
+function areDifferentValues_(oldOutput, newOutput) {
+  var to = typeof oldOutput;
+  var tn = typeof newOutput;
+  return (to !== tn) || 
+        ((to === "string" || to == "number" || to == "boolean" || to === "undefined") &&
+         (tn === "string" || tn == "number" || tn == "boolean" || tn === "undefined") &&
+          oldOutput !== newOutput) || (
+          Array.isArray(oldOutput) && (oldOutput.length !== newOutput.length ||
+             oldOutput.some(function(o, k) {
+          return areDifferentValues_(o, newOutput[k]); }))) ||
+            (function() {
+              for(var k in oldOutput) {
+                if(areDifferentValues_(oldOutput[k], newOutput[k])) return true;
+              }
+              for(var k in newOutput) {
+                if(areDifferentValues_(oldOutput[k], newOutput[k])) return true;
+              }
+              return false;
+            })()
+}

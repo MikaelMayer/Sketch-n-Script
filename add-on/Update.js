@@ -352,22 +352,7 @@ function allClonePaths_(complexVal, simpleVal) {
     }
     return [];
 }
-function isRichText_(value) {
-    return typeof value == "object" &&
-        Array.isArray(value) &&
-        value.length === 2 &&
-        typeof value[0] == "string" &&
-        typeof value[1] == "object";
-}
-function isElement_(value) {
-    return typeof value == "object" &&
-        Array.isArray(value) &&
-        value.length === 3 &&
-        typeof value[0] == "string" &&
-        typeof value[1] == "object" &&
-        typeof value[2] == "object" &&
-        Array.isArray(value[2]);
-}
+
 // Later, we could include the context while computing diffs to recover up clones.
 function computeDiffs_(oldVal, newVal) {
     var o = typeof oldVal;

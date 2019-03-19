@@ -8,6 +8,7 @@ function doIt() {
   var x1 = parser.parse("var x = 1;\n(function(y) { return 1 + y })(x)");
   ts.push(Date.now());
   */
+  Logger.log(uneval_(Object.create(a)));
 }
 
 // https://developers.google.com/gsuite/add-ons/how-tos/publish-for-domains#before_you_publish
@@ -800,8 +801,7 @@ function updateLetExprs_(doc, env, letExprs) {
         newOutput = mergeValues(oldOutput, updatedNewEnv.head.value.v_, newOutput);
         updatedEnv1 = updatedNewEnv.tail;
       }
-      if(areCompatibleUpdateType_(oldOutput, newOutput) &&
-           oldOutput != newOutput) {
+      if(areDifferentValues_(oldOutput, newOutput)) {
         // Here the value was changed directly or indiretly, or a merge of both.
         formulaEnvUpdate = update_(env, formula)(newOutput);
       }
@@ -815,10 +815,41 @@ function updateLetExprs_(doc, env, letExprs) {
     });
 }
 
-function areCompatibleUpdateType_(oldOutput, newOutput) {
-  var to = typeof oldOutput;
-  return (to === "string" || to == "number" || to == "boolean") &&
-     typeof newOutput === to;
+function elementToValue(element) {
+  if(element.getType() == DocumentApp.ElementType.TABLE) {
+    var nRows = element.getNumRows();
+    var table = [];
+    for(var rowIndex = 0; rowIndex < nRows; rowIndex++) {
+      var row = element.getRow(rowIndex)
+      var nCells = row.getNumCells();
+      var tableRow = [];
+      for(var cellIndex = 0; cellIndex < nCells; cellIndex++) {
+        var cell = row.getCell(cellIndex);
+        var cellNumChildren = cell.getNumChildren();
+        var subElems = [];
+        for(var childIndex = 0; childIndex < cellNumChildren; childIndex++) {
+          subElems.push(elementToValue(cell.getChild(childIndex)));
+        }
+        tableRow.push(subElems);
+      }
+      table.push(tableRow);
+    }
+    return ["table", {}, table];
+  } else if(element.getType() == DocumentApp.ElementType.PARAGRAPH ||
+            element.getType() == DocumentApp.ElementType.LIST_ITEM) {
+    var numChildren = element.getNumChildren();
+    var subElems = [];
+    for(var childIndex = 0; childIndex < numChildren; childIndex++) {
+      subElems.push(elementToValue(element.getChild(childIndex)));
+    }
+    return [element.getType() == DocumentApp.ElementType.PARAGRAPH ? "p" : "li", {}, subElems];
+  } else if(element.getType() == DocumentApp.ElementType.TEXT) {
+    return element.getText();
+  } else if(element.getType() == DocumentApp.ElementType.INLINE_IMAGE) {
+    return ["img", {}, []]; // Will be asjusted later with the old value.
+  } else {
+    return "";
+  }
 }
 
 // Returns the list of expressions from the program
@@ -834,22 +865,37 @@ function extractExprs_(doc, maybeFinalExpr) {
     var formulaValue = formulaValueUnapply_(getNamedRangeLongName(namedRange));
     var formula = formulaValue[0];
     var oldOutputStr = formulaValue[1];
-    var oldOutput = oldOutputStr; // compatibility with previous approach
+    var oldOutput = oldOutputStr; // compatibility with previous approach where strings were stored raw.
     try {
-      oldOutput = eval(oldOutputStr);
+      oldOutput = eval(oldOutputStr); //Now values are stored in expression format.
     } catch(error) { 
       // Here it's fine
     }
     var range = namedRange.getRange();
     var newOutput = "";
+    var numOfElements = 0;
+    function addToOutput(newValue) {
+      if(numOfElements == 1 && !Array.isArray(newOutput) || (!isRichText(newOutput) && !isElement(newOutput))) {
+        newOutput = [newOutput]; // Force a list of elements.
+      }
+      if(numOfElements >= 1) {
+        newOutput.push(newValue);
+      } else {
+        newOutput = newValue;
+      }
+      numOfElements++;
+    }
+    
     foreachDRange_(
       range,
       function(txt, start, endInclusive) {
-        newOutput = txt.getText().substring(start, endInclusive + 1);
-        // TODO: In the new output, gather not only text, but also elements, list of elements, and so on.
+        var newValue = txt.getText().substring(start, endInclusive + 1); // TODO: Recover style change?
+        addToOutput(newValue);
       },
       function(element) {
+        addToOutput(elementToValue(element));
       });
+    newOutput = reconcileAsMuchAsPossible_(newOutput, oldOutput);
     exprs.push( // Insert at the end. We might consider permuting the array to resolve dependencies later.
       {name: nameOf_(formula),
        sourceType: isEqualFormula_(formula) ? EQUALFORMULA : RAWFORMULA,
@@ -947,8 +993,7 @@ function updateNamedRanges_(doc, env, exprs) {
   var changed = false;
   List.foreach(exprs, function(expr) {
     var to = typeof expr.newOutput
-    if(areCompatibleUpdateType_(expr.oldOutput, expr.newOutput) &&
-       expr.oldOutput !== expr.newOutput) {
+    if(areDifferentValues_(expr.oldOutput, expr.newOutput)) {
       changed = expr.name || expr.source;
       return changed;
     }
@@ -1126,21 +1171,14 @@ function insertElementAt_(doc, insertPosition, name, initializationContent, expr
   return elementToReturn;
 }
 
-function valueIsElement_(value) {
-  return typeof value == "object" && value.length == 3 && typeof value[1] == "object" && typeof value[1].length == "undefined"
-}
-function valueIsRichText_(value) {
-  return typeof value == "object" && value.length == 2 && typeof value[1] == "object" && typeof value[1].length == "undefined";
-}
-
 function valuestoArray_(values) {
-  if(valueIsElement_(values) ||
+  if(isElement_(values) ||
      typeof values == "string" ||
      typeof values == "number" ||
      typeof values == "boolean" ||
-     valueIsRichText_(values)) { // Not text, it's an element
+     isRichText_(values)) { // Not text, it's an element
     values = [values] // We wrap it in a list
-  } else if(typeof values == "object" && typeof values.length != "undefined") {
+  } else if(Array.isArray(values)) {
     // That's fine, it's an array. Hopefully recursively it's good.
   } else {
     Logger.log("Unexpected value: " + uneval_(values));
@@ -1155,7 +1193,6 @@ function valuestoArray_(values) {
 */
 // Converts the values into elements that can be inserted
 // Pre-fetches all images
-// Return 
 function valuesToElementsToInsert_(values) {
   // Make sure values is an array
   values = valuestoArray_(values);
@@ -1164,7 +1201,7 @@ function valuesToElementsToInsert_(values) {
   // We gather the elements to insert
   for(var v in values) {
     var value = values[v];
-    if(valueIsElement_(value)) {
+    if(isElement_(value)) {
       var tag = value[0];
       var attrs = value[1];
       var children = value[2];
@@ -1180,10 +1217,11 @@ function valuesToElementsToInsert_(values) {
       } else if(tag.toLowerCase() == "table") {
         var initContent = [];
         var childrenToInsert = [];
+        children = valuestoArray_(children);
         for(var rowIndex in children) {
           var childRow = [];
           var childToInsertRow = [];
-          var row = children[rowIndex];
+          var row = valuestoArray_(children[rowIndex]); // Make sure it's an array
           for(var colIndex in row) {
             childRow.push("");
             childToInsertRow.push(valuesToElementsToInsert_(row[colIndex]));
@@ -1197,7 +1235,7 @@ function valuesToElementsToInsert_(values) {
         throw ("Tag cannot be inserted (yet?): " + tag);
       }
     } else {
-      if(valueIsRichText_(value)) {
+      if(isRichText_(value)) {
         toInsert.push({ctor: "text", content: value[0], attrs: value[1]});
       } else if(typeof value == "number" || typeof value == "boolean") {
         toInsert.push({ctor: "text", content: "" + value});
