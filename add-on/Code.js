@@ -801,7 +801,7 @@ function updateLetExprs_(doc, env, letExprs) {
         newOutput = mergeValues(oldOutput, updatedNewEnv.head.value.v_, newOutput);
         updatedEnv1 = updatedNewEnv.tail;
       }
-      if(typeof expr.oldOutput !== "undefined" &&
+      if(typeof evalValue.expr.oldOutput !== "undefined" &&
          areDifferentValues_(oldOutput, newOutput)) {
         // Here the value was changed directly or indiretly, or a merge of both.
         formulaEnvUpdate = update_(env, formula)(newOutput);
@@ -996,12 +996,12 @@ function updateNamedRanges_(doc, env, exprs) {
     var to = typeof expr.newOutput
     if(typeof expr.oldOutput !== "undefined" &&
        areDifferentValues_(expr.oldOutput, expr.newOutput)) {
-      changed = expr.name || expr.source;
+      changed = (expr.name || expr.source) + " changed to " + uneval_(expr.newOutput);
       return changed;
     }
   });
   if(changed) {
-    Logger.log("Value of " + changed + " changed. Back-propagating");
+    Logger.log("Value of " + changed + ". Back-propagating");
     return resultCase(
       updateLetExprs_(doc, env, exprs), function (msg) { 
         return [env, exprs, msg]; },

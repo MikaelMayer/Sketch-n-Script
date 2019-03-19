@@ -463,7 +463,12 @@ function isElement_(value) {
 
 
 function testReconcile() {
+  Logger.log(uneval_(reconcileAsMuchAsPossible_("1", 2)));
+  Logger.log(uneval_(reconcileAsMuchAsPossible_("seventy", 2)));
+  Logger.log(uneval_(reconcileAsMuchAsPossible_("false", true)));
+  Logger.log(uneval_(reconcileAsMuchAsPossible_(["p", {}, ["test"]], "hello")));
   Logger.log(uneval_(reconcileAsMuchAsPossible_(["hallo"], "hello")));
+  Logger.log(uneval_(reconcileAsMuchAsPossible_(["p", {}, "hallo"], "hallo")));
   Logger.log(uneval_(reconcileAsMuchAsPossible_("hallo", ["hello", {italic: true}])));
   Logger.log(uneval_(reconcileAsMuchAsPossible_(["p", {}, ["hallo"]], ["paragraph", {blah: 1}, "hello"])))
   Logger.log(uneval_(reconcileAsMuchAsPossible_(["table", {}, [["hallo"]]], ["TABLE", {blah: 1}, "hello"])))
@@ -477,14 +482,27 @@ function testReconcile() {
 function reconcileAsMuchAsPossible_(computedValues, oldValues) {
   //Logger.log("reconcileAsMuchAsPossible_(" + uneval_(computedValues) + ", " + uneval_(oldValues) + ")")
   if(typeof oldValues === "undefined") return computedValues;
-  if(( typeof computedValues == "string" ||
-       typeof computedValues == "number" ||
-       typeof computedValues == "boolean") &&
+  if(( typeof computedValues == "string") &&
      (typeof oldValues == "string" ||
       typeof oldValues == "number" ||
       typeof oldValues == "boolean")) {
+    // TODO: coerce if possible.
+    if(typeof oldValues == "number") {
+      var number = parseInt(computedValues);
+      if(number !== number && computedValues !== "NaN") {
+        return computedValues;
+      }
+      return number;
+    }
+    if(typeof oldValues == "boolean") return computedValues.toLowerCase() == "true";
     return computedValues;
   }
+  if(isElement_(computedValues) && computedValues[0] == "p" && ( typeof oldValues == "string" ||
+       typeof oldValues == "number" ||
+       typeof oldValues == "boolean")) {
+    return reconcileAsMuchAsPossible_(computedValues[2], oldValues);
+  }
+  
   if((isElement_(oldValues) ||
      typeof oldValues == "string" ||
      typeof oldValues == "number" ||

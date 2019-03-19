@@ -1,3 +1,4 @@
+syntax = typeof syntax == "undefined" ? this : syntax;
 var __assign = (this && this.__assign) || function () {
     __assign = Object.assign || function(t) {
         for (var s, i = 1, n = arguments.length; i < n; i++) {
@@ -9,10 +10,6 @@ var __assign = (this && this.__assign) || function () {
     };
     return __assign.apply(this, arguments);
 };
-Object.defineProperty(exports, "__esModule", { value: true });
-var syntax = require("./syntax");
-var Node = require("./nodes");
-var esprima = require("./esprima");
 var DType;
 (function (DType) {
     DType["Clone"] = "Clone";
@@ -22,10 +19,7 @@ var DType;
 var DUType;
 (function (DUType) {
     DUType["Reuse"] = "Reuse";
-    DUType["NewValue"] = "NewValue";
-    DUType["NewObject"] = "NewObject";
-    DUType["NewArray"] = "NewArray";
-    DUType["NewNode"] = "NewNode";
+    DUType["NewValue"] = "New";
 })(DUType || (DUType = {}));
 ;
 function DDReuse(childDiffs) {
@@ -36,17 +30,18 @@ function DDReuse(childDiffs) {
         }];
 }
 function DDNewValue(newVal) {
-    return [{ ctor: DType.Update, kind: { ctor: DUType.NewValue, newVal: newVal }, children: {} }];
+    return [{ ctor: DType.Update, kind: { ctor: DUType.NewValue, model: newVal }, children: {} }];
 }
-function DDNewObject(children) {
-    return [{ ctor: DType.Update, kind: { ctor: DUType.NewObject }, children: children }];
+function DDNewObject(children, model) {
+    if (model === void 0) { model = {}; }
+    return [{ ctor: DType.Update, kind: { ctor: DUType.NewValue, model: model }, children: children }];
 }
 function DDNewArray(length, children) {
-    return [{ ctor: DType.Update, kind: { ctor: DUType.NewArray, length: length }, children: children }];
+    return [{ ctor: DType.Update, kind: { ctor: DUType.NewValue, model: Array(length) }, children: children }];
 }
-function DDNewNode(nodeCtor, args, children) {
+function DDNewNode(model, children) {
     if (children === void 0) { children = {}; }
-    return [{ ctor: DType.Update, kind: { ctor: DUType.NewNode, nodeCtor: nodeCtor, arguments: args }, children: children }];
+    return [{ ctor: DType.Update, kind: { ctor: DUType.NewValue, model: model }, children: children }];
 }
 function DDClone(path, diffs) {
     return [{ ctor: DType.Clone, path: path, diffs: diffs }];
@@ -140,7 +135,7 @@ function isDSame(diffs) {
 }
 // TODO: Incorporate custom path map.
 function processClone(prog, newVal, oldVal, diff, callback) {
-    var Syntax = syntax.Syntax;
+    var Syntax = syntax.Syntax || esprima.Syntax;
     if (diff.path.up <= prog.context.length) {
         var toClone = diff.path.up == 0 ? prog.node : prog.context[diff.path.up - 1];
         var nodePathDown = [];
@@ -165,16 +160,17 @@ function processClone(prog, newVal, oldVal, diff, callback) {
         return UpdateFail("Difference outside of context");
     }
 }
-function valToNode_(value) {
-    return uniqueNewValOf(valToNodeDiffs_(value));
-}
 function valToNodeDiffs_(value) {
+    return DDNewNode(value);
+}
+function valToNode_(value) {
+    var Node = esprima.Node;
     if (typeof value == "number" || typeof value == "boolean" || typeof value == "string" || typeof value == "object" && value === null) {
-        return DDNewNode("Literal", ["", value, uneval_(value)]);
+        return new Node.Literal("", value, uneval_(value));
     }
     else if (typeof value == "object") {
         if (Array.isArray(value)) {
-            return DDNewNode("ArrayExpression", ["", value.map(valToNode_), [], ""]);
+            return new Node.ArrayExpression("", value.map(valToNode_), [], "");
         }
         else {
             var children = [];
@@ -184,22 +180,21 @@ function valToNodeDiffs_(value) {
                 var propertyValue = valToNode_(v);
                 children.push(new Node.Property("init", propertyKey, "", "", "", "", false, propertyValue, false, false));
             }
-            return DDNewNode("ObjectExpression", ["", children, [], ""]);
+            return new Node.ObjectExpression("", children, [], "");
         }
     }
-    return DDNewNode("Literal", ["", null]);
+    return new Node.Literal("", null, "null");
 }
 function processClones(prog, updateData, otherwise) {
-    var Syntax = syntax.Syntax;
+    var Syntax = syntax.Syntax || esprima.Syntax;
     return UpdateAlternative.apply(void 0, updateData.diffs.map(function (diff) {
         if (diff.ctor === DType.Clone) {
             return processClone(prog, updateData.newVal, updateData.oldVal, diff);
         }
-        else if (diff.kind.ctor === DUType.NewArray) {
-            var length_1 = diff.kind.length; // Just rebuild the new array and clone elements.
+        else if (diff.kind.ctor === DUType.NewValue && Array.isArray(diff.kind.model)) {
             var oldFormat = prog.node.type === Syntax.ArrayExpression ? prog.node : { wsBefore: "", separators: [], wsBeforeClosing: "" };
-            var newDiffs = DDNewNode("ArrayExpression", [oldFormat.wsBefore, Array(length_1), oldFormat.separators, oldFormat.wsBeforeClosing], { elements: DDSame() });
-            var newNode = uniqueNewValOf(newDiffs);
+            var newNode = new Node.ArrayExpression(oldFormat.wsBefore, diff.kind.model.map(valToNode_), oldFormat.separators, oldFormat.wsBeforeClosing);
+            var newDiffs = DDNewNode(newNode);
             return updateForeach(prog.env, updateData.newVal, function (newChildVal, k) { return function (callback) {
                 var childDiff = diff.children[k];
                 if (childDiff.length == 1 && childDiff[0].ctor === DType.Update &&
@@ -222,26 +217,6 @@ function processClones(prog, updateData, otherwise) {
         }
         return undefined;
     }).filter(function (x) { return typeof x !== "undefined"; }));
-}
-function newCall(Cls, args) {
-    return (function () {
-        function F(args) {
-            return Cls.apply(this, args);
-        }
-        F.prototype = Cls.prototype;
-        return function () {
-            return new F(arguments);
-        };
-    })();
-}
-function uniqueNewValOf(diffs) {
-    var construct = esprima.Node[diffs[0].kind.nodeCtor];
-    /*Logger.log(uneval_(construct))
-    Logger.log("(construct.prototype.unparse)");
-    Logger.log(uneval_(construct.prototype.unparse))*/
-    var result = newCall(construct, [void 0].concat(diffs[0].kind.arguments));
-    result.unparse = construct.prototype.unparse; // TODO: Figure out why this is needed.
-    return result;
 }
 function updateForeach(env, collection, callbackIterator, gather) {
     var aux = function (envSoFar, nodesSoFar, diffsSoFar, i) {
@@ -270,7 +245,8 @@ function getUpdateAction(prog, updateData) {
     /*if(prog.node.update) { // In case there is a custom update procedure available.
       return prog.node.update{prog, diff};
     }*/
-    var Syntax = esprima.Syntax;
+    var Syntax = syntax.Syntax || esprima.Syntax;
+    var Node = typeof Node == "undefined" ? esprima.Node : Node;
     var oldNode = prog.node;
     if (oldNode.type == Syntax.Program) {
         var script = oldNode;
@@ -325,8 +301,8 @@ function getUpdateAction(prog, updateData) {
                     return processClone(prog, updateData.newVal, updateData.oldVal, diff);
                 }
                 else {
-                    var newDiffs = DDNewNode("Literal", [oldNode.wsBefore, updateData.newVal]); // TODO: What about string diffs?
-                    return UpdateResult(__assign({}, prog, { node: uniqueNewValOf(newDiffs), diffs: newDiffs }), prog);
+                    var newNode = new Node.Literal(oldNode.wsBefore, updateData.newVal, updateData.newVal); // TODO: What about string diffs?
+                    return UpdateResult(__assign({}, prog, { node: newNode, diffs: DDNewNode(newNode) }), prog);
                 }
             }));
         }
