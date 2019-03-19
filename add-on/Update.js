@@ -223,7 +223,7 @@ function updateForeach(env, collection, callbackIterator, gather) {
         if (i < collection.length) {
             var elem = collection[i];
             return callbackIterator(elem, i)(function (newProg, oldProg) {
-                var mergedEnv = mergeUpdatedEnvs(envSoFar, newProg.env);
+                var mergedEnv = mergeUpdatedEnvs(envSoFar, newProg.env)._0;
                 return aux(mergedEnv, nodesSoFar.concat(newProg.node), diffsSoFar.concat(newProg.diffs), i + 1);
             });
         }

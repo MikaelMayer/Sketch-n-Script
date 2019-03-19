@@ -19,7 +19,7 @@ type Prog = {
 type ProgDiffs = Prog & { diffs: Diffs }
 type UpdateData = {newVal: any, oldVal: any, diffs?: Diffs}
 declare let Logger: { log: (content: any) => any };
-declare function mergeUpdatedEnvs(env1: Env, env2: Env): Env;
+declare function mergeUpdatedEnvs(env1: Env, env2: Env): Res<string,Env>;
 declare function uneval_(x: any): string
 declare function buildEnvJS_(env: Env): any
 declare function evaluate_(env: Env, $$source$$$: string): any
@@ -252,7 +252,7 @@ function updateForeach<elem>(env: Env,
     if(i < collection.length) {
       var elem = collection[i];
       return callbackIterator(elem, i)((newProg: ProgDiffs, oldProg: Prog) => {
-        var mergedEnv = mergeUpdatedEnvs(envSoFar, newProg.env);
+        var mergedEnv = mergeUpdatedEnvs(envSoFar, newProg.env)._0 as Env;
         return aux(mergedEnv, nodesSoFar.concat(newProg.node), diffsSoFar.concat(newProg.diffs), i + 1);
       })
     } else {

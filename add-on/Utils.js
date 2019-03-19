@@ -92,7 +92,7 @@ function mergeUpdatedEnvs(updatedEnv1, updatedEnv2) {
   return resultCase(
     mergeUpdatedEnvs(updatedEnv1.tail, updatedEnv2.tail), Err,
     function(updatedTail) {
-      return cons_(mergeBinding(updatedEnv1.head, updatedEnv2.head), updatedTail);
+      return Ok(cons_(mergeBinding(updatedEnv1.head, updatedEnv2.head), updatedTail));
     });
 }
 
