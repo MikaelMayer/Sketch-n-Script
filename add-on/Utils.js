@@ -115,7 +115,6 @@ function updateVar_(env, name, oldValueToNewValue) {
       return rebuildEnv(cons_({
         name: env.head.name,
         value: oldValueToNewValue(env.head.value),
-        expr: env.head.expr,
         diffs: true}, env.tail))
     } else {
       rebuildEnv = (function(head, rebuildEnv) {

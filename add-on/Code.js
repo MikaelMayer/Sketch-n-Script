@@ -795,7 +795,7 @@ function updateLetExprs_(doc, env, letExprs) {
       var oldOutput = letExp.oldOutput;
       var newOutput = letExp.newOutput;
       var updatedEnv1 = updatedNewEnv;
-      var formulaEnvUpdate = Ok([env, formula]);
+      var formulaEnvUpdate = Ok({env: env, node: formula});
       if(evalValue.expr.name) { // Then this formula introduced a variable, we might need to update it.
         newOutput = mergeValues(oldOutput, updatedNewEnv.head.value.v_, newOutput);
         updatedEnv1 = updatedNewEnv.tail;
@@ -808,8 +808,8 @@ function updateLetExprs_(doc, env, letExprs) {
       return resultCase(
         formulaEnvUpdate, Err,
         function(updatedEnv2updatedFormula) {
-          var updatedEnv2 = updatedEnv2updatedFormula[0];
-          var updatedFormula = updatedEnv2updatedFormula[1];
+          var updatedEnv2 = updatedEnv2updatedFormula.env;
+          var updatedFormula = updatedEnv2updatedFormula.node;
           return finish(updatedEnv1, updatedEnv2, updatedFormula);
         });
     });
@@ -968,8 +968,8 @@ function updateNamedRanges_(doc, env, exprs) {
             resultCase(
               update_(tmp.tail, formula)(newValue), function (msg) { throw msg; },
               function(newtmptailformula) {
-                var newtmptail = newtmptailformula[0];
-                var newFormula = newtmptailformula[1];
+                var newtmptail = newtmptailformula.env;
+                var newFormula = newtmptailformula.node;
                 var newSource = newFormulaOf_(tmp.head.value.expr, newFormula);
                 if(newSource != tmp.head.value.expr.source) {
                   var range = tmp.head.value.expr.range;
