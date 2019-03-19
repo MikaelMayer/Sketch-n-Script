@@ -4,7 +4,7 @@
   "description": "The Google docs add-on to enter formulas in your doc",
   "main": "test_update.js",
   "scripts": {
-    "compile": "tsc --noImplicitUseStrict -p src/ --outDir add-on/ && sed -i '12,15d' add-on/Update.js",
+    "compile": "tsc --noImplicitUseStrict -p src/ --outDir add-on/ && sed -i '12,15d' add-on/Update.js && sed -i '1s/var __assign/syntax = typeof syntax == \"undefined\" ? this : syntax;\\nvar __assign/' add-on/Update.js",
     "test": "node script_testscript.js",
     "minify": "uglifyjs --compress --mangle --output add-on/esprima-min.js -- add-on/esprima.js"
   },
