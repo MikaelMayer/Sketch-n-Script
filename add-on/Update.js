@@ -10,7 +10,6 @@ var __assign = (this && this.__assign) || function () {
     };
     return __assign.apply(this, arguments);
 };
-var DType;
 (function (DType) {
     DType["Clone"] = "Clone";
     DType["Update"] = "Update";
@@ -136,6 +135,7 @@ function isDSame(diffs) {
 // TODO: Incorporate custom path map.
 function processClone(prog, newVal, oldVal, diff, callback) {
     var Syntax = syntax.Syntax || esprima.Syntax;
+    var Node = typeof Node == "undefined" ? esprima.Node : Node;
     if (diff.path.up <= prog.context.length) {
         var toClone = diff.path.up == 0 ? prog.node : prog.context[diff.path.up - 1];
         var nodePathDown = [];
@@ -164,7 +164,7 @@ function valToNodeDiffs_(value) {
     return DDNewNode(value);
 }
 function valToNode_(value) {
-    var Node = esprima.Node;
+    var Node = typeof Node == "undefined" ? esprima.Node : Node;
     if (typeof value == "number" || typeof value == "boolean" || typeof value == "string" || typeof value == "object" && value === null) {
         return new Node.Literal("", value, uneval_(value));
     }
@@ -187,6 +187,7 @@ function valToNode_(value) {
 }
 function processClones(prog, updateData, otherwise) {
     var Syntax = syntax.Syntax || esprima.Syntax;
+    var Node = typeof Node == "undefined" ? esprima.Node : Node;
     return UpdateAlternative.apply(void 0, updateData.diffs.map(function (diff) {
         if (diff.ctor === DType.Clone) {
             return processClone(prog, updateData.newVal, updateData.oldVal, diff);

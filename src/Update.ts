@@ -160,6 +160,7 @@ function isDSame(diffs) {
 // TODO: Incorporate custom path map.
 function processClone(prog: Prog, newVal: any, oldVal: any, diff: DClone, callback?: UpdateCallback): UpdateAction {
   var Syntax = syntax.Syntax || esprima.Syntax;
+  var Node = typeof Node == "undefined" ? esprima.Node : Node;
   if(diff.path.up <= prog.context.length) {
     var toClone: AnyNode = diff.path.up == 0 ? prog.node : prog.context[diff.path.up - 1];
     var nodePathDown = [];
@@ -191,7 +192,7 @@ function valToNodeDiffs_(value: any): DUpdate[] {
 }
 
 function valToNode_(value: any): AnyNode {
-  var Node = esprima.Node;
+  var Node = typeof Node == "undefined" ? esprima.Node : Node;
   if(typeof value == "number" || typeof value == "boolean" || typeof value == "string" || typeof value == "object" && value === null) {
     return new Node.Literal("", value, uneval_(value));
   } else if(typeof value == "object") {
@@ -214,6 +215,7 @@ function valToNode_(value: any): AnyNode {
 function processClones(prog: Prog, updateData: UpdateData,
      otherwise?: (diff: DUpdate) => UpdateAction ): UpdateAction {
   var Syntax = syntax.Syntax || esprima.Syntax;
+  var Node = typeof Node == "undefined" ? esprima.Node : Node;
   return UpdateAlternative(...updateData.diffs.map(function(diff: Diff): UpdateAction {
     if(diff.ctor === DType.Clone) {
       return processClone(prog, updateData.newVal, updateData.oldVal, diff);
