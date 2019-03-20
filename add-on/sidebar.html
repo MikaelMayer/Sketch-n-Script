@@ -39,7 +39,7 @@
         background: rgba(255, 255, 255, 0.8);
       }
       div#finaldummy {
-        height: 4em;
+        height: 6em;
       }
       textarea#sidebarEnv {
         width: 100%;
@@ -83,11 +83,33 @@
           outline: 10px solid blue;
         }
       }
+      .sendfeedback {
+        cursor: pointer;
+        background: green;
+        color: white;
+        padding-left: 6px;
+        padding-right: 6px;
+      }
+      a.sendfeedback:hover {
+        background: #01b301;
+        color: white;
+      }
+      span#getuserfeedback.display {
+        display: initial !important;
+      }
     </style>
   </head>
   <body>
     <div class="sidebar branding-below">
-      <!--span class="hint">Optionally select text, and then:</span-->
+      <span id="getuserfeedback" style="display:none">
+        Significant time elapsed since installation.<br>
+        To help us make this extension better,<br>
+        <a href="https://docs.google.com/forms/d/e/1FAIpQLSfimHyb5FGiiUNFWeEBFRQ4Kfmzif1qye6tp-n_5KMYnop-ig/viewform?usp=sf_link"
+         class="sendfeedback button">Send us private feedback</a>, or<br>
+        <button id="month-reminder">Remind me in one month</button>. You can also<br>
+        <button id="dismiss-reminder">Dismiss this reminder</button>.<br><br>
+        <hr>
+      </span>
       <form onsubmit="return mySubmitFunction(event)">
         <div class="block" id="button-bar">
           <div>
@@ -182,6 +204,8 @@
         <br>
         Builtin functions:
         <div class="doclike">=sum([1, 2, 3, 4, 5])</div>
+        <div class="doclike">rotate([[1, 2, 3]]) == [[1],[2],[3]]</div>
+        <div class="doclike">=$$("\\frac{1}{2}")</div>
         <br>
         You can also enter arrays of text, rich text and inline images.
         If you enter an array of paragraphs, list items and tables, make sure the formula spans an entire paragraph.
@@ -213,14 +237,14 @@
     </div>
 
     <div class="sidebar bottom">
-      <span class="gray branding-text">Formulas by 
+      <a href="https://docs.google.com/forms/d/e/1FAIpQLSfimHyb5FGiiUNFWeEBFRQ4Kfmzif1qye6tp-n_5KMYnop-ig/viewform?usp=sf_link"
+         class="sendfeedback button">Send us private feedback</a>, or
       <span children-are-ghosts="true" id="twitterlink"></span>
       <script>
       var t = document.querySelector("#twitterlink");
       t.innerHTML = `<a href="https://twitter.com/intent/tweet?screen_name=MikaelMayer&ref_src=twsrc%5Etfw" class="twitter-mention-button" data-size="large" data-text="Simple but amazing idea: add formulas to google docs. I can&#39;t wait for ..." data-show-count="false">@MikaelMayer</a>`
       </script>
       <script async="" src="https://platform.twitter.com/widgets.js" charset="utf-8"></script><br><br>
-      </span>
     </div>
 
     <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
@@ -231,6 +255,7 @@
       }
     
       var hideFeedbackTimer = undefined;
+      var nextReminderDate = "nextReminderDate"
       /**
        * On document load, assign click handlers to each button and try to load the
        * user's origin and destination language preferences if previously set.
@@ -271,7 +296,26 @@
             $(selector).removeClass("highlighthint");
           }, 2000);
         })
+        
+        $("#month-reminder").click(function() {
+          $("#getuserfeedback").removeClass("display");
+          displayFeedback("We will show you a reminder to give us feedback in one month, next time you open this extension.");
+          setNextReminderDate(Date.now() + 1000*3600*24*30);
+        });
+        $("#dismiss-reminder").click(function() {
+          $("#getuserfeedback").removeClass("display");
+          setNextReminderDate(-1);
+        });
       });
+      
+      function setNextReminderDate(value) {
+        saveUserProperty.call({
+          value: value + "",
+          getAttribute: function(attr) {
+            return attr == "id" ? nextReminderDate : attr == "type" ? "text" : null;
+          }
+        });
+      }
       
       function refreshInterface() {
         if(usedNames[$("#nameToGive").val()]) {
@@ -421,6 +465,16 @@
             } else if(c.getAttribute("type") == "text") {
               c.value = prefs[k];
             }
+          } else if(k === nextReminderDate) {
+            if(prefs[k] === "0") { // if it's the first opening, we wait one week.
+              setNextReminderDate(Date.now() + 1000*3600*24*7);
+            } else if(prefs[k] == "-1") { // We don't do anything
+            } else {
+              var dateToRemind = parseInt(prefs[k]);
+              if(dateToRemind < Date.now()) {
+                $("#getuserfeedback").addClass("display");
+              }
+            }
           }
           if(typeof options[k] !== "undefined") {
             options[k] = prefs[k];
@@ -458,8 +512,10 @@
           options[name] = value;
         }
         
-        google.script.run.withSuccessHandler(function() { 
-              displayFeedback(name + " set to '" + value + "'"); })
+        google.script.run.withSuccessHandler(function() {
+              if(name !== nextReminderDate) {
+                displayFeedback(name + " set to '" + value + "'");
+              }})
           .withFailureHandler(showError).setUserPreference(name, value);
       }
       

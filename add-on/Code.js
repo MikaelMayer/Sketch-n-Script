@@ -1922,7 +1922,8 @@ var defaultOptions = {
   highlightFormulas: "true",
   highlightValues: "false",
   nameToGive: "x",
-  refreshImages: "true"
+  refreshImages: "true",
+  nextReminderDate: "0" // 0 means "not asked yet", -1 means "never", else it's a date.
 };
 /**
  * Gets the stored user preferences for the origin and destination languages,
