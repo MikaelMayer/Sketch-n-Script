@@ -1743,13 +1743,14 @@ function revealFormulas(options, docProperties, doc, body) {
   return {feedback: "Revealed " + numRevealed + " formulas"};
 };
 
-function testNameSelection_() {
-  nameSelection({nameToGive: "heros"});
+function testNameSelection() {
+  nameSelection({nameToGive: "animal", nameFormulasInline: "false"}, getDocProperties());
 }
 
 function nameSelection(options, docProperties, doc, body) {
   options = options || defaultOptions;
   var name = options.nameToGive;
+  var nameFormulasInline = options.nameFormulasInline === "true";
   var vn = new RegExp("^" + varName + "$");
   if(!name || !vn.exec(name)) {
     if(name == "" || typeof name == "undefined") {
@@ -1840,26 +1841,49 @@ function nameSelection(options, docProperties, doc, body) {
       lastIndex = endInclusive_ + 1;
     }
     if(lastIndex != endInclusive + 1) {
-      var x = txtText.substring(lastIndex, endInclusive + 1);
-      addFormulaElem(toExpString(x));
+      var lastElem = txtText.substring(lastIndex, endInclusive + 1);
+      addFormulaElem(toExpString(lastElem));
     }
+    var toAppendToSidebarEnv = "";
+    var feedback = "";
+    var maybefunction = "";
     if(argumentNames.length == 0) {
-      formula = "=(/*"+name+"=*/" + formula + ")";
+      if(nameFormulasInline) {
+        formula = "=(/*"+name+"=*/" + formula + ")";
+      } else {
+        if(rangesBeneath.length == 0 && lastElem.length > 0 && !(/^\s|\s$/.exec(lastElem[0]))) {
+          toAppendToSidebarEnv = name + " = " + lastElem;
+        } else {
+          toAppendToSidebarEnv = name + " = (" + formula + ")";
+        }
+        formula = "=" + name;
+      }
     } else {
+      if(!nameFormulasInline) {
+        feedback += "\nExtracted as inline named function because of the presence of inline named formulas."
+      }
       formula = "=(/*"+name+"("+argumentNames.join(",")+")=*/(function("+
         argumentNames.join(",")
         +") { return " + formula + ";})("+
         argumentValues.join(",")
         +"))";
+      maybefunction = "("+argumentNames.join(",")+")";
     }
     removeFormulas_(doc, txt, start, endInclusive); // It should not be needed but I have to do it.
     txt.deleteText(start, endInclusive); // Should delete any previous ranges
     txt.insertText(start, value); //Same text
     addRange_(doc, formulaValue_(formula, uneval_(value)), [TextRange(txt, start, endInclusive)]);
+    if(toAppendToSidebarEnv) {
+      docProperties.sidebarEnv = docProperties.sidebarEnv + (docProperties.sidebarEnv ? "\n" : "") + toAppendToSidebarEnv;
+    }
     var result = evaluateFormulas(options, docProperties, doc);
     if(!result) result = {};
     if(!result.feedback) result.feedback = "";
-    result.feedback = value + " has been named '" + name + "'. You can now type =" + name + " anywhere in the doc to reuse it.\n" + result.feedback;
+    result.feedback = value + " has been named '" + name + "'. You can now type =" + name + maybefunction +  " anywhere in the doc to reuse it.\n" + result.feedback + feedback;
+    if(toAppendToSidebarEnv) {
+      result.newSidebarEnv = docProperties.sidebarEnv;
+    }
+    Logger.log(uneval_(result));
     return result;
   } else {
     throw "Please select some text and try again"
@@ -1919,6 +1943,7 @@ var defaultProperties = {
 
 // Default user properties
 var defaultOptions = {
+  nameFormulasInline: "false",
   highlightFormulas: "true",
   highlightValues: "false",
   nameToGive: "x",

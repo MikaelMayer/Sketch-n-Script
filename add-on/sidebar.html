@@ -157,7 +157,12 @@
             <label for="refreshImages"
               >Refresh images</label>
           </div>
-        </div>
+          <div>
+            <input type="checkbox" name="userProperties" id="nameFormulasInline" value="">
+            <label for="nameFormulasInline" title="Names given to selections are stored in the doc (if not checked, names are added to the textbox above)"
+              >Assign names inline</label>
+          </div>
+         </div>
       </form>
       <hr>
       <div class="righttitle" id="buttoncheatsheet">Cheat sheet</div>
@@ -449,6 +454,7 @@
       };
       
       var options = {
+        nameFormulasInline: "false",
         highlightFormulas: "true",
         highlightValues: "false",
         nameToGive: "",
