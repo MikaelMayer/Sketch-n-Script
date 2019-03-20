@@ -97,17 +97,21 @@
       span#getuserfeedback.display {
         display: initial !important;
       }
+      #twitterlink {
+        top: 4px;
+        position: relative;
+      }
     </style>
   </head>
   <body>
     <div class="sidebar branding-below">
       <span id="getuserfeedback" style="display:none">
         Significant time elapsed since installation.<br>
-        To help us make this extension better,<br>
+        Tell us how you are doing:<br>
         <a href="https://docs.google.com/forms/d/e/1FAIpQLSfimHyb5FGiiUNFWeEBFRQ4Kfmzif1qye6tp-n_5KMYnop-ig/viewform?usp=sf_link"
-         class="sendfeedback button">Send us private feedback</a>, or<br>
-        <button id="month-reminder">Remind me in one month</button>. You can also<br>
-        <button id="dismiss-reminder">Dismiss this reminder</button>.<br><br>
+         class="sendfeedback button" title="Well' redirect you to a Google forms">Send Feedback</a> 
+        <button id="month-reminder" title="We'll remind you in one month">Later</button> 
+        <button id="dismiss-reminder" title="We'll not show you this reminder again">Dismiss</button><br><br>
         <hr>
       </span>
       <form onsubmit="return mySubmitFunction(event)">
@@ -238,11 +242,16 @@
 
     <div class="sidebar bottom">
       <a href="https://docs.google.com/forms/d/e/1FAIpQLSfimHyb5FGiiUNFWeEBFRQ4Kfmzif1qye6tp-n_5KMYnop-ig/viewform?usp=sf_link"
-         class="sendfeedback button">Send us private feedback</a>, or
+         class="sendfeedback button" style="vertical-align: bottom">Send Feedback</a>
       <span children-are-ghosts="true" id="twitterlink"></span>
       <script>
       var t = document.querySelector("#twitterlink");
-      t.innerHTML = `<a href="https://twitter.com/intent/tweet?screen_name=MikaelMayer&ref_src=twsrc%5Etfw" class="twitter-mention-button" data-size="large" data-text="Simple but amazing idea: add formulas to google docs. I can&#39;t wait for ..." data-show-count="false">@MikaelMayer</a>`
+      t.innerHTML = `<a href="https://twitter.com/intent/tweet"
+        class="twitter-mention-button"
+        data-size="large"
+        data-text="Simple but amazing idea from @MikaelMayer: add formulas to Google Docs."
+        data-show-count="false"
+        data-url="https://chrome.google.com/webstore/detail/reversible-formulas-sketc/kgjbgmonlnhglokmfnpnklegakfknbeh?authuser=0">@MikaelMayer</a>`
       </script>
       <script async="" src="https://platform.twitter.com/widgets.js" charset="utf-8"></script><br><br>
     </div>
