@@ -10,6 +10,7 @@ var __assign = (this && this.__assign) || function () {
     };
     return __assign.apply(this, arguments);
 };
+var DType;
 (function (DType) {
     DType["Clone"] = "Clone";
     DType["Update"] = "Update";
