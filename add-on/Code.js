@@ -1870,12 +1870,12 @@ function nameSelection(options, docProperties, doc, body) {
         lastIndex = endInclusive_ + 1;
       }
       if(lastIndex != endInclusive + 1) {
-        var lastElem = txtText.substring(lastIndex, endInclusive + 1);
+        lastElem = txtText.substring(lastIndex, endInclusive + 1);
         addFormulaElem(toExpString(lastElem));
       }
       formulaElements.push(formula);
       textSelected = true;
-      filteredSelection.push(TextRange(txt, start, end));
+      filteredSelection.push(TextRange(txt, start, endInclusive));
     },
     function(element) {
       Logger.log("element");
