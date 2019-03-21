@@ -353,7 +353,7 @@
       
       function handleScriptFeedback(result) {
         if(!result) return;
-        if(typeof result.newSidebarEnv == "string") {
+        if(typeof result.newSidebarEnv == "string") { // The sidebar env should have been saved by the code.
           if(result.newSidebarEnv != docProperties.sidebarEnv) {
             $("#sidebarEnv").val(result.newSidebarEnv);
             docProperties.sidebarEnv = result.newSidebarEnv;

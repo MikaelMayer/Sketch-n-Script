@@ -142,7 +142,7 @@ function parseSidebarCode_(doc, defs) {
     var equalSign = m[3];
     var content = m[4];
     var sourceType = RAW;
-    if(content.length > 0 && content[0]=="(") {
+    if(content.length > 0 && content[0]=="(" || content[0] =="[") {
       var endInclusiveContent = getEndOffsetInclusiveFormula_(
         defs, m.index + newlineBefore.length + name.length + equalSign.length);
       content = defs.substring(m.index + newlineBefore.length + name.length + equalSign.length,
@@ -208,7 +208,7 @@ function collectEnv_(doc, body, env) {
       var textStartIndex = m.index + newline.length + name.length + equalSign.length;
       var dRanges;
       var sourceType;
-      if(content.length > 0 && content[0]=="(") {
+      if(content.length > 0 && content[0]=="(" || content[0] =="[") {
         sourceType = RAWFORMULA;
         dRanges = getFormulaOnMultipleParagraphs_(txt, textStartIndex);
         content = "";
@@ -271,7 +271,8 @@ function getFunctionSource_(source) {
 }
 
 // Given a value, if it is not computed yet, compute it
-function computeValue_(doc, $$value$$$) { // Strange name to prevent override when using with(envJS)
+function computeValue_(doc, $$value$$$, $$insertErrors$$$) { // Strange name to prevent override when using with(envJS)
+  if(typeof $$insertErrors$$$ === "undefined") $$insertErrors$$$ = true;
   var envJS = buildEnvJS_($$value$$$.env);
   if(typeof $$value$$$.v_ !== "undefined") return $$value$$$;
   try{
@@ -310,7 +311,7 @@ function computeValue_(doc, $$value$$$) { // Strange name to prevent override wh
   }
   catch(error) {
     var errormessage = "[Evaluation error: " + error + "] ";
-    if($$value$$$.expr.range) {
+    if($$value$$$.expr.range && $$insertErrors$$$) {
       var positions = drangesOf_($$value$$$.expr.range);
       if(positions.length > 0) {
         var position = positions[positions.length - 1];
@@ -451,7 +452,7 @@ function evaluateFormulas(options, docProperties, doc, body) {
                       {v_: undefined, // Usually the raw value
                        vName_: undefined, // Can be a function
                        expr: expr,
-                       env: env});
+                       env: env}, !options.firstlaunch);
     if(evalValue) {
       if(evalValue.expr.name) {
         env = cons_({name: evalValue.expr.name, value: evalValue}, env);
@@ -485,6 +486,7 @@ function evaluateFormulas(options, docProperties, doc, body) {
       }
     }
   });
+  maybeSaveNewSidebarEnv(newSidebarEnv, docProperties.sidebarEnv);
   return {
     nameValues: nameValues,
     feedback: "Updated " + numUpdated + " computed values." + potentialWarnings,
@@ -1493,7 +1495,7 @@ function insertRichValue_(doc, positions, values, expr, exprs) {
       var parent = element.getParent();
       var index = parent.getChildIndex(element);
       if(typeof insertPosition == "undefined") {
-        insertPosition = {ctor: "IndexPosition", parent: parent, index: index}; // 3 elements: inside the children of a parent.
+        insertPosition = {ctor: "IndexPosition", parent: parent, index: index};
       }
       thingsToDelete.push({ctor: "Element", element: element});
     }
@@ -1805,6 +1807,7 @@ function nameSelection(options, docProperties, doc, body) {
   var lastElem = "";
   var pureString = true;
   var filteredSelection = []; // Only computable elements;
+  var charAfterLastTextSelectionIsLetter = false;
   foreachDRange_(
     selection,
     function(txt, start, endInclusive) {
@@ -1876,6 +1879,8 @@ function nameSelection(options, docProperties, doc, body) {
       formulaElements.push(formula);
       textSelected = true;
       filteredSelection.push(TextRange(txt, start, endInclusive));
+      charAfterLastTextSelectionIsLetter =
+        /^[a-zA-Z0-9_\$]$/.exec(txtText.substring(endInclusive + 1, endInclusive + 2));
     },
     function(element) {
       Logger.log("element");
@@ -1941,12 +1946,13 @@ function nameSelection(options, docProperties, doc, body) {
     if(nameFormulasInline) {
       formula = "=(/*"+name+"=*/" + formula + ")";
     } else {
-      if(pureString && lastElem.length > 0 && !(/^\s|\s$/.exec(lastElem[0]))) {
+      if(pureString && lastElem.length > 0 && !(/^\s|\s$/.exec(lastElem))) {
         toAppendToSidebarEnv = name + " = " + lastElem;
       } else {
-        toAppendToSidebarEnv = name + " = (" + formula + ")";
+        toAppendToSidebarEnv = name + " = " + 
+          (formula && (formula[0] == "[" || formula[0] == "(") ? formula : "(" + formula + ")");
       }
-      formula = "=" + name;
+      formula = "=" + (charAfterLastTextSelectionIsLetter ? "(" + name + ")" : name);
     }
   } else {
     if(!nameFormulasInline) {
@@ -1961,16 +1967,15 @@ function nameSelection(options, docProperties, doc, body) {
   }
   removeFormulas_(doc, selection);
   addRange_(doc, formulaValue_(formula, undefined), filteredSelection);
+  var sidebarEnv = docProperties.sidebarEnv;
   if(toAppendToSidebarEnv) {
     docProperties.sidebarEnv = docProperties.sidebarEnv + (docProperties.sidebarEnv ? "\n" : "") + toAppendToSidebarEnv;
+    maybeSaveNewSidebarEnv(docProperties.sidebarEnv, sidebarEnv);
   }
-  var result = evaluateFormulas(options, docProperties, doc);
+  var result = evaluateFormulas(options, docProperties, doc); // Might modify the new sidebarEnv
   if(!result) result = {};
   if(!result.feedback) result.feedback = "";
   result.feedback = "Selection has been named '" + name + "'. You can now type =" + name + maybefunction +  " anywhere in the doc to reuse it.\n" + result.feedback + feedback;
-  if(toAppendToSidebarEnv) {
-    result.newSidebarEnv = docProperties.sidebarEnv;
-  }
   return result;
 }
 
@@ -2070,6 +2075,7 @@ function setDocProperty(name, value, oldValue) {
   if(currentValue != oldValue && typeof currentValue == "string" && typeof oldValue == "string") {
     value = mergeModifications(oldValue, currentValue, value);
   }
+  //Logger.log("setDocProperty(" + uneval_(name) + ", " + uneval_(value) + ")");
   p.setProperty(name, value);
   return value;
 }
@@ -2151,7 +2157,15 @@ function hideDefinitions(options, docProperties, doc, body) {
   var newSidebarEnv = sidebarEnv + (sidebarEnv == "" || acc == "" ? "" : "\n") + acc;
   PropertiesService.getDocumentProperties().setProperty("sidebarEnv", newSidebarEnv);
   var feedback = moved.length ? "Moved the definitions of " + moved.join(", ") + " to above. " : "";
+  maybeSaveNewSidebarEnv(newSidebarEnv, sidebarEnv);
   return {feedback: feedback + error, newSidebarEnv: newSidebarEnv};
+}
+                   
+function maybeSaveNewSidebarEnv(newSidebarEnv, sidebarEnv) {
+  Logger.log("maybeSaveNewSidebarEnv(" + uneval_(newSidebarEnv) + ", " + uneval_(sidebarEnv) + ")");
+  if(sidebarEnv != newSidebarEnv) {
+    setDocProperty("sidebarEnv", newSidebarEnv, sidebarEnv);
+  }
 }
 
 function showDefinitions(options, docProperties, doc, body) {
