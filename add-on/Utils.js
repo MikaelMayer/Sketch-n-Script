@@ -141,9 +141,11 @@ function buildEnvJS_(env) {
   if(typeof env.cache !== "undefined") return env.cache;
   var result = {};
   List.foreach(env, function(head) {
-    result[head.name] =
-      typeof head.value.vName_ != "undefined" ?
-        head.value.vName_ : head.value.v_;
+    if(typeof result[head.name] === "undefined") {
+      result[head.name] =
+        typeof head.value.vName_ != "undefined" ?
+          head.value.vName_ : head.value.v_;
+    }
   });
   env.cache = result;
   return result;

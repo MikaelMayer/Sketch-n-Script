@@ -62,12 +62,15 @@ function getNamedRangeLongName(namedRange) {
 }
 
 // Add the given range with a name.
-// insertPosition is an Array DRange
-function addRange_(doc, name, insertPositions, canoverflow) {
+// insertPosition is an Array DRange or a Range
+function addRange_(doc, name, insertPositions) {
   if(name.length >= 255) {
     name = storeLongName(name);
   }
-  return doc.addNamedRange(name, rangeFromPositions(doc, insertPositions));
+  var range = 
+      insertPositions.getRangeElements ? insertPositions :
+      rangeFromPositions(doc, insertPositions);
+  return doc.addNamedRange(name, range);
 }
 
 // type DRange = TextRange (txt: Text) (start: Start) (endInclusive:EndInclusive)
@@ -149,6 +152,12 @@ function isBeforeElement(element1, element2) {
 
 function areSameElement_(element1, element2) {
   return getPathUntilBody_(element1).join("<") == getPathUntilBody_(element2).join("<");
+}
+
+function isDescendantOf_(element1, element2) {
+  var path1 = getPathUntilBody_(element1).join(">");
+  var path2 = getPathUntilBody_(element2).join(">");
+  return path2.length <= path1.length && path1.substring(0, path2.length) === path2;
 }
 
 function getPathUntilBody_(element) {

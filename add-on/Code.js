@@ -492,26 +492,55 @@ function evaluateFormulas(options, docProperties, doc, body) {
 }
 
 // Remove the formulas that touch the given range.
-function removeFormulas_(doc, txt, start, endInclusive) {
+function removeFormulas_(doc, range) {
   var namedFormulas = getFormulas_(doc);
-  foreachNamedRange_(
-    namedFormulas,
-    function(name /* Maybe to expand */, range, namedRange) {
-      var shouldDelete = false;
-      foreachDRange_(
-        range,
-        function(txtF, startF, endInclusiveF) {
-          if(areSameElement_(txt, txtF) && !(endInclusive < startF || endInclusiveF < start)) {
-            shouldDelete = true;
-            return true;
+  foreachDRange_(
+    range,
+    function(txt, start, endInclusive) {
+      foreachNamedRange_(
+        namedFormulas,
+        function(name /* Maybe to expand */, range, namedRange) {
+          var shouldDelete = false;
+          foreachDRange_(
+            range,
+            function(txtF, startF, endInclusiveF) {
+              if(areSameElement_(txt, txtF) && !(endInclusive < startF || endInclusiveF < start)) {
+                shouldDelete = true;
+                return true;
+              }
+            },
+            function(elementF) {
+              
+            });
+          if(shouldDelete) {
+            namedRange.remove();
           }
-        },
-        function(element) {
-        });
-      if(shouldDelete) {
-        namedRange.remove();
-      }
-    })
+        })
+    },
+    function(element) {
+      foreachNamedRange_(
+        namedFormulas,
+        function(name /* Maybe to expand */, range, namedRange) {
+          var shouldDelete = false;
+          foreachDRange_(
+            range,
+            function(txtF, startF, endInclusiveF) {
+              if(isDescendantOf_(txtF, element)) {
+                shouldDelete = true;
+                return true;
+              }
+            },
+            function(elementF) {
+              if(isDescendantOf_(elementF, element)) {
+                shouldDelete = true;
+                return true;
+              }
+            });
+          if(shouldDelete) {
+            namedRange.remove();
+          }
+        })
+    });
 }
 
 // Finds all formula ranges and add a namedrange for them, no matter the selection
@@ -849,7 +878,7 @@ function elementToValue(element) {
   } else if(element.getType() == DocumentApp.ElementType.INLINE_IMAGE) {
     return ["img", {}, []]; // Will be asjusted later with the old value.
   } else {
-    return "";
+    throw "Element cannot be converted to a computable value:" + element;
   }
 }
 
@@ -1744,7 +1773,7 @@ function revealFormulas(options, docProperties, doc, body) {
 };
 
 function testNameSelection() {
-  nameSelection({nameToGive: "animal", nameFormulasInline: "false"}, getDocProperties());
+  nameSelection({nameToGive: "paragraphs", nameFormulasInline: "false"}, getDocProperties());
 }
 
 function nameSelection(options, docProperties, doc, body) {
@@ -1763,131 +1792,186 @@ function nameSelection(options, docProperties, doc, body) {
   var exprs = extractExprs_(doc);
   var selectionElements = selection ? selection.getRangeElements() : undefined;
   
-  if(selectionElements) {
-    var underSelection = false;
-    var rangeBuilder = doc.newRange();
-    var txt, start, endInclusive;
-    for(var i in selectionElements) { // There should be only one.
-      var selectionElement = selectionElements[i];
-      if(selectionElement.getElement().getType() == DocumentApp.ElementType.TEXT) {
-        start = selectionElement.getStartOffset();
-        endInclusive = selectionElement.getEndOffsetInclusive();
-        if(start == -1 || endInclusive == -1) continue;
-        if(typeof txt !== "undefined") {
-          throw ("Cannot abstract on two different text elements. Refine your selection inside either '" +
-                 txt.getText() + "' or '" + selectionElement.getElement().getText() + "'")
-        }
-        txt = selectionElement.getElement();
-        rangeBuilder.addElement(txt, start, endInclusive);
-      } else {
-        throw "Elements cannot be named. Feature in progress!"
-        //rangeBuilder.addElement(selectionElement.getElement());
-      }
-    }
-    var range = rangeBuilder.build();
-    // Now let's build the formula that can generate this range.
-    var rangesBeneath = [];
-    List.foreach(exprs, function(expr) {
-      foreachDRange_(
-        expr.range,
-        function(txt2, start2, endInclusive2) {
-          if(areSameElement_(txt, txt2) && !(endInclusive2 < start || endInclusive < start2)) {
-            if(start <= start2 && endInclusive2 <= endInclusive) { // Formula totally included
-              rangesBeneath.push([start2, endInclusive2, formulaOf_(expr), expr.name]);
-            } else { // Partial inclusion: We cannot do this
-              if(start2 <= start && endInclusive <= endInclusive2) { // One of them is strict
-                throw ("The selection is at the position "+(start - start2 + 1)+" of a formula ("+expr.source+") that generates ("+txt.getText().substring(start2, endInclusive2 + 1)+").\nIt's not yet possible to name something inside a formula.")
-              }
-              if(endInclusive >= endInclusive2) {
-                throw ("The first " + (endInclusive2 - start + 1) + " chars of the selection ("+txt.getText().substring(start, endInclusive2 + 1)+") partially cover a formula " +
-                  "(" + expr.source + ") that generates ("+txt.getText().substring(start2, endInclusive2 + 1)+"). Please avoid partially selecting formulas before naming them.");
-              } // endInclusive >= start2
-              throw ("The last " + (endInclusive - start2 + 1) + " chars of the selection ("+txt.getText().substring(start2, endInclusive + 1)+") partially cover a formula " +
-                "(" + expr.source + ") that generates ("+txt.getText().substring(start2, endInclusive2 + 1)+"). Please avoid partially selecting formulas before naming them.");
-            }
-          }
-        });
-    });
-    var txtText = txt.getText();
-    var value = txtText.substring(start, endInclusive + 1);
-    var formula = "";
-    var first = true;
-    var addFormulaElem = function(elem) {
-      if(first) {
-        formula = formula + elem;
-        first = false;
-      } else formula = formula + " + " + elem;
-    }
-    var lastIndex = start;
-    var argumentNames = [];
-    var argumentValues = [];
-    for(var k in rangesBeneath) {
-      var r = rangesBeneath[k];
-      var start_ = r[0];
-      var endInclusive_ = r[1];
-      var formula_ = r[2];
-      var name_ = r[3];
-      if(lastIndex < start_) {
-        var x = txtText.substring(lastIndex, start_);
-        addFormulaElem(toExpString(x));
-      }
-      if(name_) {
-        addFormulaElem(name_);
-        argumentNames.push(name_);
-        argumentValues.push(formula_);
-      } else {
-        addFormulaElem(formula_); // Name, call or parentheses.
-      }
-      lastIndex = endInclusive_ + 1;
-    }
-    if(lastIndex != endInclusive + 1) {
-      var lastElem = txtText.substring(lastIndex, endInclusive + 1);
-      addFormulaElem(toExpString(lastElem));
-    }
-    var toAppendToSidebarEnv = "";
-    var feedback = "";
-    var maybefunction = "";
-    if(argumentNames.length == 0) {
-      if(nameFormulasInline) {
-        formula = "=(/*"+name+"=*/" + formula + ")";
-      } else {
-        if(rangesBeneath.length == 0 && lastElem.length > 0 && !(/^\s|\s$/.exec(lastElem[0]))) {
-          toAppendToSidebarEnv = name + " = " + lastElem;
-        } else {
-          toAppendToSidebarEnv = name + " = (" + formula + ")";
-        }
-        formula = "=" + name;
-      }
-    } else {
-      if(!nameFormulasInline) {
-        feedback += "\nExtracted as inline named function because of the presence of inline named formulas."
-      }
-      formula = "=(/*"+name+"("+argumentNames.join(",")+")=*/(function("+
-        argumentNames.join(",")
-        +") { return " + formula + ";})("+
-        argumentValues.join(",")
-        +"))";
-      maybefunction = "("+argumentNames.join(",")+")";
-    }
-    removeFormulas_(doc, txt, start, endInclusive); // It should not be needed but I have to do it.
-    txt.deleteText(start, endInclusive); // Should delete any previous ranges
-    txt.insertText(start, value); //Same text
-    addRange_(doc, formulaValue_(formula, uneval_(value)), [TextRange(txt, start, endInclusive)]);
-    if(toAppendToSidebarEnv) {
-      docProperties.sidebarEnv = docProperties.sidebarEnv + (docProperties.sidebarEnv ? "\n" : "") + toAppendToSidebarEnv;
-    }
-    var result = evaluateFormulas(options, docProperties, doc);
-    if(!result) result = {};
-    if(!result.feedback) result.feedback = "";
-    result.feedback = value + " has been named '" + name + "'. You can now type =" + name + maybefunction +  " anywhere in the doc to reuse it.\n" + result.feedback + feedback;
-    if(toAppendToSidebarEnv) {
-      result.newSidebarEnv = docProperties.sidebarEnv;
-    }
-    Logger.log(uneval_(result));
-    return result;
-  } else {
-    throw "Please select some text and try again"
+  if(!selectionElements) {
+    throw "Please select some text or elements and try again"
   }
+  var dranges = drangesOf_(selection);
+  // Let's build the formula that can generate this range.
+  var formulaElements = [];
+  var textSelected = false;
+  var elemsSelected = false;
+  var argumentNames = [];
+  var argumentValues = [];
+  var lastElem = "";
+  var pureString = true;
+  var filteredSelection = []; // Only computable elements;
+  foreachDRange_(
+    selection,
+    function(txt, start, endInclusive) {
+      if(elemsSelected) {
+        throw ("Cannot name top-level text and elements at the same time")
+      }
+      var rangesBeneath = [];
+      List.foreach(exprs, function(expr) {
+        foreachDRange_(
+          expr.range,
+          function(txt2, start2, endInclusive2) {
+            if(areSameElement_(txt, txt2) && !(endInclusive2 < start || endInclusive < start2)) {
+              if(start <= start2 && endInclusive2 <= endInclusive) { // Formula totally included
+                rangesBeneath.push([start2, endInclusive2, formulaOf_(expr), expr.name]);
+              } else { // Partial inclusion: We cannot do this
+                if(start2 <= start && endInclusive <= endInclusive2) { // One of them is strict
+                  throw ("The selection is at the position "+(start - start2 + 1)+" of a formula ("+expr.source+") that generates ("+txt.getText().substring(start2, endInclusive2 + 1)+").\nIt's not yet possible to name something inside a formula.")
+                }
+                if(endInclusive >= endInclusive2) {
+                  throw ("The first " + (endInclusive2 - start + 1) + " chars of the selection ("+txt.getText().substring(start, endInclusive2 + 1)+") partially cover a formula " +
+                    "(" + expr.source + ") that generates ("+txt.getText().substring(start2, endInclusive2 + 1)+"). Please avoid partially selecting formulas before naming them.");
+                } // endInclusive >= start2
+                throw ("The last " + (endInclusive - start2 + 1) + " chars of the selection ("+txt.getText().substring(start2, endInclusive + 1)+") partially cover a formula " +
+                  "(" + expr.source + ") that generates ("+txt.getText().substring(start2, endInclusive2 + 1)+"). Please avoid partially selecting formulas before naming them.");
+              }
+            }
+          },
+          function(element2) {
+            if(isDescendantOf_(element2, txt)) {
+              throw ("'" + txt.getText().substring(start, endInclusive + 1) +"' is partially contained in a generated element and thus cannot be extracted for now.");
+            } // Else it's fine.
+          });
+      });
+      var txtText = txt.getText();
+      var value = txtText.substring(start, endInclusive + 1);
+      var formula = "";
+      var first = true;
+      var addFormulaElem = function(elem) {
+        if(first) {
+          formula = formula + elem;
+          first = false;
+        } else formula = formula + " + " + elem;
+      }
+      var lastIndex = start;
+      for(var k in rangesBeneath) {
+        pureString = false;
+        var r = rangesBeneath[k];
+        var start_ = r[0];
+        var endInclusive_ = r[1];
+        var formula_ = r[2];
+        var name_ = r[3];
+        if(lastIndex < start_) {
+          var x = txtText.substring(lastIndex, start_);
+          addFormulaElem(toExpString(x));
+        }
+        if(name_) {
+          addFormulaElem(name_);
+          argumentNames.push(name_);
+          argumentValues.push(formula_);
+        } else {
+          addFormulaElem(formula_); // Name, call or parentheses.
+        }
+        lastIndex = endInclusive_ + 1;
+      }
+      if(lastIndex != endInclusive + 1) {
+        var lastElem = txtText.substring(lastIndex, endInclusive + 1);
+        addFormulaElem(toExpString(lastElem));
+      }
+      formulaElements.push(formula);
+      textSelected = true;
+      filteredSelection.push(TextRange(txt, start, end));
+    },
+    function(element) {
+      Logger.log("element");
+      // If the element is a table cell, and if it's the first one, we consider the table instead.
+      if(element.getType() == DocumentApp.ElementType.TABLE_CELL) {
+        Logger.log("Cell");
+        if(element.getParent().getChildIndex(element) === 0) {
+          Logger.log("First of row");
+          element = element.getParent();
+        } else return;
+      }
+      if(element.getType() == DocumentApp.ElementType.TABLE_ROW) {
+        Logger.log("Row");
+        if(element.getParent().getChildIndex(element) === 0) {
+          Logger.log("First of table");
+          element = element.getParent();
+        } else return;
+      }
+      if(textSelected) {
+        throw ("Cannot name top-level elements and text at the same time");
+      }
+      var found = false;
+      List.foreach(exprs, function(expr) {
+        foreachDRange_(
+          expr.range,
+          function(txt2, start2, endInclusive2) {
+            if(isDescendantOf_(txt2, element)) {
+              throw ("'" + txt2.getText().substring(start2, endInclusive2 + 1) +"' is generated and strictly contained in the selection. This pattern is not supported yet. please change your selection")
+            }
+          },
+          function(element2) {
+            if(areSameElement_(element, element2)) {
+              formulaElements.push(formulaOf_(expr));
+              found = true;
+            } else if(isDescendantOf_(element2, element)) {
+              throw ("The selected element '" + element +
+                     "' is partially contained in a generated element (formula : " + formulaOf_(expr) +
+                     ") and thus cannot be extracted for now.");
+            } else if(isDescendantOf_(element, element2)) {
+              throw ("The selected element '" + element +
+                     "' contains a generated element (formula : " + formulaOf_(expr) +
+                     ") and thus cannot be extracted for now.");
+            }
+          });
+      });
+      if(!found) {
+        formulaElements.push(uneval_(elementToValue(element)));
+      }
+      elemsSelected = true;
+      pureString = false;
+      filteredSelection.push(Element(element));
+    });
+  // Here formulaElements.length is always > 0
+  if(formulaElements.length == 0) {
+    throw "None of the selected elements could be extracted";
+  }
+  var formula = formulaElements.length == 1 ? formulaElements[0] : "[" + formulaElements.join(",\n") + "]"; 
+  
+  var toAppendToSidebarEnv = "";
+  var feedback = "";
+  var maybefunction = "";
+  if(argumentNames.length == 0) {
+    if(nameFormulasInline) {
+      formula = "=(/*"+name+"=*/" + formula + ")";
+    } else {
+      if(pureString && lastElem.length > 0 && !(/^\s|\s$/.exec(lastElem[0]))) {
+        toAppendToSidebarEnv = name + " = " + lastElem;
+      } else {
+        toAppendToSidebarEnv = name + " = (" + formula + ")";
+      }
+      formula = "=" + name;
+    }
+  } else {
+    if(!nameFormulasInline) {
+      feedback += "\nExtracted as inline named function because of the presence of inline named formulas."
+    }
+    formula = "=(/*"+name+"("+argumentNames.join(",")+")=*/(function("+
+      argumentNames.join(",")
+    +") { return " + formula + ";})("+
+      argumentValues.join(",")
+    +"))";
+    maybefunction = "("+argumentNames.join(",")+")";
+  }
+  removeFormulas_(doc, selection);
+  addRange_(doc, formulaValue_(formula, undefined), filteredSelection);
+  if(toAppendToSidebarEnv) {
+    docProperties.sidebarEnv = docProperties.sidebarEnv + (docProperties.sidebarEnv ? "\n" : "") + toAppendToSidebarEnv;
+  }
+  var result = evaluateFormulas(options, docProperties, doc);
+  if(!result) result = {};
+  if(!result.feedback) result.feedback = "";
+  result.feedback = "Selection has been named '" + name + "'. You can now type =" + name + maybefunction +  " anywhere in the doc to reuse it.\n" + result.feedback + feedback;
+  if(toAppendToSidebarEnv) {
+    result.newSidebarEnv = docProperties.sidebarEnv;
+  }
+  return result;
 }
 
 function insertFormulaAtCursor(options, docProperties, formulaValue, doc) {
