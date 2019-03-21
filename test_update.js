@@ -23,16 +23,25 @@ let envS = {head: {name: "s", value: {
 let tests = 0;
 let testsPassed = 0;
   
-function assertUpdate(env, code, value, newCode, envPredicate) {
+function assertUpdate(env, code, value, newCode, envPredicate, nth) {
   tests++;
   var result = update_(env, code)(value);
   if(result.ctor == "Ok") {
-    if(result._0.node !== newCode) {
-      console.log("Error: Expected\n" + newCode + "\n, got\n" + result._0.node);
+    result = result._0;
+    while(nth >= 2 && result) {
+      result = result.next();
+      nth--;
+    }
+    if(!result) {
+      console.log("Error: Expected\n" + newCode + "\n, got no " + nth + "-th solution");
+        return;
+    }
+    if(result.node !== newCode) {
+      console.log("Error: Expected\n" + newCode + "\n, got\n" + result.node);
     } else {
-      result = envPredicate ? envPredicate(result._0.env) : undefined;
+      result = envPredicate ? envPredicate(result.env) : undefined;
       if(result && result.ctor == "Err") {
-        console.log("Error: " + result._0);
+        console.log("Error: " + result);
       } else {
         testsPassed++;
       }
@@ -88,6 +97,8 @@ assertUpdate(envNiu, "//\nniu//x", [["Normal",{bold:true}], " ", ["italic", {ita
 //*/
 assertUpdate(envS, "s", [[1,"2"],"3", "4"], "[s, \"3\", \"4\"]")
 assertUpdate(envX12, "[x, {italic: true}]", 12, "x");
+assertUpdate(envX12, "x", [12, {italic: true}], "[x, {italic:true}]");
+assertUpdate(envX12, "x", [12, {italic: true}], "x", envEqual("x", [12, {italic: true}]), 2);
 
 console.log(testsPassed + "/" + tests + " passed");
 if(testsPassed !== tests) {

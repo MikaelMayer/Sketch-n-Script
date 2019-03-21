@@ -586,7 +586,7 @@ function computeDiffs_(oldVal: any, newVal: any): Diffs {
   return [];
 }
 
-type Update_Result = {env: Env, node: String};
+type Update_Result = {env: Env, node: String, next: () => Update_Result | undefined};
 
 // Given the old formula and the new value, try to generate a new formula.
 // If fails, return false
@@ -602,13 +602,32 @@ function update_(env, oldFormula): (newVal: any) => Res<string, Update_Result> {
     console.log("computeDiffs_(" + uneval_(oldVal) + ", " + uneval_(newVal) + ")");
     console.log(uneval_(diffs, ""));
     //*/
-    var updated = processUpdateAction(UpdateContinue({context: [], env: env, node: oldNode}, {newVal: newVal, oldVal: oldVal, diffs: diffs}));
-    return resultCase(updated, function(x) { return Err(x); },
-      function(progWithAlternatives: ProgWithAlternatives): Res<string, Update_Result> {
-        return Ok<Update_Result>({env: progWithAlternatives.prog.env, node: progWithAlternatives.prog.node.unparse()});
-      }
-    )
+    return formatUpdateResult(UpdateContinue({context: [], env: env, node: oldNode}, {newVal: newVal, oldVal: oldVal, diffs: diffs}))
   }
+}
+
+function formatUpdateResult(updateAction, callbacks?, forks?): Res<string, Update_Result> {
+  var updated = processUpdateAction(updateAction, callbacks, forks);
+  return resultCase(updated, function(x) { return Err(x); },
+    function(progWithAlternatives: ProgWithAlternatives): Res<string, Update_Result> {
+      var uResult = {
+        env: progWithAlternatives.prog.env,
+        node: progWithAlternatives.prog.node.unparse(),
+        next() {
+          if(progWithAlternatives.alternatives.length == 0) return undefined;
+          var fork = progWithAlternatives.alternatives[0];
+          var remainingForks = progWithAlternatives.alternatives.slice(1);
+          var action = fork.action;
+          var callbacks = fork.callbacks;
+          var r = formatUpdateResult(action, callbacks, remainingForks);
+          var result = r.ctor == "Err" ? undefined : r._0;
+          uResult.next = (result => () => result)(result);
+          return result;
+        }
+      };
+      return Ok<Update_Result>(uResult);
+    }
+  )
 }
 
 function testUpdate() {

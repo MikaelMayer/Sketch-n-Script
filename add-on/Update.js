@@ -571,11 +571,30 @@ function update_(env, oldFormula) {
         console.log("computeDiffs_(" + uneval_(oldVal) + ", " + uneval_(newVal) + ")");
         console.log(uneval_(diffs, ""));
         //*/
-        var updated = processUpdateAction(UpdateContinue({ context: [], env: env, node: oldNode }, { newVal: newVal, oldVal: oldVal, diffs: diffs }));
-        return resultCase(updated, function (x) { return Err(x); }, function (progWithAlternatives) {
-            return Ok({ env: progWithAlternatives.prog.env, node: progWithAlternatives.prog.node.unparse() });
-        });
+        return formatUpdateResult(UpdateContinue({ context: [], env: env, node: oldNode }, { newVal: newVal, oldVal: oldVal, diffs: diffs }));
     };
+}
+function formatUpdateResult(updateAction, callbacks, forks) {
+    var updated = processUpdateAction(updateAction, callbacks, forks);
+    return resultCase(updated, function (x) { return Err(x); }, function (progWithAlternatives) {
+        var uResult = {
+            env: progWithAlternatives.prog.env,
+            node: progWithAlternatives.prog.node.unparse(),
+            next: function () {
+                if (progWithAlternatives.alternatives.length == 0)
+                    return undefined;
+                var fork = progWithAlternatives.alternatives[0];
+                var remainingForks = progWithAlternatives.alternatives.slice(1);
+                var action = fork.action;
+                var callbacks = fork.callbacks;
+                var r = formatUpdateResult(action, callbacks, remainingForks);
+                var result = r.ctor == "Err" ? undefined : r._0;
+                uResult.next = (function (result) { return function () { return result; }; })(result);
+                return result;
+            }
+        };
+        return Ok(uResult);
+    });
 }
 function testUpdate() {
     Logger.log(update_(undefined, "/*a=*/\"Hi\"")("Hai"));
