@@ -1,3 +1,15 @@
+function isLetter(s) {
+  return /^[a-zA-Z0-9_\$]$/.exec(s);
+}
+
+function endsWithLetter(s) {
+  return s.length > 0 && isLetter(s[s.length - 1]);
+}
+
+function wrapsWithParens(s) {
+  return s.replace(/^(=?)(?!\(|\[|=)([\s\S]*)$/,
+            function(match, eq, content) { return eq + "(" + content + ")"; });
+}
 
 //////// Array Manipulation ///////////////
 

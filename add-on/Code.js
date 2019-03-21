@@ -1693,6 +1693,7 @@ function revealFormulas(options, docProperties, doc, body) {
       var lastStart;
       var lastParent;
       var lastChildIndex;
+      var charAfterLastTextSelectionIsLetter = false;
       if(positions.length == 0) return;
       for(var p in positions) {
         var position = positions[p];
@@ -1703,6 +1704,8 @@ function revealFormulas(options, docProperties, doc, body) {
           if(start == 0 && lastTxt && txt.getText().length <= endInclusive + 1) {
             txt.removeFromParent();
           } else {
+            charAfterLastTextSelectionIsLetter =
+              isLetter(txt.getText().substring(endInclusive + 1, endInclusive + 2));
             txt.deleteText(start, endInclusive);
             lastTxt = txt;
             lastStart = start;
@@ -1732,17 +1735,21 @@ function revealFormulas(options, docProperties, doc, body) {
           position.element.removeFromParent();
         }
       }
+      var sourceToInsert =
+            endsWithLetter(expr.source) && charAfterLastTextSelectionIsLetter ?
+              wrapsWithParens(expr.source) : expr.source;
       if(typeof lastTxt === "undefined") { //The elements remaining to the left of the deletion is not a text
         if(lastChildIndex >= lastParent.getNumChildren()) { // No child afterwards
-          txt = lastParent.appendText(expr.source);
+          txt = lastParent.appendText(sourceToInsert);
           start = 0;
         } else {
           var next = lastParent.getChild(lastChildIndex);
           if(next && next.getType() == DocumentApp.ElementType.TEXT) {
             txt = next;
+            txt.insertText(0, sourceToInsert);
             start = 0;
           } else {
-            txt = lastParent.insertText(lastChildIndex, expr.source);
+            txt = lastParent.insertText(lastChildIndex, sourceToInsert);
             start = 0;
           }
         }
@@ -1756,7 +1763,7 @@ function revealFormulas(options, docProperties, doc, body) {
           nextSibling.merge(); // Will not change anything
         }
         var u = txt.getText();
-        txt.insertText(start, expr.source);
+        txt.insertText(start, sourceToInsert);
         var w = txt.getText();
         Logger.log("before merge (left):'" + l + "'\nbefore merge (right):'" + t + "'\nafter merge (total):'" + u + "'\nAfter insertion:'" + w + "'");
       }
@@ -1880,7 +1887,7 @@ function nameSelection(options, docProperties, doc, body) {
       textSelected = true;
       filteredSelection.push(TextRange(txt, start, endInclusive));
       charAfterLastTextSelectionIsLetter =
-        /^[a-zA-Z0-9_\$]$/.exec(txtText.substring(endInclusive + 1, endInclusive + 2));
+        isLetter(txtText.substring(endInclusive + 1, endInclusive + 2));
     },
     function(element) {
       Logger.log("element");
