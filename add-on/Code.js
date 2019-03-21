@@ -921,8 +921,7 @@ function extractExprs_(doc, maybeFinalExpr) {
     foreachDRange_(
       range,
       function(txt, start, endInclusive) {
-        var newValue = txt.getText().substring(start, endInclusive + 1); // TODO: Recover style change?
-        addToOutput(newValue);
+        addToOutput(toRichTextFormula(txt, start, endInclusive));
       },
       function(element) {
         addToOutput(elementToValue(element));
