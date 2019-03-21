@@ -46,14 +46,16 @@ function envEqual(name, v_) {
     return result || Err(name + " not found in env " + uneval_(newEnv))
   }
 }
-assertUpdate(envX12, "/*-*/1//x", 2, "/*-*/2//x");
-assertUpdate(envX12, "/*-*/'1'//x", 2, "/*-*/2//x");
-assertUpdate(envX12, "/*-*/1//x", '2', "/*-*/\"2\"//x");
-assertUpdate(envX12, "/*-*/'1'//x", '2', "/*-*/'2'//x");
-assertUpdate(envX12, "/*-*/\"1\"//x", '2', "/*-*/\"2\"//x");
-assertUpdate(envX12, "/*-*/ x //y", '2', "/*-*/ x //y", envEqual("x", "2"));
-assertUpdate(envX12, "/*-*/[15,/***/16]", [12, 13], "/*-*/[12,/***/13]");
-assertUpdate(envX12, "/*-*/x", [12, 13], "[/*-*/x, 13]");
-assertUpdate(envX12, '[x, " ", ["italic", {italic:true}]," ",["underlined",{underline:true}]]', [["Normal",{bold:true}]," ",["italic",{italic:true}]," ",["underlined",{underline:true}]],
+//*
+assertUpdate(envX12, "//\n1//x", 2, "//\n2//x");
+assertUpdate(envX12, "//\n'1'//x", 2, "//\n2//x");
+assertUpdate(envX12, "//\n1//x", '2', "//\n\"2\"//x");
+assertUpdate(envX12, "//\n'1'//x", '2', "//\n'2'//x");
+assertUpdate(envX12, "//\n\"1\"//x", '2', "//\n\"2\"//x");
+assertUpdate(envX12, "//\n x //y", '2', "//\n x //y", envEqual("x", "2"));
+assertUpdate(envX12, "//\n[15,//b\n16]", [12, 13], "//\n[12,//b\n13]");
+assertUpdate(envX12, "//\nx", [12, 13], "[//\nx, 13]");
+//*/
+assertUpdate(envX12, '[x, " ", ["italic", {italic:true}]," ",["underlined",{underline:true}]]', [[12,{bold:true}]," ",["italic",{italic:true}]," ",["underlined",{underline:true}]],
   '[[x, {bold:true}], " ", ["italic", {italic:true}]," ",["underlined",{underline:true}]]')
 console.log(testsPassed + "/" + tests + " passed");
