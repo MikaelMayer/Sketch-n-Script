@@ -343,3 +343,67 @@ function testBodyStructure() {
   }*/
 }
 /**/
+
+var minifyProperties = {};
+minifyProperties[DocumentApp.Attribute.BACKGROUND_COLOR] = "background";
+minifyProperties[DocumentApp.Attribute.FOREGROUND_COLOR] = "color";
+minifyProperties[DocumentApp.Attribute.LINK_URL] = "url";
+minifyProperties[DocumentApp.Attribute.GLYPH_TYPE] = "glyph";
+minifyProperties[DocumentApp.Attribute.LIST_ID] = "id";
+minifyProperties[DocumentApp.Attribute.HORIZONTAL_ALIGNMENT] = "horizontal";
+minifyProperties[DocumentApp.Attribute.STRIKETHROUGH] = "strike";
+
+function minifyPropertyKey(key) {
+  return typeof minifyProperties[key] !== "undefined" ? minifyProperties[key] :
+    key.replace(/^(\w)|_(\w)|(\w)/g, function(match, start, mid, inside) {
+      return start ? start.toLowerCase() : mid ? mid : inside.toLowerCase(); })
+}
+/*
+function testRichFormula() {
+  var doc = DocumentApp.getActiveDocument();
+  var selection = doc.getSelection();
+  var selectionElements = selection ? selection.getRangeElements() : undefined;
+  var txt = selectionElements[0].getElement();
+  var start = selectionElements[0].getStartOffset();
+  var endInclusive = selectionElements[0].getEndOffsetInclusive();
+  Logger.log(uneval_(toRichTextFormula(txt, start, endInclusive)));
+}*/
+
+function toRichTextFormula(txt, start, endInclusive) {
+  var bufferStr = "";
+  var text = txt.getText();
+  var offset = start;
+  var prevAttributes = {};
+  var attributes = {};
+  if(start > 0) prevAttributes = txt.getAttributes(start - 1);
+  var textElements = [];
+  function flush() {
+    if(bufferStr != "") {
+      var attrs = {};
+      var hasAttribute = false;
+      for(var k in prevAttributes) {
+        var v = prevAttributes[k];
+        if(typeof v === "undefined" || v === null) continue;
+        hasAttribute = true;
+        attrs[minifyPropertyKey(k)] = v;
+      }
+      textElements.push(hasAttribute ? [bufferStr, attrs] : bufferStr);
+      bufferStr = "";
+    }
+  }
+  while(offset <= endInclusive) {
+    attributes = txt.getAttributes(offset);
+    if(uneval_(prevAttributes) == uneval_(attributes)) {
+      bufferStr += text.substring(offset, offset + 1);
+    } else {
+      flush();
+      bufferStr += text.substring(offset, offset + 1);
+    }
+    prevAttributes = attributes;
+    offset++;
+  }
+  flush();
+  if(textElements.length === 1) return textElements[0];
+  return textElements;
+}
+

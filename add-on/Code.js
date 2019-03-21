@@ -15,7 +15,7 @@ function doIt() {
 // 
 
 var HIGHLIGHT_VALUE_COLOR = "#B6FFB6";
-var UNHIGHLIGHT_VALUE_COLOR = "#FFFFFF";
+var UNHIGHLIGHT_VALUE_COLOR = null;
 var REVEALED_FORMULA_COLOR = "#FFE8C9";
 var REVEALED_FORMULA_NAME = "revealedFormula";
 var REVEALED_FORMULA_FONT = "Consolas";
@@ -876,7 +876,7 @@ function elementToValue(element) {
     }
     return [element.getType() == DocumentApp.ElementType.PARAGRAPH ? "p" : "li", {}, subElems];
   } else if(element.getType() == DocumentApp.ElementType.TEXT) {
-    return element.getText();
+    return toRichTextFormula(element, 0, element.getText().length - 1);
   } else if(element.getType() == DocumentApp.ElementType.INLINE_IMAGE) {
     return ["img", {}, []]; // Will be asjusted later with the old value.
   } else {
@@ -1849,15 +1849,7 @@ function nameSelection(options, docProperties, doc, body) {
           });
       });
       var txtText = txt.getText();
-      var value = txtText.substring(start, endInclusive + 1);
-      var formula = "";
-      var first = true;
-      var addFormulaElem = function(elem) {
-        if(first) {
-          formula = formula + elem;
-          first = false;
-        } else formula = formula + " + " + elem;
-      }
+      //var value = txtText.substring(start, endInclusive + 1);
       var lastIndex = start;
       for(var k in rangesBeneath) {
         pureString = false;
@@ -1868,41 +1860,38 @@ function nameSelection(options, docProperties, doc, body) {
         var name_ = r[3];
         if(lastIndex < start_) {
           var x = txtText.substring(lastIndex, start_);
-          addFormulaElem(toExpString(x));
+          if(start_ > lastIndex)
+            formulaElements.push(uneval_(toRichTextFormula(txt, lastIndex, start_ - 1)));
         }
         if(name_) {
-          addFormulaElem(name_);
+          formulaElements.push(name_);
           argumentNames.push(name_);
           argumentValues.push(formula_);
         } else {
-          addFormulaElem(formula_); // Name, call or parentheses.
+          formulaElements.push(formula_); // Name, call or parentheses.
         }
         lastIndex = endInclusive_ + 1;
       }
       if(lastIndex != endInclusive + 1) {
         lastElem = txtText.substring(lastIndex, endInclusive + 1);
-        addFormulaElem(toExpString(lastElem));
+        var final = toRichTextFormula(txt, lastIndex, endInclusive);
+        formulaElements.push(uneval_(final));
+        pureString = pureString && typeof final === "string";
       }
-      formulaElements.push(formula);
       textSelected = true;
       filteredSelection.push(TextRange(txt, start, endInclusive));
       charAfterLastTextSelectionIsLetter =
         isLetter(txtText.substring(endInclusive + 1, endInclusive + 2));
     },
     function(element) {
-      Logger.log("element");
       // If the element is a table cell, and if it's the first one, we consider the table instead.
       if(element.getType() == DocumentApp.ElementType.TABLE_CELL) {
-        Logger.log("Cell");
         if(element.getParent().getChildIndex(element) === 0) {
-          Logger.log("First of row");
           element = element.getParent();
         } else return;
       }
       if(element.getType() == DocumentApp.ElementType.TABLE_ROW) {
-        Logger.log("Row");
         if(element.getParent().getChildIndex(element) === 0) {
-          Logger.log("First of table");
           element = element.getParent();
         } else return;
       }
