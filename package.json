@@ -6,6 +6,8 @@
   "scripts": {
     "compile": "tsc --noImplicitUseStrict -p src/ --outDir add-on/ && sed -i '12,14d' add-on/Update.js && sed -i '1s/var __assign/syntax = typeof syntax == \"undefined\" ? this : syntax;\\nvar __assign/' add-on/Update.js",
     "test": "node script_testscript.js",
+    "pulladdon": "cd add-on && clasp pull",
+    "pushaddon": "cd add-on && clasp push",
     "minify": "uglifyjs --compress --mangle --output add-on/esprima-min.js -- add-on/esprima.js"
   },
   "repository": {

@@ -19,7 +19,7 @@ var DType;
 var DUType;
 (function (DUType) {
     DUType["Reuse"] = "Reuse";
-    DUType["NewValue"] = "New";
+    DUType["NewValue"] = "NewValue";
 })(DUType || (DUType = {}));
 ;
 function DDReuse(childDiffs) {
@@ -164,6 +164,11 @@ function processClone(prog, newVal, oldVal, diff, callback) {
 function valToNodeDiffs_(value) {
     return DDNewNode(value);
 }
+function keyValueToProperty(key, propertyValue) {
+    var Node = typeof Node == "undefined" ? esprima.Node : Node;
+    var propertyKey = new Node.Identifier("", key, key);
+    return new Node.Property("init", propertyKey, "", "", "", "", false, propertyValue, false, false);
+}
 function valToNode_(value) {
     var Node = typeof Node == "undefined" ? esprima.Node : Node;
     if (typeof value == "number" || typeof value == "boolean" || typeof value == "string" || typeof value == "object" && value === null) {
@@ -177,9 +182,8 @@ function valToNode_(value) {
             var children = [];
             for (var k in value) {
                 var v = value[k];
-                var propertyKey = new Node.Identifier("", k, k);
                 var propertyValue = valToNode_(v);
-                children.push(new Node.Property("init", propertyKey, "", "", "", "", false, propertyValue, false, false));
+                children.push(keyValueToProperty(k, propertyValue));
             }
             return new Node.ObjectExpression("", children, [], "");
         }
@@ -193,29 +197,56 @@ function processClones(prog, updateData, otherwise) {
         if (diff.ctor === DType.Clone) {
             return processClone(prog, updateData.newVal, updateData.oldVal, diff);
         }
-        else if (diff.kind.ctor === DUType.NewValue && Array.isArray(diff.kind.model)) {
-            var oldFormat = prog.node.type === Syntax.ArrayExpression ? prog.node : { wsBefore: "", separators: [], wsBeforeClosing: "" };
-            var newNode = new Node.ArrayExpression(oldFormat.wsBefore, diff.kind.model.map(valToNode_), oldFormat.separators, oldFormat.wsBeforeClosing);
-            var newDiffs = DDNewNode(newNode);
-            return updateForeach(prog.env, updateData.newVal, function (newChildVal, k) { return function (callback) {
-                var childDiff = diff.children[k];
-                if (typeof childDiff == "undefined" /* ||
-                   childDiff.length == 1 && childDiff[0].ctor === DType.Update &&
-                   (childDiff[0] as DUpdate).kind.ctor !== DUType.Reuse
-                */) { // New values are not back-propagated in this context. We don't want them to flow through or otherwise change the existing function.
-                    var newChildNode = valToNode_(newChildVal);
-                    var newChildNodeDiffs = valToNodeDiffs_(newChildVal);
-                    return UpdateResult(__assign({}, prog, { node: newChildNode, diffs: newChildNodeDiffs }), prog, callback);
+        else if (diff.kind.ctor === DUType.NewValue) {
+            var model = diff.kind.model;
+            if ((typeof model == "number" ||
+                typeof model == "string" ||
+                typeof model == "boolean") &&
+                (prog.node.type == Syntax.Literal ||
+                    prog.node.type == Syntax.ArrayExpression ||
+                    prog.node.type == Syntax.ObjectExpression)) { // TODO: Deal with string literals in a better way.
+                var oldFormat = prog.node.type === Syntax.Literal ? prog.node : { wsBefore: prog.node.wsBefore, value: undefined, raw: uneval_(model) };
+                var newChildVal = new Node.Literal(oldFormat.wsBefore, oldFormat.value, oldFormat.raw);
+                newChildVal.value = model;
+                return UpdateResult(__assign({}, prog, { node: newChildVal, diffs: valToNodeDiffs_(newChildVal) }), prog);
+            }
+            else if (typeof model == "object") {
+                var oldFormat = prog.node.type === Syntax.ArrayExpression ? prog.node : prog.node.type === Syntax.ObjectExpression ? prog.node : { wsBefore: "", separators: [], wsBeforeClosing: "" };
+                var newNode = valToNode_(model);
+                var separators = oldFormat.separators;
+                var numKeys = Array.isArray(model) ? model.length : Object.keys(model).length;
+                if (separators.length >= numKeys) {
+                    separators = separators.slice(0, Math.max(0, numKeys - 1));
                 }
-                else { // Clones and reuse go through this
-                    var oldChildVal = updateData.oldVal[k];
-                    return UpdateContinue(prog, {
-                        newVal: newChildVal, oldVal: oldChildVal, diffs: childDiff
-                    }, callback);
-                }
-            }; }, arrayGather(prog, newNode, newDiffs));
+                newNode.wsBefore = oldFormat.wsBefore;
+                newNode.wsBeforeClosing = oldFormat.wsBeforeClosing;
+                newNode.separators = separators;
+                var newDiffs = DDNewNode(newNode);
+                var gatherer = newNode.type === Syntax.ArrayExpression ?
+                    arrayGather(prog, newNode, newDiffs)
+                    : objectGather(prog, Object.keys(updateData.newVal), newNode, newDiffs);
+                return updateForeach(prog.env, Object.keys(updateData.newVal), function (k) { return function (callback) {
+                    var newChildVal = updateData.newVal[k];
+                    var childDiff = diff.children[k];
+                    if (typeof childDiff == "undefined") {
+                        var newChildNode = valToNode_(newChildVal);
+                        var newChildNodeDiffs = valToNodeDiffs_(newChildVal);
+                        return UpdateResult(__assign({}, prog, { node: newChildNode, diffs: newChildNodeDiffs }), prog, callback);
+                    }
+                    else { // Clones and reuse go through this
+                        var oldChildVal = updateData.oldVal[k];
+                        return UpdateContinue(prog, {
+                            newVal: newChildVal, oldVal: oldChildVal, diffs: childDiff
+                        }, callback);
+                    }
+                }; }, gatherer);
+            }
+            else {
+                if (otherwise)
+                    return otherwise(diff);
+            }
         }
-        else { // TODO: Deal with string literals in a better way.
+        else {
             if (otherwise)
                 return otherwise(diff);
         }
@@ -240,7 +271,16 @@ function updateForeach(env, collection, callbackIterator, gather) {
 function arrayGather(prog, newNode, newDiffs) {
     return function (newEnv, newNodes, newNodesDiffs) {
         newNode.elements = newNodes;
-        newDiffs[0].children.elements = DDReuse(newNodesDiffs);
+        newDiffs[0].children.elements = DDReuse(newNodesDiffs); // FIXME: Not correct: elements form a new array.
+        return UpdateResult(__assign({}, prog, { env: newEnv, node: newNode, diffs: newDiffs }), prog);
+    };
+}
+function objectGather(prog, keys, newNode, newDiffs) {
+    return function (newEnv, newNodes, newNodesDiffs) {
+        keys.map(function (key, k) {
+            newNode.properties.push(keyValueToProperty(key, newNodes[k]));
+        });
+        newDiffs[0].children.properties = DDReuse(newNodesDiffs.map(function (newNodeDiff) { return DDReuse({ value: newNodeDiff }); })); // FIXME: Not reuse?!
         return UpdateResult(__assign({}, prog, { env: newEnv, node: newNode, diffs: newDiffs }), prog);
     };
 }
@@ -326,7 +366,7 @@ function getUpdateAction(prog, updateData) {
                 }; }, arrayGather(prog, newNode, newDiffs));
             }
             else {
-                return UpdateFail("Don't know how to handle this kind of diff on arrays: " + DUType[diff.kind.ctor]);
+                return UpdateFail("Don't know how to handle this kind of diff on arrays: " + diff.kind.ctor);
             }
         });
     }
@@ -369,6 +409,9 @@ function isElement_(value) {
         typeof value[2] == "object" &&
         Array.isArray(value[2]);
 }
+function isSimpleChildClone(d) {
+    return d.ctor == DType.Clone && d.path.up === 0 && d.path.down.length == 1;
+}
 // Later, we could include the context while computing diffs to recover up clones.
 function computeDiffs_(oldVal, newVal) {
     var o = typeof oldVal;
@@ -379,21 +422,42 @@ function computeDiffs_(oldVal, newVal) {
     function addNewObjectDiffs(diffs) {
         var childDiffs = {};
         var model = Array.isArray(newVal) ? Array(newVal.length) : {};
-        for (var key in newVal) {
-            if (typeof oldVal == "object" &&
+        var lastClosestOffset = 0;
+        var _loop_2 = function () {
+            if (typeof oldVal == "object" && lastClosestOffset == 0 &&
                 uneval_(oldVal[key]) == uneval_(newVal[key])) {
-                // Same key, we try not to clone it.
+                // Same key, we try not to find fancy diffs with it.
                 childDiffs[key] = DDClone({ up: 0, down: [key] }, DDSame());
             }
             else {
-                var cd = computeDiffs_(oldVal, newVal[key]);
+                cd = computeDiffs_(oldVal, newVal[key]);
                 if (cd.length == 1 && cd[0].ctor == DType.Update && cd[0].kind.ctor == DUType.NewValue && Object.keys(cd[0].children).length == 0) {
                     model[key] = cd[0].kind.model;
                 }
                 else {
+                    if (cd.length >= 1 && isSimpleChildClone(cd[0])) {
+                        // Here we should remove everything else which is not a clone, as we are just moving children around the object.
+                        cd = cd.filter(function (d) { return isSimpleChildClone(d); });
+                        if (Array.isArray(newVal)) {
+                            // The most likely clones are those whose key is close to the original one.
+                            // TODO: For deletions and insertions, compute an offset to change this key.
+                            var nKey_1 = parseInt(key);
+                            cd.sort(function (d1, d2) {
+                                return Math.abs(parseInt(d1.path.down[0] + "") - nKey_1 - lastClosestOffset) -
+                                    Math.abs(parseInt(d2.path.down[0] + "") - nKey_1 - lastClosestOffset);
+                            });
+                            lastClosestOffset = parseInt(cd[0].path.down[0] + "") - nKey_1;
+                        }
+                        ;
+                        //cd.length = 1;
+                    }
                     childDiffs[key] = cd;
                 }
             }
+        };
+        var cd;
+        for (var key in newVal) {
+            _loop_2();
         }
         diffs.push.apply(diffs, DDNewObject(childDiffs, model));
         return diffs;

@@ -31,7 +31,7 @@ enum DType {
 };
 enum DUType {
   Reuse = "Reuse",
-  NewValue = "New",
+  NewValue = "NewValue",
 };
 type DUKindNew = 
   {ctor: DUType.NewValue, model: any};
@@ -191,6 +191,12 @@ function valToNodeDiffs_(value: any): DUpdate[] {
   return DDNewNode(value);
 }
 
+function keyValueToProperty(key: string, propertyValue: Node.PropertyValue): Node.Property {
+  var Node = typeof Node == "undefined" ? esprima.Node : Node;
+  let propertyKey = new Node.Identifier("", key, key);
+  return new Node.Property("init", propertyKey, "", "", "", "", false, propertyValue, false, false);
+}
+
 function valToNode_(value: any): AnyNode {
   var Node = typeof Node == "undefined" ? esprima.Node : Node;
   if(typeof value == "number" || typeof value == "boolean" || typeof value == "string" || typeof value == "object" && value === null) {
@@ -202,9 +208,8 @@ function valToNode_(value: any): AnyNode {
       var children: Node.Property[] = [];
       for(let k in value) {
         var v = value[k];
-        var propertyKey = new Node.Identifier("", k, k);
         var propertyValue = valToNode_(v) as Node.PropertyValue;
-        children.push(new Node.Property("init", propertyKey, "", "", "", "", false, propertyValue, false, false));
+        children.push(keyValueToProperty(k, propertyValue));
       }
       return new Node.ObjectExpression("", children, [], "");
     }
@@ -219,29 +224,54 @@ function processClones(prog: Prog, updateData: UpdateData,
   return UpdateAlternative(...updateData.diffs.map(function(diff: Diff): UpdateAction {
     if(diff.ctor === DType.Clone) {
       return processClone(prog, updateData.newVal, updateData.oldVal, diff);
-    } else if(diff.kind.ctor === DUType.NewValue && Array.isArray(diff.kind.model)) {
-      let oldFormat = prog.node.type === Syntax.ArrayExpression ? prog.node as Node.ArrayExpression : { wsBefore: "", separators: [], wsBeforeClosing: ""};
-      let newNode = new Node.ArrayExpression(oldFormat.wsBefore, diff.kind.model.map(valToNode_), oldFormat.separators, oldFormat.wsBeforeClosing);
-      let newDiffs = DDNewNode(newNode);
-      return updateForeach(prog.env, updateData.newVal as any[],
-        (newChildVal, k) => callback => {
-          let childDiff = diff.children[k];
-          if(typeof childDiff == "undefined"/* ||
-             childDiff.length == 1 && childDiff[0].ctor === DType.Update &&
-             (childDiff[0] as DUpdate).kind.ctor !== DUType.Reuse
-          */) { // New values are not back-propagated in this context. We don't want them to flow through or otherwise change the existing function.
-            let newChildNode = valToNode_(newChildVal);
-            let newChildNodeDiffs = valToNodeDiffs_(newChildVal);
-            return UpdateResult({...prog, node: newChildNode, diffs: newChildNodeDiffs}, prog, callback);
-          } else { // Clones and reuse go through this
-            let oldChildVal = (updateData.oldVal as any[])[k];
-            return UpdateContinue(prog, {
-                 newVal: newChildVal, oldVal: oldChildVal, diffs: childDiff }, callback)
-          }
-        },
-        arrayGather(prog, newNode, newDiffs)
-      )
-    } else { // TODO: Deal with string literals in a better way.
+    } else if(diff.kind.ctor === DUType.NewValue) {
+      let model = diff.kind.model;
+      if((typeof model == "number" ||
+           typeof model == "string" ||
+           typeof model == "boolean") &&
+             (prog.node.type == Syntax.Literal ||
+              prog.node.type == Syntax.ArrayExpression ||
+              prog.node.type == Syntax.ObjectExpression)) { // TODO: Deal with string literals in a better way.
+        let oldFormat = prog.node.type === Syntax.Literal ? prog.node as Node.Literal : { wsBefore: prog.node.wsBefore, value: undefined, raw: uneval_(model)};
+        let newChildVal = new Node.Literal(oldFormat.wsBefore, oldFormat.value, oldFormat.raw);
+        newChildVal.value = model;
+        return UpdateResult({...prog, node: newChildVal, diffs: valToNodeDiffs_(newChildVal)}, prog);
+      } else if(typeof model == "object") {
+        let oldFormat = prog.node.type === Syntax.ArrayExpression ? prog.node as Node.ArrayExpression : prog.node.type === Syntax.ObjectExpression ? prog.node as Node.ObjectExpression : { wsBefore: "", separators: [], wsBeforeClosing: ""};
+        let newNode = valToNode_(model) as (Node.ArrayExpression | Node.ObjectExpression);
+        let separators = oldFormat.separators;
+        let numKeys = Array.isArray(model) ? model.length : Object.keys(model).length;
+        if(separators.length >= numKeys) {
+          separators = separators.slice(0, Math.max(0, numKeys - 1));
+        }
+        newNode.wsBefore = oldFormat.wsBefore;
+        newNode.wsBeforeClosing = oldFormat.wsBeforeClosing;
+        newNode.separators = separators;
+        let newDiffs = DDNewNode(newNode);
+        let gatherer =
+          newNode.type === Syntax.ArrayExpression ?
+            arrayGather(prog, newNode as Node.ArrayExpression, newDiffs)
+            : objectGather(prog, Object.keys(updateData.newVal), newNode as Node.ObjectExpression, newDiffs);
+        return updateForeach(prog.env, Object.keys(updateData.newVal),
+          k => callback => {
+            let newChildVal = updateData.newVal[k];
+            let childDiff = diff.children[k];
+            if(typeof childDiff == "undefined") {
+              let newChildNode = valToNode_(newChildVal);
+              let newChildNodeDiffs = valToNodeDiffs_(newChildVal);
+              return UpdateResult({...prog, node: newChildNode, diffs: newChildNodeDiffs}, prog, callback);
+            } else { // Clones and reuse go through this
+              let oldChildVal = (updateData.oldVal as any[])[k];
+              return UpdateContinue(prog, {
+                   newVal: newChildVal, oldVal: oldChildVal, diffs: childDiff }, callback)
+            }
+          },
+          gatherer
+        );
+      } else {
+        if(otherwise) return otherwise(diff);
+      }
+    } else {
       if(otherwise) return otherwise(diff);
     }
     return undefined;
@@ -268,7 +298,17 @@ function updateForeach<elem>(env: Env,
 function arrayGather(prog: Prog, newNode: Node.ArrayExpression, newDiffs: DUpdate[]) {
   return function(newEnv: Env, newNodes: AnyNode[], newNodesDiffs: Diffs[]): UpdateAction {
     newNode.elements = newNodes;
-    newDiffs[0].children.elements = DDReuse(newNodesDiffs);
+    newDiffs[0].children.elements = DDReuse(newNodesDiffs); // FIXME: Not correct: elements form a new array.
+    return UpdateResult({...prog, env: newEnv, node: newNode, diffs: newDiffs}, prog);
+  }
+}
+
+function objectGather(prog: Prog, keys: string[], newNode: Node.ObjectExpression, newDiffs: DUpdate[]) {
+  return function(newEnv: Env, newNodes: AnyNode[], newNodesDiffs: Diffs[]): UpdateAction {
+    keys.map((key, k) => {
+      newNode.properties.push(keyValueToProperty(key, newNodes[k] as Node.PropertyValue));
+    });
+    newDiffs[0].children.properties = DDReuse(newNodesDiffs.map((newNodeDiff) => DDReuse({value: newNodeDiff}))); // FIXME: Not reuse?!
     return UpdateResult({...prog, env: newEnv, node: newNode, diffs: newDiffs}, prog);
   }
 }
@@ -364,7 +404,7 @@ function getUpdateAction(prog: Prog, updateData: UpdateData): UpdateAction {
               UpdateResult({...prog, node: element, diffs: DDSame()}, prog, callback),
           arrayGather(prog, newNode, newDiffs));
       } else {
-        return UpdateFail("Don't know how to handle this kind of diff on arrays: " + DUType[diff.kind.ctor]);
+        return UpdateFail("Don't know how to handle this kind of diff on arrays: " + diff.kind.ctor);
       }
     });
   }
@@ -407,6 +447,10 @@ function isElement_(value: any) {
     Array.isArray(value[2]);
 }
 
+function isSimpleChildClone(d: Diff): boolean {
+  return d.ctor == DType.Clone && (d as DClone).path.up === 0 && (d as DClone).path.down.length == 1;
+}
+
 // Later, we could include the context while computing diffs to recover up clones.
 function computeDiffs_(oldVal: any, newVal: any): Diffs {
   let o: string = typeof oldVal;
@@ -417,16 +461,32 @@ function computeDiffs_(oldVal: any, newVal: any): Diffs {
   function addNewObjectDiffs(diffs: Diffs): Diffs {
     let childDiffs: ChildDiffs = {};
     let model: any = Array.isArray(newVal) ? Array(newVal.length) : {};
+    let lastClosestOffset: number = 0;
     for(var key in newVal) {
-      if(typeof oldVal == "object" &&
+      if(typeof oldVal == "object" && lastClosestOffset == 0 &&
          uneval_(oldVal[key]) == uneval_(newVal[key])) {
-        // Same key, we try not to clone it.
+        // Same key, we try not to find fancy diffs with it.
         childDiffs[key] = DDClone({up: 0, down: [key]}, DDSame());
       } else {
         var cd = computeDiffs_(oldVal, newVal[key]);
         if(cd.length == 1 && cd[0].ctor == DType.Update && (cd[0] as DUpdate).kind.ctor == DUType.NewValue && Object.keys((cd[0] as DUpdate).children).length == 0) {
           model[key] = ((cd[0] as DUpdate).kind as {model: any}).model;
         } else {
+          if(cd.length >= 1 && isSimpleChildClone(cd[0])) {
+            // Here we should remove everything else which is not a clone, as we are just moving children around the object.
+            cd = cd.filter(d => isSimpleChildClone(d)) as DClone[];
+            if(Array.isArray(newVal)) {
+              // The most likely clones are those whose key is close to the original one.
+              // TODO: For deletions and insertions, compute an offset to change this key.
+              let nKey = parseInt(key);
+              (cd as DClone[]).sort(function(d1, d2) {
+                return Math.abs(parseInt(d1.path.down[0] + "") - nKey - lastClosestOffset) -
+                       Math.abs(parseInt(d2.path.down[0] + "") - nKey - lastClosestOffset);
+              });
+              lastClosestOffset = parseInt((cd[0] as DClone).path.down[0] + "") - nKey;
+            };
+            //cd.length = 1;
+          }
           childDiffs[key] = cd;
         }
       }
