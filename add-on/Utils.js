@@ -164,29 +164,32 @@ function buildEnvJS_(env) {
 }
 
 
-function uneval_(x) {
+function uneval_(x, indent) {
   if(typeof x == "string") {
     return toExpString(x);
   }
   if(typeof x == "number" || typeof x == "boolean") {
-    return "" + x;
+    return x;
   }
   if(typeof x == "object" && x == null) {
     return "null";
   }
-  if(typeof x == "object" && Array.isArray(x)) { // Arrays
-    var result = [];
-    for(var i = 0; i < x.length; i++) {
-      result.push(uneval_(x[i]));
-    }
-    return "[" + result.join(",") + "]";
-  }
   if(typeof x == "object") {
     var result = [];
-    for(var k in x) {
-      result.push(k + ":" + uneval_(x[k]));
+    var isSmall = Object.keys(x).length <= 1;
+    var newline = typeof indent == "undefined" || isSmall ? "" : "\n" + indent;
+    var separator = newline + ", ";
+    var newIndent = typeof indent == "undefined" ? indent : indent + "  ";
+    if(Array.isArray(x)) { // Arrays
+      for(var i = 0; i < x.length; i++) {
+        result.push(uneval_(x[i], newIndent));
+      }
+      return "[ " + result.join(separator) + "]";
     }
-    return "{" + result.join(",") + "}";
+    for(var k in x) {
+      result.push(k + ": " + (typeof x[k] == "object" ? newline + "  " : "") + uneval_(x[k], newIndent));
+    }
+    return "{ " + result.join(separator) + "}";
   }
   return "" + x;
 }

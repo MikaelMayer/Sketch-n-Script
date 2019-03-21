@@ -55,7 +55,16 @@ assertUpdate(envX12, "//\n\"1\"//x", '2', "//\n\"2\"//x");
 assertUpdate(envX12, "//\n x //y", '2', "//\n x //y", envEqual("x", "2"));
 assertUpdate(envX12, "//\n[15,//b\n16]", [12, 13], "//\n[12,//b\n13]");
 assertUpdate(envX12, "//\nx", [12, 13], "[//\nx, 13]");
-//*/
 assertUpdate(envX12, '[x, " ", ["italic", {italic:true}]," ",["underlined",{underline:true}]]', [[12,{bold:true}]," ",["italic",{italic:true}]," ",["underlined",{underline:true}]],
   '[[x, {bold:true}], " ", ["italic", {italic:true}]," ",["underlined",{underline:true}]]')
+//*/
+assertUpdate(undefined,  "[\"Normal\",[\"italic\",{italic:true}]]", [["Normal",{bold:true}],["italic",{italic:true}]], "[[\"Normal\", {bold:true}],[\"italic\",{italic:true}]]")
+assertUpdate(envX12,  "[x,[\"italic\",{italic:true}]]", 
+[[12,{bold:true}],["italic",{italic:true}]], "[[x, {bold:true}],[\"italic\",{italic:true}]]")
+
 console.log(testsPassed + "/" + tests + " passed");
+if(testsPassed !== tests) {
+  console.log((tests - testsPassed) + " tests failed");
+} else {
+  console.log("All tests passed");
+}

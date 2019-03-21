@@ -20,7 +20,7 @@ type ProgDiffs = Prog & { diffs: Diffs }
 type UpdateData = {newVal: any, oldVal: any, diffs?: Diffs}
 declare let Logger: { log: (content: any) => any };
 declare function mergeUpdatedEnvs(env1: Env, env2: Env): Res<string,Env>;
-declare function uneval_(x: any): string
+declare function uneval_(x: any, indent?: string): string
 declare function buildEnvJS_(env: Env): any
 declare function evaluate_(env: Env, $$source$$$: string): any
 declare function newCall(s: string, args: any[]): any
@@ -226,9 +226,10 @@ function processClones(prog: Prog, updateData: UpdateData,
       return updateForeach(prog.env, updateData.newVal as any[],
         (newChildVal, k) => callback => {
           let childDiff = diff.children[k];
-          if(childDiff.length == 1 && childDiff[0].ctor === DType.Update &&
+          if(typeof childDiff == "undefined"/* ||
+             childDiff.length == 1 && childDiff[0].ctor === DType.Update &&
              (childDiff[0] as DUpdate).kind.ctor !== DUType.Reuse
-          ) { // New values are not back-propagated in this context. We don't want them to flow through or otherwise change the existing function.
+          */) { // New values are not back-propagated in this context. We don't want them to flow through or otherwise change the existing function.
             let newChildNode = valToNode_(newChildVal);
             let newChildNodeDiffs = valToNodeDiffs_(newChildVal);
             return UpdateResult({...prog, node: newChildNode, diffs: newChildNodeDiffs}, prog, callback);
@@ -391,7 +392,8 @@ function isRichText_(value: any) {
     Array.isArray(value) &&
     value.length === 2 &&
     typeof value[0] == "string" &&
-    typeof value[1] == "object";
+    typeof value[1] == "object" &&
+    !Array.isArray(value[1]);
 }
 
 function isElement_(value: any) {
@@ -400,6 +402,7 @@ function isElement_(value: any) {
     value.length === 3 &&
     typeof value[0] == "string" &&
     typeof value[1] == "object" &&
+    !Array.isArray(value[1]) &&
     typeof value[2] == "object" &&
     Array.isArray(value[2]);
 }
@@ -411,6 +414,26 @@ function computeDiffs_(oldVal: any, newVal: any): Diffs {
   if(o == "function" || n == "function") {
     return []; // Cannot diff functions
   }
+  function addNewObjectDiffs(diffs: Diffs): Diffs {
+    let childDiffs: ChildDiffs = {};
+    let model: any = Array.isArray(newVal) ? Array(newVal.length) : {};
+    for(var key in newVal) {
+      if(typeof oldVal == "object" &&
+         uneval_(oldVal[key]) == uneval_(newVal[key])) {
+        // Same key, we try not to clone it.
+        childDiffs[key] = DDClone({up: 0, down: [key]}, DDSame());
+      } else {
+        var cd = computeDiffs_(oldVal, newVal[key]);
+        if(cd.length == 1 && cd[0].ctor == DType.Update && (cd[0] as DUpdate).kind.ctor == DUType.NewValue && Object.keys((cd[0] as DUpdate).children).length == 0) {
+          model[key] = ((cd[0] as DUpdate).kind as {model: any}).model;
+        } else {
+          childDiffs[key] = cd;
+        }
+      }
+    }
+    diffs.push(...DDNewObject(childDiffs, model));
+    return diffs;
+  }
   if(o == "number" || o == "boolean" || o == "string") {
     if(n == "boolean" || n == "number" ||
      n == "string") {
@@ -419,22 +442,13 @@ function computeDiffs_(oldVal: any, newVal: any): Diffs {
       // if(n == "string") // TODO: String diffs
       return DDNewValue(newVal);
     } else if(n == "object" ) { // maybe the number was included in the object/array
-      var childDiffs: ChildDiffs = {};
-      for(var key in newVal) {
-        var newValChild = newVal[key];
-        childDiffs[key] = computeDiffs_(oldVal, newValChild);
-      }
-      if(Array.isArray(newVal)) {
-        return DDNewArray(newVal.length, childDiffs)
-      } else {
-        return DDNewObject(childDiffs);
-      }
+      return addNewObjectDiffs([]);
     }
   } else if(o == "object") {
     if(n == "number" || n == "string" || n == "boolean") {
       // It could have been cloned from one of the object's descendent.
-      var clonePaths = allClonePaths_(oldVal, newVal);
-      var diffs: Diffs = [];
+      let clonePaths = allClonePaths_(oldVal, newVal);
+      let diffs: Diffs = [];
       for(let c in clonePaths) {
         diffs.push({ctor: DType.Clone, path: clonePaths[c], diffs: DDSame()});
       }
@@ -447,9 +461,12 @@ function computeDiffs_(oldVal: any, newVal: any): Diffs {
       // n: ["img", {}, []] ->
       // o: ["p", {}, ["img", {}, []]];
       // We want to detect that.
-      let diffs: Diffs = [];
+      let diffs = [];
       let sameKeys = uneval_(Object.keys(newVal)) == uneval_(Object.keys(oldVal));
       if(sameKeys) { // Check if they are compatible for reuse
+        if(uneval_(newVal) == uneval_(oldVal)) {
+          return DDSame();
+        }
         if(isRichText_(newVal) && isRichText_(oldVal) || isElement_(newVal) && isElement_(oldVal) && newVal[0] == oldVal[0] || !isRichText_(newVal) && !isRichText_(oldVal) && !isElement_(newVal) && !isElement_(oldVal) && Array.isArray(oldVal) == Array.isArray(newVal)) {
           let childDiffs: ChildDiffs = {};
           for(let k in oldVal) {
@@ -462,22 +479,13 @@ function computeDiffs_(oldVal: any, newVal: any): Diffs {
         }
       }
       // Now check if the new value was unwrapped
-      let unwrappingPaths = allClonePaths_(o, n);
+      let unwrappingPaths = allClonePaths_(oldVal, newVal);
       for(let c in unwrappingPaths) {
         diffs.push({ctor: DType.Clone, path: unwrappingPaths[c], diffs: DDSame()});
       }
       // Now let's create a new object or array and obtain the children from the original.
       // Values might be wrapped that way.
-      let childDiffs: ChildDiffs = {};
-      for(var key in newVal) {
-        childDiffs[key] = computeDiffs_(oldVal, newVal[key]);
-      }
-      if(Array.isArray(newVal)) {
-        diffs.push(...DDNewObject(childDiffs));
-      } else {
-        diffs.push(...DDNewArray(newVal.length, childDiffs));
-      }
-      return diffs;
+      return addNewObjectDiffs(diffs);
     }
   }
   // Symbols
@@ -496,6 +504,8 @@ function update_(env, oldFormula): (newVal: any) => Res<string, Update_Result> {
   
   return function(newVal: any):Res<string, Update_Result> {
     var diffs = computeDiffs_(oldVal, newVal);
+    /*console.log("computeDiffs_(" + uneval_(oldVal) + ", " + uneval_(newVal) + ")");
+    console.log(uneval_(diffs, ""));*/
     var updated = processUpdateAction(UpdateContinue({context: [], env: env, node: oldNode}, {newVal: newVal, oldVal: oldVal, diffs: diffs}));
     return resultCase(updated, function(x) { return Err(x); },
       function(progWithAlternatives: ProgWithAlternatives): Res<string, Update_Result> {

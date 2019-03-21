@@ -199,8 +199,10 @@ function processClones(prog, updateData, otherwise) {
             var newDiffs = DDNewNode(newNode);
             return updateForeach(prog.env, updateData.newVal, function (newChildVal, k) { return function (callback) {
                 var childDiff = diff.children[k];
-                if (childDiff.length == 1 && childDiff[0].ctor === DType.Update &&
-                    childDiff[0].kind.ctor !== DUType.Reuse) { // New values are not back-propagated in this context. We don't want them to flow through or otherwise change the existing function.
+                if (typeof childDiff == "undefined" /* ||
+                   childDiff.length == 1 && childDiff[0].ctor === DType.Update &&
+                   (childDiff[0] as DUpdate).kind.ctor !== DUType.Reuse
+                */) { // New values are not back-propagated in this context. We don't want them to flow through or otherwise change the existing function.
                     var newChildNode = valToNode_(newChildVal);
                     var newChildNodeDiffs = valToNodeDiffs_(newChildVal);
                     return UpdateResult(__assign({}, prog, { node: newChildNode, diffs: newChildNodeDiffs }), prog, callback);
@@ -354,7 +356,8 @@ function isRichText_(value) {
         Array.isArray(value) &&
         value.length === 2 &&
         typeof value[0] == "string" &&
-        typeof value[1] == "object";
+        typeof value[1] == "object" &&
+        !Array.isArray(value[1]);
 }
 function isElement_(value) {
     return typeof value == "object" &&
@@ -362,6 +365,7 @@ function isElement_(value) {
         value.length === 3 &&
         typeof value[0] == "string" &&
         typeof value[1] == "object" &&
+        !Array.isArray(value[1]) &&
         typeof value[2] == "object" &&
         Array.isArray(value[2]);
 }
@@ -372,6 +376,28 @@ function computeDiffs_(oldVal, newVal) {
     if (o == "function" || n == "function") {
         return []; // Cannot diff functions
     }
+    function addNewObjectDiffs(diffs) {
+        var childDiffs = {};
+        var model = Array.isArray(newVal) ? Array(newVal.length) : {};
+        for (var key in newVal) {
+            if (typeof oldVal == "object" &&
+                uneval_(oldVal[key]) == uneval_(newVal[key])) {
+                // Same key, we try not to clone it.
+                childDiffs[key] = DDClone({ up: 0, down: [key] }, DDSame());
+            }
+            else {
+                var cd = computeDiffs_(oldVal, newVal[key]);
+                if (cd.length == 1 && cd[0].ctor == DType.Update && cd[0].kind.ctor == DUType.NewValue && Object.keys(cd[0].children).length == 0) {
+                    model[key] = cd[0].kind.model;
+                }
+                else {
+                    childDiffs[key] = cd;
+                }
+            }
+        }
+        diffs.push.apply(diffs, DDNewObject(childDiffs, model));
+        return diffs;
+    }
     if (o == "number" || o == "boolean" || o == "string") {
         if (n == "boolean" || n == "number" ||
             n == "string") {
@@ -381,17 +407,7 @@ function computeDiffs_(oldVal, newVal) {
             return DDNewValue(newVal);
         }
         else if (n == "object") { // maybe the number was included in the object/array
-            var childDiffs = {};
-            for (var key in newVal) {
-                var newValChild = newVal[key];
-                childDiffs[key] = computeDiffs_(oldVal, newValChild);
-            }
-            if (Array.isArray(newVal)) {
-                return DDNewArray(newVal.length, childDiffs);
-            }
-            else {
-                return DDNewObject(childDiffs);
-            }
+            return addNewObjectDiffs([]);
         }
     }
     else if (o == "object") {
@@ -411,38 +427,31 @@ function computeDiffs_(oldVal, newVal) {
             // n: ["img", {}, []] ->
             // o: ["p", {}, ["img", {}, []]];
             // We want to detect that.
-            var diffs_1 = [];
+            var diffs = [];
             var sameKeys = uneval_(Object.keys(newVal)) == uneval_(Object.keys(oldVal));
             if (sameKeys) { // Check if they are compatible for reuse
+                if (uneval_(newVal) == uneval_(oldVal)) {
+                    return DDSame();
+                }
                 if (isRichText_(newVal) && isRichText_(oldVal) || isElement_(newVal) && isElement_(oldVal) && newVal[0] == oldVal[0] || !isRichText_(newVal) && !isRichText_(oldVal) && !isElement_(newVal) && !isElement_(oldVal) && Array.isArray(oldVal) == Array.isArray(newVal)) {
-                    var childDiffs_1 = {};
+                    var childDiffs = {};
                     for (var k in oldVal) {
                         var oldValChild = oldVal[k];
-                        var newValChild_1 = newVal[k];
-                        if (uneval_(oldValChild) != uneval_(newValChild_1))
-                            childDiffs_1[k] = computeDiffs_(oldValChild, newValChild_1);
+                        var newValChild = newVal[k];
+                        if (uneval_(oldValChild) != uneval_(newValChild))
+                            childDiffs[k] = computeDiffs_(oldValChild, newValChild);
                     }
-                    diffs_1.push({ ctor: DType.Update, kind: { ctor: DUType.Reuse }, children: childDiffs_1 });
+                    diffs.push({ ctor: DType.Update, kind: { ctor: DUType.Reuse }, children: childDiffs });
                 }
             }
             // Now check if the new value was unwrapped
-            var unwrappingPaths = allClonePaths_(o, n);
+            var unwrappingPaths = allClonePaths_(oldVal, newVal);
             for (var c in unwrappingPaths) {
-                diffs_1.push({ ctor: DType.Clone, path: unwrappingPaths[c], diffs: DDSame() });
+                diffs.push({ ctor: DType.Clone, path: unwrappingPaths[c], diffs: DDSame() });
             }
             // Now let's create a new object or array and obtain the children from the original.
             // Values might be wrapped that way.
-            var childDiffs_2 = {};
-            for (var key in newVal) {
-                childDiffs_2[key] = computeDiffs_(oldVal, newVal[key]);
-            }
-            if (Array.isArray(newVal)) {
-                diffs_1.push.apply(diffs_1, DDNewObject(childDiffs_2));
-            }
-            else {
-                diffs_1.push.apply(diffs_1, DDNewArray(newVal.length, childDiffs_2));
-            }
-            return diffs_1;
+            return addNewObjectDiffs(diffs);
         }
     }
     // Symbols
@@ -457,6 +466,8 @@ function update_(env, oldFormula) {
     var oldVal = evaluate_(env, oldFormula);
     return function (newVal) {
         var diffs = computeDiffs_(oldVal, newVal);
+        /*console.log("computeDiffs_(" + uneval_(oldVal) + ", " + uneval_(newVal) + ")");
+        console.log(uneval_(diffs, ""));*/
         var updated = processUpdateAction(UpdateContinue({ context: [], env: env, node: oldNode }, { newVal: newVal, oldVal: oldVal, diffs: diffs }));
         return resultCase(updated, function (x) { return Err(x); }, function (progWithAlternatives) {
             return Ok({ env: progWithAlternatives.prog.env, node: progWithAlternatives.prog.node.unparse() });
