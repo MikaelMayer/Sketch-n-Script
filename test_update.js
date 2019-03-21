@@ -9,6 +9,11 @@ let envX12 = {head: {name: "x", value: {
   }},
   tail: undefined};
 
+let envXL = {head: {name: "x", value: {
+    v_: "L"
+  }},
+  tail: undefined};
+
 let envNiu = {head: {name: "niu", value: {
     v_: ["Normal",["italic",{italic:true}],
          " ", ["underlined", {underline:true}]]
@@ -99,6 +104,10 @@ assertUpdate(envS, "s", [[1,"2"],"3", "4"], "[s, \"3\", \"4\"]")
 assertUpdate(envX12, "[x, {italic: true}]", 12, "x");
 assertUpdate(envX12, "x", [12, {italic: true}], "[x, {italic:true}]");
 assertUpdate(envX12, "x", [12, {italic: true}], "x", envEqual("x", [12, {italic: true}]), 2);
+assertUpdate(envXL, "['HE', x, 'L', 'O']", ['SAY', 'HE', 'L', 'L', 'O'], "[\"SAY\",'HE', x, 'L', 'O']");
+assertUpdate(envXL, "['SAY', 'HE', x, 'L', 'O']", ['HE', 'L', 'L', 'O'], "[ 'HE', x, 'L', 'O']");
+assertUpdate(envXL, "[x, 'L', 'O']", ['SAY', 'L', 'L', 'O'], "[\"SAY\",x, 'L', 'O']");
+assertUpdate(envXL, "['SAY', x, 'L', 'O']", ['L', 'L', 'O'], "[ x, 'L', 'O']");
 
 console.log(testsPassed + "/" + tests + " passed");
 if(testsPassed !== tests) {
