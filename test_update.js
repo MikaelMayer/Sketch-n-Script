@@ -54,5 +54,6 @@ assertUpdate(envX12, "/*-*/\"1\"//x", '2', "/*-*/\"2\"//x");
 assertUpdate(envX12, "/*-*/ x //y", '2', "/*-*/ x //y", envEqual("x", "2"));
 assertUpdate(envX12, "/*-*/[15,/***/16]", [12, 13], "/*-*/[12,/***/13]");
 assertUpdate(envX12, "/*-*/x", [12, 13], "[/*-*/x, 13]");
-
+assertUpdate(envX12, '[x, " ", ["italic", {italic:true}]," ",["underlined",{underline:true}]]', [["Normal",{bold:true}]," ",["italic",{italic:true}]," ",["underlined",{underline:true}]],
+  '[[x, {bold:true}], " ", ["italic", {italic:true}]," ",["underlined",{underline:true}]]')
 console.log(testsPassed + "/" + tests + " passed");
