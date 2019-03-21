@@ -358,7 +358,7 @@ function minifyPropertyKey(key) {
     key.replace(/^(\w)|_(\w)|(\w)/g, function(match, start, mid, inside) {
       return start ? start.toLowerCase() : mid ? mid : inside.toLowerCase(); })
 }
-/*
+
 function testRichFormula() {
   var doc = DocumentApp.getActiveDocument();
   var selection = doc.getSelection();
@@ -367,7 +367,7 @@ function testRichFormula() {
   var start = selectionElements[0].getStartOffset();
   var endInclusive = selectionElements[0].getEndOffsetInclusive();
   Logger.log(uneval_(toRichTextFormula(txt, start, endInclusive)));
-}*/
+}
 
 function toRichTextFormula(txt, start, endInclusive) {
   var bufferStr = "";

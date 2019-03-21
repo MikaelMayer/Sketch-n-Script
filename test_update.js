@@ -87,6 +87,7 @@ assertUpdate(envNiu, "//\nniu//x", [["Normal",{bold:true}], " ", ["italic", {ita
 );
 //*/
 assertUpdate(envS, "s", [[1,"2"],"3", "4"], "[s, \"3\", \"4\"]")
+assertUpdate(envX12, "[x, {italic: true}]", 12, "x");
 
 console.log(testsPassed + "/" + tests + " passed");
 if(testsPassed !== tests) {

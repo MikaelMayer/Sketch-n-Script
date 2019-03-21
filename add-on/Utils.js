@@ -480,6 +480,7 @@ function isElement_(value) {
 
 
 function testReconcile() {
+  Logger.log(uneval_(reconcileAsMuchAsPossible_("noprops", ["noprops", {italic: true}])));
   Logger.log(uneval_(reconcileAsMuchAsPossible_("1", 2)));
   Logger.log(uneval_(reconcileAsMuchAsPossible_("seventy", 2)));
   Logger.log(uneval_(reconcileAsMuchAsPossible_("false", true)));
@@ -530,12 +531,6 @@ function reconcileAsMuchAsPossible_(computedValues, oldValues) {
     return reconcileAsMuchAsPossible_(computedValues[0], oldValues); 
   }
   // We copy the attributes there so that they are not considered a difference
-  if(isRichText_(oldValues) && isRichText_(computedValues)) {
-    return [computedValues[0], oldValues[1]];
-  }
-  if(isRichText_(oldValues) && typeof computedValues === "string") {
-    return [computedValues, oldValues[1]];
-  }
   if(isElement_(oldValues) && isElement_(computedValues)) {
     // If tags are compatible, make sure we propagate the correct one.
     var oldTag = oldValues[0];
