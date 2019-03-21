@@ -190,6 +190,29 @@ function valToNode_(value) {
     }
     return new Node.Literal("", null, "null");
 }
+function filterDiffsNoClonesDown(diffs) {
+    var willBeEmpty = false;
+    var newDiffs = [];
+    for (var _i = 0, diffs_1 = diffs; _i < diffs_1.length; _i++) {
+        var diff = diffs_1[_i];
+        if (diff.ctor === DType.Clone) {
+            if (diff.path.up != 0)
+                newDiffs.push(diff);
+            continue;
+        }
+        var newChildrenDiffs = {};
+        for (var key in diff.children) {
+            var newChildDiffs = filterDiffsNoClonesDown(diff.children[key]);
+            if (newChildDiffs.length == 0)
+                willBeEmpty = true;
+            newChildDiffs[key] = newChildDiffs;
+        }
+        newDiffs.push(__assign({}, diff, { children: newChildrenDiffs }));
+    }
+    if (willBeEmpty)
+        return [];
+    return newDiffs;
+}
 function processClones(prog, updateData, otherwise) {
     var Syntax = syntax.Syntax || esprima.Syntax;
     var Node = typeof Node == "undefined" ? esprima.Node : Node;
@@ -225,9 +248,23 @@ function processClones(prog, updateData, otherwise) {
                 var gatherer = newNode.type === Syntax.ArrayExpression ?
                     arrayGather(prog, newNode, newDiffs)
                     : objectGather(prog, Object.keys(updateData.newVal), newNode, newDiffs);
+                var diffToConsider_1 = __assign({}, diff);
+                var willBeEmpty = false;
+                if (prog.node.type === Syntax.Identifier) {
+                    // Identifiers forbid the flow of clones
+                    for (var k in diff.children) {
+                        diffToConsider_1.children[k] = filterDiffsNoClonesDown(diff.children[k]);
+                        willBeEmpty = willBeEmpty || diffToConsider_1.children[k].length == 0;
+                    }
+                }
+                if (willBeEmpty) {
+                    if (otherwise)
+                        return otherwise(diff);
+                    return undefined;
+                }
                 return updateForeach(prog.env, Object.keys(updateData.newVal), function (k) { return function (callback) {
                     var newChildVal = updateData.newVal[k];
-                    var childDiff = diff.children[k];
+                    var childDiff = diffToConsider_1.children[k];
                     if (typeof childDiff == "undefined") {
                         var newChildNode = valToNode_(newChildVal);
                         var newChildNodeDiffs = valToNodeDiffs_(newChildVal);
@@ -530,8 +567,10 @@ function update_(env, oldFormula) {
     var oldVal = evaluate_(env, oldFormula);
     return function (newVal) {
         var diffs = computeDiffs_(oldVal, newVal);
-        /*console.log("computeDiffs_(" + uneval_(oldVal) + ", " + uneval_(newVal) + ")");
-        console.log(uneval_(diffs, ""));*/
+        /*
+        console.log("computeDiffs_(" + uneval_(oldVal) + ", " + uneval_(newVal) + ")");
+        console.log(uneval_(diffs, ""));
+        //*/
         var updated = processUpdateAction(UpdateContinue({ context: [], env: env, node: oldNode }, { newVal: newVal, oldVal: oldVal, diffs: diffs }));
         return resultCase(updated, function (x) { return Err(x); }, function (progWithAlternatives) {
             return Ok({ env: progWithAlternatives.prog.env, node: progWithAlternatives.prog.node.unparse() });

@@ -9,12 +9,23 @@ let envX12 = {head: {name: "x", value: {
   }},
   tail: undefined};
 
+let envNiu = {head: {name: "niu", value: {
+    v_: ["Normal",["italic",{italic:true}],
+         " ", ["underlined", {underline:true}]]
+  }},
+  tail: undefined};
+  
+let envS = {head: {name: "s", value: {
+    v_: [1,"2"]
+  }},
+  tail: undefined};
+  
 let tests = 0;
 let testsPassed = 0;
   
 function assertUpdate(env, code, value, newCode, envPredicate) {
   tests++;
-  var result = update_(envX12, code)(value);
+  var result = update_(env, code)(value);
   if(result.ctor == "Ok") {
     if(result._0.node !== newCode) {
       console.log("Error: Expected\n" + newCode + "\n, got\n" + result._0.node);
@@ -34,12 +45,10 @@ function envEqual(name, v_) {
   return function(newEnv) {
     var result = List.foreach(newEnv, function(binding) {
       if(binding.name == name) {
-        if(binding.value.v_ === v_) {
-         console.log("ok");
+        if(uneval_(binding.value.v_) === uneval_(v_)) {
           return Ok("");
         } else {
-         console.log("err");
-          return Err("Expected that " + name + " = " + v_ + ", got " + binding.value.v_);
+          return Err("Expected that " + name + " = \n" + uneval_(v_) + "\n, got \n" + uneval_(binding.value.v_));
         }
       }
     });
@@ -73,7 +82,12 @@ assertUpdate(envX12,  "[x,[\"italic\",{italic:true}]]",
 [[12,{bold:true}],["italic",{italic:true}]], "[[x, {bold:true}],[\"italic\",{italic:true}]]")
 
 assertUpdate(undefined, `["Normal ", ["italic", {italic:true}], " ", ["underlined", {underline:true}]]`, [["Normal", {bold:true}], " ", ["italic", {italic:true}], " ", ["underlined", {underline:true}]], `[["Normal",{bold:true}], " ", ["italic", {italic:true}], " ", ["underlined", {underline:true}]]`)
+assertUpdate(envNiu, "//\nniu//x", [["Normal",{bold:true}], " ", ["italic", {italic:true}], " ", ["underlined", {underline:true}]], "//\nniu//x",
+  envEqual("niu", [["Normal",{bold:true}], " ", ["italic", {italic:true}], " ", ["underlined", {underline:true}]])
+);
 //*/
+assertUpdate(envS, "s", [[1,"2"],"3", "4"], "[s, \"3\", \"4\"]")
+
 console.log(testsPassed + "/" + tests + " passed");
 if(testsPassed !== tests) {
   console.log((tests - testsPassed) + " tests failed");

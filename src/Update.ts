@@ -217,6 +217,27 @@ function valToNode_(value: any): AnyNode {
   return new Node.Literal("", null, "null");
 }
 
+function filterDiffsNoClonesDown(diffs: Diffs): Diffs {
+  var willBeEmpty = false;
+  let newDiffs: Diffs = [];
+  for(let diff of diffs) {
+    if(diff.ctor === DType.Clone) {
+      if(diff.path.up != 0)
+        newDiffs.push(diff);
+      continue;
+    }
+    var newChildrenDiffs: ChildDiffs = {};
+    for(let key in diff.children) {
+      var newChildDiffs = filterDiffsNoClonesDown(diff.children[key]);
+      if(newChildDiffs.length == 0) willBeEmpty = true;
+      newChildDiffs[key] = newChildDiffs;
+    }
+    newDiffs.push({...diff, children: newChildrenDiffs});
+  }
+  if(willBeEmpty) return [];
+  return newDiffs;
+}
+
 function processClones(prog: Prog, updateData: UpdateData,
      otherwise?: (diff: DUpdate) => UpdateAction ): UpdateAction {
   var Syntax = syntax.Syntax || esprima.Syntax;
@@ -252,10 +273,23 @@ function processClones(prog: Prog, updateData: UpdateData,
           newNode.type === Syntax.ArrayExpression ?
             arrayGather(prog, newNode as Node.ArrayExpression, newDiffs)
             : objectGather(prog, Object.keys(updateData.newVal), newNode as Node.ObjectExpression, newDiffs);
+        let diffToConsider: DUpdate = {...diff};
+        let willBeEmpty = false;
+        if(prog.node.type === Syntax.Identifier) {
+          // Identifiers forbid the flow of clones
+          for(var k in diff.children) {
+            diffToConsider.children[k] = filterDiffsNoClonesDown(diff.children[k]);
+            willBeEmpty = willBeEmpty || diffToConsider.children[k].length == 0;
+          }
+        }
+        if(willBeEmpty) {
+          if(otherwise) return otherwise(diff);
+          return undefined;
+        }
         return updateForeach(prog.env, Object.keys(updateData.newVal),
           k => callback => {
             let newChildVal = updateData.newVal[k];
-            let childDiff = diff.children[k];
+            let childDiff = diffToConsider.children[k];
             if(typeof childDiff == "undefined") {
               let newChildNode = valToNode_(newChildVal);
               let newChildNodeDiffs = valToNodeDiffs_(newChildVal);
@@ -564,8 +598,10 @@ function update_(env, oldFormula): (newVal: any) => Res<string, Update_Result> {
   
   return function(newVal: any):Res<string, Update_Result> {
     var diffs = computeDiffs_(oldVal, newVal);
-    /*console.log("computeDiffs_(" + uneval_(oldVal) + ", " + uneval_(newVal) + ")");
-    console.log(uneval_(diffs, ""));*/
+    /*
+    console.log("computeDiffs_(" + uneval_(oldVal) + ", " + uneval_(newVal) + ")");
+    console.log(uneval_(diffs, ""));
+    //*/
     var updated = processUpdateAction(UpdateContinue({context: [], env: env, node: oldNode}, {newVal: newVal, oldVal: oldVal, diffs: diffs}));
     return resultCase(updated, function(x) { return Err(x); },
       function(progWithAlternatives: ProgWithAlternatives): Res<string, Update_Result> {
