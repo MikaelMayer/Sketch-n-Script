@@ -772,10 +772,14 @@ function formulaOf_(letExp) {
 function newFormulaOf_(letExp, newFormula) {
   if(letExp.sourceType == EQUALFORMULA)
     return "=" + newFormula;
-  if(letExp.sourceType == RAW)
-    return eval(newFormula);
-  if(letExp.sourceType == RAWFORMULA)
-    return newFormula;
+  if(letExp.sourceType == RAW || letExp.sourceType == RAWFORMULA) {
+    if(new RegExp("^\\s*" + stringRegex + "\\s*$").exec(newFormula))
+      return eval(newFormula);
+    else if(/^\s*[\(\[]/.exec(newFormula))
+      return newFormula
+    else
+      return "(" + newFormula + ")";
+  }
   throw ("[Internal error?] What kind of source type is it? " + letExp.sourceType);
 }
 
@@ -836,6 +840,8 @@ function updateLetExprs_(doc, env, letExprs) {
          areDifferentValues_(oldOutput, newOutput)) {
         // Here the value was changed directly or indiretly, or a merge of both.
         formulaEnvUpdate = update_(env, formula)(newOutput);
+        Logger.log("After formula update")
+        Logger.log(uneval_(env.head.value.v_))
       }
       return resultCase(
         formulaEnvUpdate, Err,
@@ -1047,6 +1053,11 @@ function updateNamedRanges_(doc, env, exprs) {
               function(newtmptailformula) {
                 var newtmptail = newtmptailformula.env;
                 var newFormula = newtmptailformula.node;
+                Logger.log(formula)
+                Logger.log("<--")
+                Logger.log(uneval_(newValue))
+                Logger.log("===")
+                Logger.log(newFormula)
                 var newSource = newFormulaOf_(tmp.head.value.expr, newFormula);
                 if(newSource != tmp.head.value.expr.source) {
                   var range = tmp.head.value.expr.range;
