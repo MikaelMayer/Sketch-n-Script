@@ -382,7 +382,7 @@ function getUpdateAction(prog, updateData) {
                     return processClone(prog, updateData.newVal, updateData.oldVal, diff);
                 }
                 else {
-                    var newNode = new Node.Literal(oldNode.wsBefore, updateData.newVal, updateData.newVal); // TODO: What about string diffs?
+                    var newNode = new Node.Literal(oldNode.wsBefore, updateData.newVal, uneval_(updateData.newVal)); // TODO: What about string diffs?
                     return UpdateResult(__assign({}, prog, { node: newNode, diffs: DDNewNode(newNode) }), prog);
                 }
             }));

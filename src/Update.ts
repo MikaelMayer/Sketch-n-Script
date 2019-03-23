@@ -415,7 +415,7 @@ function getUpdateAction(prog: Prog, updateData: UpdateData): UpdateAction {
         if(diff.ctor === DType.Clone) {
           return processClone(prog, updateData.newVal, updateData.oldVal, diff);
         } else {
-          let newNode = new Node.Literal(oldNode.wsBefore, updateData.newVal, updateData.newVal); // TODO: What about string diffs?
+          let newNode = new Node.Literal(oldNode.wsBefore, updateData.newVal, uneval_(updateData.newVal)); // TODO: What about string diffs?
           return UpdateResult({ ...prog,
             node: newNode, diffs: DDNewNode(newNode)}, prog);
         }
