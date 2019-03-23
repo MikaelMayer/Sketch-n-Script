@@ -1805,6 +1805,7 @@ function nameSelection(options, docProperties, existingNames, doc, body) {
   if(!selectionElements) {
     throw "Please select some text or elements and try again"
   }
+  Logger.log(uneval_(existingNames))
   
   var ui = DocumentApp.getUi();
   var lastHint = "";
@@ -1818,11 +1819,12 @@ function nameSelection(options, docProperties, existingNames, doc, body) {
     name = response.getResponseText();
     var vn = new RegExp("^" + varName + "$");
     if(!name || !vn.exec(name)) {
-      lastHint = ("/!\\ '" + name + "' is not a valid name.\nNames should match " + varName + "\n");
+      lastHint = ("/!\\ '" + name + "' is not a valid name.\nNames contains only letters, '_' or '$' and digits, but should not start with a digit.\n");
       continue;
     }
     if(existingNames && typeof existingNames[name] != "undefined") {
-      lastHint = ("/!\\ '" + name + "' is already taken. Please enter a fresh name.\n");
+      lastHint = ("/!\\ The name '" + name + "' is already assigned. Please enter another fresh name.\n");
+      continue;
     }
     break;
   }
