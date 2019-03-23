@@ -1792,28 +1792,42 @@ function revealFormulas(options, docProperties, doc, body) {
 };
 
 function testNameSelection() {
-  nameSelection({nameToGive: "paragraphs", nameFormulasInline: "false"}, getDocProperties());
+  nameSelection({nameFormulasInline: "false"}, getDocProperties());
 }
 
-function nameSelection(options, docProperties, doc, body) {
+function nameSelection(options, docProperties, existingNames, doc, body) {
   options = options || defaultOptions;
-  var name = options.nameToGive;
   var nameFormulasInline = options.nameFormulasInline === "true";
-  var vn = new RegExp("^" + varName + "$");
-  if(!name || !vn.exec(name)) {
-    if(name == "" || typeof name == "undefined") {
-      throw ("Please give a name in the box 'name to give'");
-    } else 
-      throw ("'" + name + "' is not a valid name. Names should match " + varName);
-  }
   var doc = doc || DocumentApp.getActiveDocument();
   var selection = doc.getSelection();
-  var exprs = extractExprs_(doc);
   var selectionElements = selection ? selection.getRangeElements() : undefined;
   
   if(!selectionElements) {
     throw "Please select some text or elements and try again"
   }
+  
+  var ui = DocumentApp.getUi();
+  var lastHint = "";
+  var name;
+  while(true) {
+    var response = ui.prompt('Name selection', lastHint + 'Give a name to your selection', ui.ButtonSet.OK_CANCEL);
+    if (response.getSelectedButton() == ui.Button.CANCEL ||
+        response.getSelectedButton() == ui.Button.CLOSE) {
+      return {feedback: "Renaming cancelled"}
+    }
+    name = response.getResponseText();
+    var vn = new RegExp("^" + varName + "$");
+    if(!name || !vn.exec(name)) {
+      lastHint = ("/!\\ '" + name + "' is not a valid name.\nNames should match " + varName + "\n");
+      continue;
+    }
+    if(existingNames && typeof existingNames[name] != "undefined") {
+      lastHint = ("/!\\ '" + name + "' is already taken. Please enter a fresh name.\n");
+    }
+    break;
+  }
+  var exprs = extractExprs_(doc);
+  
   var dranges = drangesOf_(selection);
   // Let's build the formula that can generate this range.
   var formulaElements = [];
@@ -2041,7 +2055,6 @@ var defaultOptions = {
   nameFormulasInline: "false",
   highlightFormulas: "true",
   highlightValues: "false",
-  nameToGive: "x",
   refreshImages: "true",
   nextReminderDate: "0" // 0 means "not asked yet", -1 means "never", else it's a date.
 };

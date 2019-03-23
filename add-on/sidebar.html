@@ -131,9 +131,7 @@
           <hr>
           <div class="section">
             <div class="righttitle">Helpers</div>
-              <input  id="nameToGive" placeholder="name to give" class="inputbutton" type="text" name="userProperties"
-                      title="Select text in doc, enter name here, and click on 'Name selection'">
-              <button id="make-selection-formula" class="inputbutton" title="Assigns the name to the selection"
+              <button id="make-selection-formula" class="inputbutton" title="Opens a dialog box to give a name to the selection"
               >Name selection</button>
               <div id="predefined-names"></div>
           </div>
@@ -182,8 +180,7 @@
         <div class="doclike">This is some text and I can also make it big: SOME TEXT.</div-->
         Name formulas:
         <div class="doclike">=(/*adj=*/"great"), =adj, =(upper(adj))</div>
-        Alternatively, select some text, <span class="hint" highlight="#nameToGive">write a name</span>
-        and <span class="hint" highlight="#make-selection-formula">name the selection</span>.<br>
+        Alternatively, select some text and <span class="hint" highlight="#make-selection-formula">give a name to the selection</span>.<br>
         <br>
         Rich text formulas: 
           (<a href="https://developers.google.com/apps-script/reference/document/text">settable properties*</a>)
@@ -270,6 +267,11 @@
     
       var hideFeedbackTimer = undefined;
       var nextReminderDate = "nextReminderDate"
+      var usedNames = {};
+      function getExistingNames() {
+        return usedNames;
+      }
+      
       /**
        * On document load, assign click handlers to each button and try to load the
        * user's origin and destination language preferences if previously set.
@@ -279,19 +281,18 @@
           $("#cheatsheet").toggleClass("hidden");
           $("#buttoncheatsheet").toggleClass("currentlyvisible");
         });
-        $('#evaluate-formulas').click(launch("evaluateFormulas", "Computing formulas...", handleScriptFeedback));
-        $('#reveal-formulas').click(launch("revealFormulas", "Revealing formulas...", handleScriptFeedback));
-        $('#hidedefs').click(launch("hideDefinitions", "Moving definitions from the doc to above...", handleScriptFeedback));
-        $('#showdefs').click(launch("showDefinitions", "Moving definitions from above to the doc...", handleScriptFeedback));
+        $('#evaluate-formulas').click(launch("evaluateFormulas", "Computing formulas..."));
+        $('#reveal-formulas').click(launch("revealFormulas", "Revealing formulas..."));
+        $('#hidedefs').click(launch("hideDefinitions", "Moving definitions from the doc to above..."));
+        $('#showdefs').click(launch("showDefinitions", "Moving definitions from above to the doc..."));
         $("[name=userProperties]").change(saveUserProperty);
         $("[name=docProperties]").change(saveDocProperty);
-        $("#make-selection-formula").click(launch("nameSelection", "Naming selection...", handleScriptFeedback));
+        $("#make-selection-formula").click(launch("nameSelection", "Naming selection...", getExistingNames));
         $("#show-feedback").mouseenter(function() {
           if(typeof hideFeedbackTimer !== "undefined") {
             clearTimeout(hideFeedbackTimer);
           }
         });
-        $("#nameToGive").keyup(refreshInterface);
       
         google.script.run.withSuccessHandler(loadUserPreferences)
             .withFailureHandler(showError).getUserPreferences();
@@ -332,16 +333,7 @@
       }
       
       function refreshInterface() {
-        if(usedNames[$("#nameToGive").val()]) {
-          $("#make-selection-formula").attr("title", "The name '" + $("#nameToGive").val() + "' is already used. Enter another one.");
-          $("#make-selection-formula").prop('disabled', true);
-        } else if($("#nameToGive").val() == "") {
-          $("#make-selection-formula").attr("title", "Enter a name on the input on the left.");
-          $("#make-selection-formula").prop('disabled', true);
-        } else {
-          $("#make-selection-formula").attr("title", "Assigns the name '" + $("#nameToGive").val() + "' to the selection");
-          $("#make-selection-formula").prop('disabled', false);
-        }
+        // Nothing here
       }
       
       function insertFormulaAtCursor(formula, strvalue) {
@@ -363,8 +355,6 @@
         if(result.nameValues) refreshVariables(result.nameValues);
         if(result.feedback) displayFeedback(result.feedback);
       }
-      
-      var usedNames = {};
       
       function valueChanger() {
         var name = this.getAttribute("name");
@@ -404,6 +394,7 @@
         $("#predefined-names").empty();
         var feedback = "";
         usedNames = {};
+        
         for(k in nameValues) {
           var nameValue = nameValues[k];
           var name = nameValue[0];
@@ -457,7 +448,6 @@
         nameFormulasInline: "false",
         highlightFormulas: "true",
         highlightValues: "false",
-        nameToGive: "",
         refreshImages: "true",
         evaluateAfterInsert: "true" };
         
@@ -562,7 +552,7 @@
           .withFailureHandler(showError).setDocProperty(name, value, oldValue);
       }
 
-      function launch(name, hint, callback) {
+      function launch(name, hint, computedArg) {
         return function() {
           if(options.freezeUI) { // Wait for the operation to finish
             displayFeedback("Please wait until current action finishes...");
@@ -578,7 +568,7 @@
                 showError("");
                 options.freezeUI = false;
                 element.disabled = false;
-                if(callback) callback(result);
+                handleScriptFeedback(result);
               })
             .withFailureHandler(
               function(msg, element) {
@@ -586,7 +576,7 @@
                 options.freezeUI = false;
                 element.disabled = false;
               })
-            .withUserObject(this)[name](options, docProperties);
+            .withUserObject(this)[name](options, docProperties, typeof computedArg == "function" ? computedArg() : computedArg);
         }
       }
 
