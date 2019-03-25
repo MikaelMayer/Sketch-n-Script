@@ -242,7 +242,17 @@ function collectEnv_(doc, body, env) {
       } else {
         sourceType = RAW; // Unparsing style, if possible
         var textEndIndex = textStartIndex + content.length;
-        content = uneval_(toRichTextFormula(txt, textStartIndex, textEndIndex - 1)); // We store the source as a string
+        var richTextFormula = toRichTextFormula(txt, textStartIndex, textEndIndex - 1);
+        if(typeof richTextFormula == "string" && richTextFormula.length > 0) { // Maybe it's a number or a boolean
+          var x = new RegExp("-?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?", "g");
+          x.lastIndex = 0;
+          if(x.exec(richTextFormula)) {
+            richTextFormula = parseFloat(richTextFormula)
+          } else if(richTextFormula == "true" || richTextFormula == "false") {
+            richTextFormula = richTextFormula == "true";
+          }
+        }
+        content = uneval_(richTextFormula); // We store the source as a string
         dRanges = [TextRange(txt, textStartIndex, textEndIndex - 1)]
       }
       if(!dRanges) continue; // No end detected
@@ -291,20 +301,13 @@ function getFunctionSource_(source) {
 // Given a value, if it is not computed yet, compute it
 function computeValue_(doc, $$value$$$, $$insertErrors$$$) { // Strange name to prevent override when using with(envJS)
   if(typeof $$insertErrors$$$ === "undefined") $$insertErrors$$$ = true;
-  var envJS = buildEnvJS_($$value$$$.env);
   if(typeof $$value$$$.v_ !== "undefined") return $$value$$$;
   try{
-    var evalWithFunctions = function ($$source$$$) {
-      with(envJS) {
-        var result = eval($$source$$$);
-      }
-      return result;
-    }
     if($$value$$$.expr.sourceType == RAWFORMULA || $$value$$$.expr.sourceType == RAW) {
-      $$value$$$.v_ = evalWithFunctions($$value$$$.expr.source);
+      $$value$$$.v_ = evaluate_($$value$$$.env, $$value$$$.expr.source);
     } else if($$value$$$.expr.sourceType == EQUALFORMULA) {
       if(isEqualFormula_($$value$$$.expr.source)) {
-        $$value$$$.v_ = evalWithFunctions($$value$$$.expr.source.substring(1));
+        $$value$$$.v_ = evaluate_($$value$$$.env, $$value$$$.expr.source.substring(1));
       } else {
         throw "[Internal error?] Inline formula not starting with equal"
       }
@@ -313,37 +316,39 @@ function computeValue_(doc, $$value$$$, $$insertErrors$$$) { // Strange name to 
     }
   }
   catch(error) {
-    var errormessage = "[Evaluation error: " + error + "] ";
-    if($$value$$$.expr.range && $$insertErrors$$$) {
-      var positions = drangesOf_($$value$$$.expr.range);
-      if(positions.length > 0) {
-        var position = positions[positions.length - 1];
-        var start = 0;
-        var txt;
-        if(isTextRange(position)) {
-          start = position.endInclusive + 1;
-          txt = position.txt;
-        } else {
-          var element = position.element;
-          var parent = element.getParent();
-          var indexParent = parent.getChildIndex(element);
-          var numChildren = parent.getNumChildren();
-          if(indexParent == numChildren - 1) {
-            txt = parent.appendText ? parent.appendText(errormessage) : undefined;
+    (function() { // Isolate these variable's names.
+      var errormessage = "[Evaluation error: " + error + "] ";
+      if($$value$$$.expr.range && $$insertErrors$$$) {
+        var positions = drangesOf_($$value$$$.expr.range);
+        if(positions.length > 0) {
+          var position = positions[positions.length - 1];
+          var start = 0;
+          var txt;
+          if(isTextRange(position)) {
+            start = position.endInclusive + 1;
+            txt = position.txt;
           } else {
-            txt = parent.insertText ? parent.insertText(indexParent + 1, errormessage) : undefined;
+            var element = position.element;
+            var parent = element.getParent();
+            var indexParent = parent.getChildIndex(element);
+            var numChildren = parent.getNumChildren();
+            if(indexParent == numChildren - 1) {
+              txt = parent.appendText ? parent.appendText(errormessage) : undefined;
+            } else {
+              txt = parent.insertText ? parent.insertText(indexParent + 1, errormessage) : undefined;
+            }
+          }
+          if(txt) {
+            txt.insertText(start, errormessage);
+            var endInclusive = start + errormessage.length - 1;
+            txt.setForegroundColor(start, endInclusive, "#FF0000");
+            addRange_(doc, ERROR_NAME, [TextRange(txt, start, endInclusive)]);
           }
         }
-        if(txt) {
-          txt.insertText(start, errormessage);
-          var endInclusive = start + errormessage.length - 1;
-          txt.setForegroundColor(start, endInclusive, "#FF0000");
-          addRange_(doc, ERROR_NAME, [TextRange(txt, start, endInclusive)]);
-        }
-      }
-    };
-    throw ("Error while computing" + ($$value$$$.expr.name ? " " + $$value$$$.expr.name + " " : "") + "'" +
-      $$value$$$.expr.source + "', " + error)
+      };
+      throw ("Error while computing" + ($$value$$$.expr.name ? " " + $$value$$$.expr.name + " " : "") + "'" +
+        $$value$$$.expr.source + "', " + error);
+    })()
   }
   return $$value$$$;
 }
@@ -436,10 +441,13 @@ function evaluateFormulas(options, docProperties, doc, body) {
   var newSidebarEnv = recoverSidebarEnv_(env);
   var nameValues = [];
   var potentialWarnings = newenvexprs[2] || "";
-  
+  var nameValuesKeys = {};
+  var recordedNameValues = {};
+  var toRecordNameValues = {};
   List.foreach(env, function(binding) {
     var v = binding.value.v_; // Already computed
-    if(isInserable_(v)) {
+    if(isInserable_(v) && !recordedNameValues[binding.name]) {
+      recordedNameValues[binding.name] = true;
       nameValues.unshift([binding.name, uneval_(v), {frozen: binding.value.frozen}]);
     }
   });
@@ -464,7 +472,7 @@ function evaluateFormulas(options, docProperties, doc, body) {
       var v = evalValue.v_;
       var strV = uneval_(v);
       if(isInserable_(v) && evalValue.expr.name && evalValue.expr.name != LAST_NAME) {
-        nameValues.push([evalValue.expr.name, strV]);
+        toRecordNameValues[evalValue.expr.name] = strV;
       }
       var valueWasUpdated = strV != uneval_(oldOutput);
       if(isUnderSelections_(doc, positions, selection, selectionElements)) {
@@ -490,6 +498,10 @@ function evaluateFormulas(options, docProperties, doc, body) {
       }
     }
   });
+  for(var k in toRecordNameValues) {
+    nameValues.push([k, toRecordNameValues[k]]);
+  }
+
   maybeSaveNewSidebarEnv(newSidebarEnv, docProperties.sidebarEnv);
   return {
     nameValues: nameValues,
