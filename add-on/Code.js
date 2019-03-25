@@ -22,8 +22,8 @@ var REVEALED_FORMULA_FONT = "Consolas";
 var ERROR_NAME = "definition-error";
 var DEFINITION_PARAGRAPHS = "definition-paragraphs"
 
-var RAW = 0; // String interpreted as string
-var RAWFORMULA = 1; // String interpreted as a formula
+var RAW = 0; // Raw document data converted to a formula (in a def)
+var RAWFORMULA = 1; // String interpreted as a formula (starting with '(' or '[' in a def)
 var EQUALFORMULA = 2; // String starting with equal, whose tail is interpreted as a formula
 
 /*

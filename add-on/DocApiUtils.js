@@ -369,13 +369,15 @@ function testRichFormula() {
   Logger.log(uneval_(toRichTextFormula(txt, start, endInclusive)));
 }
 
+// We only store the style that is different from the surroundings (i.e. to the left)
 function toRichTextFormula(txt, start, endInclusive) {
   var bufferStr = "";
   var text = txt.getText();
   var offset = start;
-  var prevAttributes = {};
+  var prevAttributes = undefined;
   var attributes = {};
-  if(start > 0) prevAttributes = txt.getAttributes(start - 1);
+  var baseAttributes = {};
+  if(start > 0) baseAttributes = txt.getAttributes(start - 1);
   var textElements = [];
   function flush() {
     if(bufferStr != "") {
@@ -383,7 +385,11 @@ function toRichTextFormula(txt, start, endInclusive) {
       var hasAttribute = false;
       for(var k in prevAttributes) {
         var v = prevAttributes[k];
-        if(typeof v === "undefined" || v === null) continue;
+        if(((typeof v === "undefined" ||
+           v === null) && typeof baseAttributes[k] === "undefined") ||
+           baseAttributes[k] === v
+          ) continue;
+        v = (typeof v === "undefined" || v === null) ? false : v
         hasAttribute = true;
         attrs[minifyPropertyKey(k)] = v;
       }
@@ -393,7 +399,7 @@ function toRichTextFormula(txt, start, endInclusive) {
   }
   while(offset <= endInclusive) {
     attributes = txt.getAttributes(offset);
-    if(uneval_(prevAttributes) == uneval_(attributes)) {
+    if(typeof prevAttributes === "undefined" || uneval_(prevAttributes) == uneval_(attributes)) {
       bufferStr += text.substring(offset, offset + 1);
     } else {
       flush();
