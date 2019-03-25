@@ -154,9 +154,7 @@ function buildEnvJS_(env) {
   var result = {};
   List.foreach(env, function(head) {
     if(typeof result[head.name] === "undefined") {
-      result[head.name] =
-        typeof head.value.vName_ != "undefined" ?
-          head.value.vName_ : head.value.v_;
+      result[head.name] = head.value.v_;
     }
   });
   env.cache = result;

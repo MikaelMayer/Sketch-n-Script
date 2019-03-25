@@ -358,7 +358,6 @@ function getUpdateAction(prog, updateData) {
         // TODO: Immediately update expression. Will merge expressions later.
         var newEnv = updateVar_(prog.env, oldNode.name, function (oldValue) {
             return { v_: updateData.newVal,
-                vName_: typeof oldValue.vName_ != "undefined" ? updateData.newVal : undefined,
                 expr: oldValue.expr,
                 env: oldValue.env };
         });

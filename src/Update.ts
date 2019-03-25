@@ -9,7 +9,7 @@ declare function Ok<a>(arg: a): Ok<a>;
 declare function Err<a>(arg: a): Err<a>;
 declare function resultCase<err,ok,a>(arg: Res<err,ok>, cb1: ((e: err) => a), cb2: ((o: ok) => a)): a;
 type Env = undefined | { head: {name: string, value: EnvValue}, tail: Env}
-type EnvValue = { v_: any, vName_: any, expr: any, env: Env}
+type EnvValue = { v_: any, expr: any, env: Env}
 declare function updateVar_(env: Env, name: string, cb: (oldv: EnvValue) => EnvValue): Env
 type AnyNode = Node.ExportableDefaultDeclaration// & { update?: (prog: Prog, newVal: UpdateData) => UpdateAction }
 type Prog = {
@@ -389,7 +389,6 @@ function getUpdateAction(prog: Prog, updateData: UpdateData): UpdateAction {
     // TODO: Immediately update expression. Will merge expressions later.
     var newEnv = updateVar_(prog.env, (oldNode as Node.Identifier).name, function(oldValue: EnvValue): EnvValue {
       return {v_: updateData.newVal,
-              vName_: typeof oldValue.vName_ != "undefined" ? updateData.newVal : undefined,
               expr: oldValue.expr, // TODO: Update this expression as well !
               env: oldValue.env};
     });

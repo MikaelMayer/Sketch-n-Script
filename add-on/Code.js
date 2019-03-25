@@ -176,7 +176,6 @@ function parseSidebarCode_(doc, defs) {
              value:
              computeValue_(doc, 
                            {v_: undefined, // cached
-                            vName_: undefined, // Only for inline formulas. The value associated with the name.
                             expr: {
                               name: name,
                               sourceType: sourceType,
@@ -253,7 +252,6 @@ function collectEnv_(doc, body, env) {
                value:
                computeValue_(doc, 
                             {v_: undefined, // cached
-                             vName_: undefined, // The value associated with the name (inline formulas only)
                              expr: {
                                name: name,
                                sourceType: sourceType,
@@ -294,30 +292,17 @@ function computeValue_(doc, $$value$$$, $$insertErrors$$$) { // Strange name to 
   var envJS = buildEnvJS_($$value$$$.env);
   if(typeof $$value$$$.v_ !== "undefined") return $$value$$$;
   try{
-    // If the source is a named formula such as (/*name(arg1, argn)=*/(X)(Y))
-    // we need to compute two values: X and the result
-    // This is what the function evalWithFunctions returns
     var evalWithFunctions = function ($$source$$$) {
       with(envJS) {
-        var result = [eval($$source$$$)];
-      }
-      var fs = getFunctionSource_($$source$$$);
-      if(typeof fs !== "undefined") {
-        with(envJS) {
-          result.push(eval(fs));
-        }
+        var result = eval($$source$$$);
       }
       return result;
     }
     if($$value$$$.expr.sourceType == RAWFORMULA || $$value$$$.expr.sourceType == RAW) {
-      var $$x$$$ = evalWithFunctions($$value$$$.expr.source);
-      $$value$$$.v_ = $$x$$$[0];
-      $$value$$$.vName_ = $$x$$$[1]; // The value for the name, if any
+      $$value$$$.v_ = evalWithFunctions($$value$$$.expr.source);
     } else if($$value$$$.expr.sourceType == EQUALFORMULA) {
       if(isEqualFormula_($$value$$$.expr.source)) {
-        var $$x$$$ = evalWithFunctions($$value$$$.expr.source.substring(1));
-        $$value$$$.v_ = $$x$$$[0];
-        $$value$$$.vName_ = $$x$$$[1]; // The value for the name
+        $$value$$$.v_ = evalWithFunctions($$value$$$.expr.source.substring(1));
       } else {
         throw "[Internal error?] Inline formula not starting with equal"
       }
@@ -379,7 +364,6 @@ function evaluateFormula_(doc, env, formula, txt, start, endInclusive, namedRang
   var evalValue =
       computeValue_(doc,
                     {v_: undefined,
-                     vName_: undefined,
                      expr: {
                        name: nameOf_(formula),
                        sourceType: sourceType,
@@ -468,8 +452,7 @@ function evaluateFormulas(options, docProperties, doc, body) {
     var newOutput = expr.newOutput; // The value if modified by the user. Should have been handled in updateNamedRanges_
     var evalValue =
         computeValue_(doc,
-                      {v_: undefined, // Usually the raw value
-                       vName_: undefined, // Can be a function
+                      {v_: undefined, // The raw value
                        expr: expr,
                        env: env}, !options.firstlaunch);
     if(evalValue) {
@@ -478,8 +461,7 @@ function evaluateFormulas(options, docProperties, doc, body) {
       }
       var v = evalValue.v_;
       var strV = uneval_(v);
-      var vName = typeof evalValue.vName_ != "undefined" ? evalValue.vName_ : v; 
-      if(isInserable_(vName) && evalValue.expr.name) {
+      if(isInserable_(v) && evalValue.expr.name) {
         nameValues.push([evalValue.expr.name, strV]);
       }
       var valueWasUpdated = strV != uneval_(oldOutput);
@@ -1006,6 +988,7 @@ function resolveDependencies_(exprs, env) {
   List.foreach(env, function(binding) {
     definedVars[binding.name] = true;
   });
+  definedVars["last"] = true; // Special variable name that does not need special reordering
   var tmp = exprs;
   var isReady = function(expr) {
     return arrayAll(freeVarsOf_(formulaOf_(expr)), function(name) { return definedVars[name] });
