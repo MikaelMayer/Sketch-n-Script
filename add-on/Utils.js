@@ -163,6 +163,17 @@ function buildEnvJS_(env) {
   return result;
 }
 
+// Re-evaluates all entries from the env
+function reeval(env) {
+  if(typeof env !== "object") return;
+  reeval(env.tail);
+  env.cache = undefined;
+  if(!env.head.value.expr) return;
+  var formula = formulaOf_(env.head.value.expr);
+  var newV_ = evaluate_(env.tail, formula);
+  env.head.value.v_ = newV_;
+}
+
 
 function uneval_(x, indent) {
   if(typeof x == "string") {

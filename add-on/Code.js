@@ -373,7 +373,7 @@ function nameOf_(formula) {
   return undefined; // means no value
 }
 
-// Returns the new value. Does not modify the environment
+// Returns the new value. Might cache modify the JS environment
 function evaluateFormula_(doc, env, formula, txt, start, endInclusive, namedRange, meta) {
   var sourceType = formula.length > 0 && formula[0] == "=" ? EQUALFORMULA : RAWFORMULA;
   var evalValue =
@@ -1060,22 +1060,23 @@ function updateNamedRanges_(doc, env, exprs) {
       function(newenvexprs) {
         var newenv = newenvexprs[0];
         var tmp = newenv;
-        while(tmp && tmp.diffs) {
+        while(tmp && tmp.diffs) { // Loop to update all sources from recent variables to old variables.
           if(tmp.head.diffs) {
-            var newValue = tmp.head.value.v_;
+            var pushedValue = tmp.head.value.v_;
             var formula = formulaOf_(tmp.head.value.expr);
             resultCase(
-              update_(tmp.tail, formula)(newValue), function (msg) { throw msg; },
+              update_(tmp.tail, formula)(pushedValue), function (msg) { throw msg; },
               function(newtmptailformula) {
                 var newtmptail = newtmptailformula.env;
                 var newFormula = newtmptailformula.node;
                 /*Logger.log(formula)
                 Logger.log("<--")
-                Logger.log(uneval_(newValue))
-                Logger.log("===")
+                Logger.log(uneval_(pushedValue))
+                Logger.log("==>")
                 Logger.log(newFormula)*/
                 var newSource = newFormulaOf_(tmp.head.value.expr, newFormula);
                 if(newSource != tmp.head.value.expr.source) {
+                  tmp.head.value.expr.source = newSource;
                   var range = tmp.head.value.expr.range;
                   if(range) {
                     var positions = drangesOf_(range);
@@ -1091,18 +1092,21 @@ function updateNamedRanges_(doc, env, exprs) {
                       }
                     }
                   } else if(tmp.head.value.expr.meta) { // sidebarEnv
-                    tmp.head.value.expr.source = newSource;
+                    //tmp.head.value.expr.source = newSource;
                   }
                 }
                 resultCase(
                   mergeUpdatedEnvs(newtmptail, tmp.tail), function (msg) { throw msg; },
                   function(newTmpTail) {
                     tmp.tail = newTmpTail;
+                    /*Logger.log("-->")
+                    Logger.log(uneval_(newValue));*/
                   });
               });
           }
           tmp = tmp.tail;
         }
+        reeval(newenv);
         
         // TODO: (not needed if all formulas are evaluated)
         //       Update formulasRange that were modified in the document (set the update formula)
