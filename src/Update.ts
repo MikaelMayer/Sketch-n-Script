@@ -253,8 +253,9 @@ function processClones(prog: Prog, updateData: UpdateData,
              (prog.node.type == Syntax.Literal ||
               prog.node.type == Syntax.ArrayExpression ||
               prog.node.type == Syntax.ObjectExpression)) { // TODO: Deal with string literals in a better way.
-        let oldFormat = prog.node.type === Syntax.Literal ? prog.node as Node.Literal : { wsBefore: prog.node.wsBefore, value: undefined, raw: uneval_(model)};
+        let oldFormat = prog.node.type === Syntax.Literal ? prog.node as Node.Literal : { wsBefore: prog.node.wsBefore, value: undefined, raw: uneval_(model), wsAfter: prog.node.wsAfter || ""};
         let newChildVal = new Node.Literal(oldFormat.wsBefore, oldFormat.value, oldFormat.raw);
+        newChildVal.wsAfter = oldFormat.wsAfter;
         newChildVal.value = model;
         return UpdateResult({...prog, node: newChildVal, diffs: valToNodeDiffs_(newChildVal)}, prog);
       } else if(typeof model == "object") {

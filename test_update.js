@@ -109,6 +109,8 @@ assertUpdate(envXL, "['SAY', 'HE', x, 'L', 'O']", ['HE', 'L', 'L', 'O'], "[ 'HE'
 assertUpdate(envXL, "['SAY', x, 'L', 'O']", ['L', 'L', 'O'], "[ x, 'L', 'O']");
 //*/
 assertUpdate(undefined, '["hello", "world"]', "helloworld", "\"helloworld\"");
+assertUpdate(undefined, '(1)', 2, '(2)');
+assertUpdate(undefined, '(true)', false, '(false)');
 
 console.log(testsPassed + "/" + tests + " passed");
 if(testsPassed !== tests) {

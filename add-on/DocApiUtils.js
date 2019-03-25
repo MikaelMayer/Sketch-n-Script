@@ -189,9 +189,9 @@ function walkAll_(el, callbackOnText, callbackBeforeWalk, callbackAfterWalk) {
 ///////////////// Selections methods /////////////////////////
 
 // isUnderSelections_: Document -> Array DRange -> Bool
-function isUnderSelections_(doc, positions) {
-  var selection = doc.getSelection();
-  var selectionElements = selection ? selection.getRangeElements() : undefined;
+function isUnderSelections_(doc, positions, selection, selectionElements) {
+  var selection = selection || doc.getSelection();
+  var selectionElements = selectionElements || (selection ? selection.getRangeElements() : undefined);
   
   if(selectionElements) {
     var underSelection = false;

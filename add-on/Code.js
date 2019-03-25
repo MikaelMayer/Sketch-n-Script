@@ -432,6 +432,9 @@ function evaluateFormulas(options, docProperties, doc, body) {
   //Logger.log("evaluateFormulas(" + uneval_(options) + ")");
   var doc = doc || DocumentApp.getActiveDocument();
   var body = body || doc.getBody();
+  
+  var selection = doc.getSelection();
+  var selectionElements = (selection ? selection.getRangeElements() : undefined);
   options = options || defaultOptions;
   //Logger.log("options: " + uneval_(options));
   docProperties = docProperties || getDocProperties();
@@ -480,7 +483,7 @@ function evaluateFormulas(options, docProperties, doc, body) {
         nameValues.push([evalValue.expr.name, strV]);
       }
       var valueWasUpdated = strV != uneval_(oldOutput);
-      if(isUnderSelections_(doc, positions)) {
+      if(isUnderSelections_(doc, positions, selection, selectionElements)) {
         var insertedPositions;
         if(!options.firstlaunch && (valueWasUpdated || (
              options.refreshImages == "true" && isElement_(v) && (v[0].toLowerCase() == "img" || v[0].toLowerCase() == "image")))) {
@@ -506,7 +509,7 @@ function evaluateFormulas(options, docProperties, doc, body) {
   maybeSaveNewSidebarEnv(newSidebarEnv, docProperties.sidebarEnv);
   return {
     nameValues: nameValues,
-    feedback: "Updated " + numUpdated + " computed values." + potentialWarnings,
+    feedback: "Updated " + numUpdated + " computed values"+(selection ? " under selection" : "")+"." + potentialWarnings,
     newSidebarEnv: newSidebarEnv};
 }
 
@@ -1662,11 +1665,14 @@ function colorize_(positions, color) {
 
 function colorexprs_(color, doc) {
   var doc = doc || DocumentApp.getActiveDocument();
-  var exprs = extractExprs_(doc)
+  var exprs = extractExprs_(doc);
+  var selection = doc.getSelection();
+  var selectionElements = (selection ? selection.getRangeElements() : undefined);
+  
   List.foreach(exprs, function(expr) {
     if(!expr.range) return;
     var positions = drangesOf_(expr.range);
-    if(isUnderSelections_(doc, positions)) {
+    if(isUnderSelections_(doc, positions, selection, selectionElements)) {
       for(var p in positions){
         colorize_(positions[p], color);
       }
