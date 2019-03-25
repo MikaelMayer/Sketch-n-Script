@@ -86,8 +86,9 @@ var List = {
 */
 
 function mergeValues(original, value1, value2) {
-  if(original == value1) return value2;
-  if(original == value2) return value1;
+  var so = uneval_(original);
+  var s1 = uneval_(value1);
+  if(so == s1) return value2;
   return value1;
 }
 

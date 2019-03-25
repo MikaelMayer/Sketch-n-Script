@@ -26,6 +26,8 @@ var RAW = 0; // Raw document data converted to a formula (in a def)
 var RAWFORMULA = 1; // String interpreted as a formula (starting with '(' or '[' in a def)
 var EQUALFORMULA = 2; // String starting with equal, whose tail is interpreted as a formula
 
+var LAST_NAME = "last"
+
 // Default document properties, shared accross users
 var defaultProperties = {
   sidebarEnv: ""
@@ -355,7 +357,7 @@ function nameOf_(formula) {
   if(m) {
     return m[1];
   }
-  return undefined; // means no value
+  return LAST_NAME;// Default name undefined; // means no value
 }
 
 // Returns the new value. Might cache modify the JS environment
@@ -461,7 +463,7 @@ function evaluateFormulas(options, docProperties, doc, body) {
       }
       var v = evalValue.v_;
       var strV = uneval_(v);
-      if(isInserable_(v) && evalValue.expr.name) {
+      if(isInserable_(v) && evalValue.expr.name && evalValue.expr.name != LAST_NAME) {
         nameValues.push([evalValue.expr.name, strV]);
       }
       var valueWasUpdated = strV != uneval_(oldOutput);
@@ -1031,7 +1033,7 @@ function updateNamedRanges_(doc, env, exprs) {
     var to = typeof expr.newOutput
     if(typeof expr.oldOutput !== "undefined" &&
        areDifferentValues_(expr.oldOutput, expr.newOutput)) {
-      changed = (expr.name || expr.source) + " changed to " + uneval_(expr.newOutput);
+      changed = ((expr.name === LAST_NAME ? undefined : expr.name) || expr.source) + " changed to " + uneval_(expr.newOutput);
       return changed;
     }
   });
@@ -1052,11 +1054,11 @@ function updateNamedRanges_(doc, env, exprs) {
               function(newtmptailformula) {
                 var newtmptail = newtmptailformula.env;
                 var newFormula = newtmptailformula.node;
-                /*Logger.log(formula)
+                Logger.log(formula)
                 Logger.log("<--")
                 Logger.log(uneval_(pushedValue))
                 Logger.log("==>")
-                Logger.log(newFormula)*/
+                Logger.log(newFormula)
                 var newSource = newFormulaOf_(tmp.head.value.expr, newFormula);
                 if(newSource != tmp.head.value.expr.source) {
                   tmp.head.value.expr.source = newSource;
