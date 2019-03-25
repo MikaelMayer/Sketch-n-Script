@@ -154,7 +154,7 @@ function parseSidebarCode_(doc, defs) {
     var newlineBefore = m[1];
     var name = m[2];
     var equalSign = m[3];
-    var content;
+    var content = m[4];
     var sourceType;
     if(content.length > 0 && content[0]=="(" || content[0] =="[") {
       var endInclusiveContent = getEndOffsetInclusiveFormula_(
@@ -395,9 +395,9 @@ function evaluateFormula_(doc, env, formula, txt, start, endInclusive, namedRang
 // oldValue and newValue should really be the actual values, not string representations of them
 function modifyName(options, docProperties, name, oldValue, newValue) {
   Logger.log("modifyName(" + uneval_(name) + ", " + uneval_(oldValue) + ", " + uneval_(newValue) + ")")
-  name = typeof name != "undefined" ? name : "x";
-  oldValue = typeof oldValue != "undefined" ? oldValue : "1";
-  newValue = typeof newValue != "undefined" ? newValue : "1";
+  name = typeof name != "undefined" ? name : "bold";
+  oldValue = typeof oldValue != "undefined" ? oldValue : false;
+  newValue = typeof newValue != "undefined" ? newValue : true;
   options = options || defaultOptions;
   options.finalExpr =
      {//name: undefined,
