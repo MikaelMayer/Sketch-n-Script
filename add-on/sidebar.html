@@ -142,17 +142,17 @@
           <div>
             <div class="righttitle">Options</div>
             <input type="checkbox" name="userProperties" id="highlightValues" value="" checked="checked">
-            <label for="highlightValues"
+            <label for="highlightValues" title="Color values when they are revealed"
               >Highlight values</label>
           </div>
           <div>
             <input type="checkbox" name="userProperties" id="highlightFormulas" value="" checked="checked">
-            <label for="highlightFormulas"
+            <label for="highlightFormulas" title="Color formulas when they are revealed"
               >Highlight formulas</label>
           </div>
           <div>
             <input type="checkbox" name="userProperties" id="refreshImages" value="" checked="checked">
-            <label for="refreshImages"
+            <label for="refreshImages" title="Always fetch the image even if its URL did not change"
               >Refresh images</label>
           </div>
           <div>
@@ -169,7 +169,7 @@
         <ul><li>Hidden formulas are not stored in the clipboard when copying. To ensure to copy formulas, always reveal them before copying.</li>
         </ul>
         <br>
-        Define variables in doc or <span class="hint" highlight="#sidebarEnv">above</span>:
+        Define names in doc or <span class="hint" highlight="#sidebarEnv">above</span>:
         <div class="doclike">name = some text</div>
         <div class="doclike">upper = (function(x) { return x.toUpperCase() })</div>
         In parentheses, you can write any javascript<br><br>.
@@ -179,7 +179,7 @@
         <!--Render formulas:
         <div class="doclike">This is some text and I can also make it big: SOME TEXT.</div-->
         Name formulas:
-        <div class="doclike">=(/*adj=*/"great"), =adj, =(upper(adj))</div>
+        <div class="doclike">=adj@("great"), =adj, =(upper(adj))</div>
         Alternatively, select some text and <span class="hint" highlight="#make-selection-formula">give a name to the selection</span>.<br>
         <br>
         Rich text formulas: 
@@ -459,7 +459,7 @@
           $("#predefined-names").append(insertVariable);
         }
         if($("#predefined-names").children().length) {
-          $("#predefined-names").prepend("<span title='Click on any of these variables to insert it in the doc'> Variables:</span>");
+          $("#predefined-names").prepend("<span title='Click on any of these names to insert it in the doc'>Defined names:</span>");
         }
         if(feedback != "") {
           displayFeedback(feedback);

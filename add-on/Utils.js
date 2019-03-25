@@ -380,10 +380,11 @@ function nextOffsetDelimiters_(s, o, delimiters) {
 // TODO: It's not compatible with comments.
 // TODO: We might want not the tightest, but the longest until a closing delimiter is found (e.g. ')', ']', or ',')
 
-function getEndOffsetInclusiveFormula_(string, endOffsetInclusive) {
+function getEndOffsetInclusiveFormula_(string, endOffsetInclusive, includeNames) {
   string = sanitizeQuotes_(string);
   var delimiters = [];
-  while(string.length > endOffsetInclusive && /[a-zA-Z0-9_$]/.exec(string[endOffsetInclusive])) {
+  while(string.length > endOffsetInclusive &&
+        (includeNames ? /[a-zA-Z0-9_$@]/ : /[a-zA-Z0-9_$]/).exec(string[endOffsetInclusive])) {
     endOffsetInclusive++;
   }
   endOffsetInclusive--; // So that this is the last char that was a letter

@@ -25,6 +25,7 @@ var DEFINITION_PARAGRAPHS = "definition-paragraphs"
 var RAW = 0; // Raw document data converted to a formula (in a def)
 var RAWFORMULA = 1; // String interpreted as a formula (starting with '(' or '[' in a def)
 var EQUALFORMULA = 2; // String starting with equal, whose tail is interpreted as a formula
+var EQUALNAMEATFORMULA = 3; // String starting with equal, a name, the at sign, whose tail is interpreted as a formula
 
 var LAST_NAME = "last"
 
@@ -303,17 +304,8 @@ function computeValue_(doc, $$value$$$, $$insertErrors$$$) { // Strange name to 
   if(typeof $$insertErrors$$$ === "undefined") $$insertErrors$$$ = true;
   if(typeof $$value$$$.v_ !== "undefined") return $$value$$$;
   try{
-    if($$value$$$.expr.sourceType == RAWFORMULA || $$value$$$.expr.sourceType == RAW) {
-      $$value$$$.v_ = evaluate_($$value$$$.env, $$value$$$.expr.source);
-    } else if($$value$$$.expr.sourceType == EQUALFORMULA) {
-      if(isEqualFormula_($$value$$$.expr.source)) {
-        $$value$$$.v_ = evaluate_($$value$$$.env, $$value$$$.expr.source.substring(1));
-      } else {
-        throw "[Internal error?] Inline formula not starting with equal"
-      }
-    } else {
-      throw ("[Internal error?] not recognized $$value$$$.expr.sourceType: " + $$value$$$.expr.sourceType)
-    }
+    var $$formula$$$ = formulaOf_($$value$$$.expr);
+    $$value$$$.v_ = evaluate_($$value$$$.env, $$formula$$$);
   }
   catch(error) {
     (function() { // Isolate these variable's names.
@@ -356,7 +348,13 @@ function computeValue_(doc, $$value$$$, $$insertErrors$$$) { // Strange name to 
 // If the formula sets a name, returns the name
 // If the comment is /*name()*/ return nmae
 function nameOf_(formula) {
-  var nameExtractRegex = new RegExp("^=?\\s*\\("+commentStart+"("+varName+")(?:\\([^\\)]*\\))?="+commentEnd+any+"*\\)$");
+  var nameExtractRegex = new RegExp("^=?\\("+commentStart+"("+varName+")(?:\\([^\\)]*\\))?="+commentEnd+any+"*\\)$");
+  nameExtractRegex.lastIndex = 0;
+  var m = nameExtractRegex.exec(formula);
+  if(m) {
+    return m[1];
+  }
+  nameExtractRegex = new RegExp("^=?("+varName+")@"+any+"*$");
   nameExtractRegex.lastIndex = 0;
   var m = nameExtractRegex.exec(formula);
   if(m) {
@@ -365,22 +363,10 @@ function nameOf_(formula) {
   return LAST_NAME;// Default name undefined; // means no value
 }
 
-// Returns the new value. Might cache modify the JS environment
-function evaluateFormula_(doc, env, formula, txt, start, endInclusive, namedRange, meta) {
-  var sourceType = formula.length > 0 && formula[0] == "=" ? EQUALFORMULA : RAWFORMULA;
-  var evalValue =
-      computeValue_(doc,
-                    {v_: undefined,
-                     expr: {
-                       name: nameOf_(formula),
-                       sourceType: sourceType,
-                       source: formula,
-                       range: rangeFromPositions(doc, [TextRange(txt, start, endInclusive)]),
-                       namedRange: namedRange,
-                       meta: meta
-                     },
-                     env: env});
-  return evalValue;
+function isEqualNameAtFormula_(formula) {
+  var x = new RegExp("^=" + varName + "@");
+  x.lastIndex = 0;
+  return x.exec(formula);
 }
 
 // oldValue and newValue should really be the actual values, not string representations of them
@@ -392,7 +378,7 @@ function modifyName(options, docProperties, name, oldValue, newValue) {
   options = options || defaultOptions;
   options.finalExpr =
      {//name: undefined,
-       sourceType: 2, // EQUALFORMULA
+       sourceType: EQUALFORMULA,
        source: "=" + name,
        //range: undefined,
        //namedRange: undefined,
@@ -605,7 +591,7 @@ function detectFormulaRanges_(doc, body) {
   while (searchResult = body.findText("=([a-zA-Z_$]|\\(|\\[)", searchResult)) {
     var txt = searchResult.getElement().asText();
     var start = searchResult.getStartOffset();
-    var endInclusive = getEndOffsetInclusiveFormula_(txt.getText(), start + 1);
+    var endInclusive = getEndOffsetInclusiveFormula_(txt.getText(), start + 1, /* include names */ true);
     if(endInclusive == -1) continue;
     var fullmatch = sanitizeQuotes_(txt.getText().substring(start, endInclusive + 1));
     if(!isPartiallyGenerated(txt, start, endInclusive)) {
@@ -778,6 +764,8 @@ function formulaValueUnapply_(formulaValue) {
 function formulaOf_(letExp) {
   if(letExp.sourceType == EQUALFORMULA && letExp.source.length > 0)
     return letExp.source.substring(1);
+  if(letExp.sourceType == EQUALNAMEATFORMULA && letExp.source.length > 0)
+    return letExp.source.substring(2+letExp.name.length); // 2 for the equal sign and the @ symbol
   if(letExp.sourceType == RAW || letExp.sourceType == RAWFORMULA)
     return letExp.source;
   throw ("[Internal error?] Empty formula that should start with equal: " + letExp);
@@ -786,8 +774,10 @@ function formulaOf_(letExp) {
 function newFormulaOf_(letExp, newFormula) {
   if(letExp.sourceType == EQUALFORMULA)
     return "=" + newFormula;
+  if(letExp.sourceType == EQUALNAMEATFORMULA)
+    return "=" + letExp.name + "@" + newFormula;
   if(letExp.sourceType == RAW || letExp.sourceType == RAWFORMULA) {
-    if(/^\s*[\(\[]/.exec(newFormula))
+    if(/^\s*[\(\[0-9\.]/.exec(newFormula) || newFormula == "true" || newFormula == "false")
       return newFormula
     else
       return "(" + newFormula + ")";
@@ -947,7 +937,7 @@ function extractExprs_(doc, maybeFinalExpr) {
     newOutput = reconcileAsMuchAsPossible_(newOutput, oldOutput);
     exprs.push( // Insert at the end. We might consider permuting the array to resolve dependencies later.
       {name: nameOf_(formula),
-       sourceType: isEqualFormula_(formula) ? EQUALFORMULA : RAWFORMULA,
+       sourceType: isEqualFormula_(formula) ? (isEqualNameAtFormula_(formula) ? EQUALNAMEATFORMULA : EQUALFORMULA) : RAWFORMULA,
        source: formula,
        range: range,
        namedRange: namedRange,
@@ -1990,7 +1980,7 @@ function nameSelection(options, docProperties, existingNames, doc, body) {
   var maybefunction = "";
   if(argumentNames.length == 0) {
     if(nameFormulasInline) {
-      formula = "=(/*"+name+"=*/" + formula + ")";
+      formula = "=" + name + "@(" + formula + ")";
     } else {
       if(pureString && lastElem.length > 0 && !(/^\s|\s$/.exec(lastElem))) {
         toAppendToSidebarEnv = name + " = " + lastElem;
