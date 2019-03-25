@@ -26,6 +26,20 @@ var RAW = 0; // Raw document data converted to a formula (in a def)
 var RAWFORMULA = 1; // String interpreted as a formula (starting with '(' or '[' in a def)
 var EQUALFORMULA = 2; // String starting with equal, whose tail is interpreted as a formula
 
+// Default document properties, shared accross users
+var defaultProperties = {
+  sidebarEnv: ""
+}
+
+// Default user properties
+var defaultOptions = {
+  nameFormulasInline: "false",
+  highlightFormulas: "true",
+  highlightValues: "false",
+  refreshImages: "true",//Refresh images even if URL has not changed
+  nextReminderDate: "0" // 0 means "not asked yet", -1 means "never", else it's a date.
+};
+
 /*
 Give names to reuse strings and numbers within your document.
 
@@ -140,15 +154,18 @@ function parseSidebarCode_(doc, defs) {
     var newlineBefore = m[1];
     var name = m[2];
     var equalSign = m[3];
-    var content = m[4];
-    var sourceType = RAW;
+    var content;
+    var sourceType;
     if(content.length > 0 && content[0]=="(" || content[0] =="[") {
       var endInclusiveContent = getEndOffsetInclusiveFormula_(
         defs, m.index + newlineBefore.length + name.length + equalSign.length);
-      content = defs.substring(m.index + newlineBefore.length + name.length + equalSign.length,
-                               endInclusiveContent + 1);
-      content = sanitizeQuotes_(content); 
+      content = sanitizeQuotes_(
+        defs.substring(m.index + newlineBefore.length + name.length + equalSign.length,
+                       endInclusiveContent + 1));
       sourceType = RAWFORMULA;
+    } else {
+      content = uneval_(m[4]); // We really store the string as a JS string
+      sourceType = RAW; // Unparsing style
     }
     var meta = {
       wsBefore: defs.substring(lastIndex, m.index) + newlineBefore,
@@ -222,8 +239,9 @@ function collectEnv_(doc, body, env) {
         }
         content = sanitizeQuotes_(content);
       } else {
-        sourceType = RAW;
+        sourceType = RAW; // Unparsing style, if possible
         var textEndIndex = textStartIndex + content.length;
+        content = uneval_(toRichTextFormula(txt, textStartIndex, textEndIndex - 1)); // We store the source as a string
         dRanges = [TextRange(txt, textStartIndex, textEndIndex - 1)]
       }
       if(!dRanges) continue; // No end detected
@@ -291,9 +309,7 @@ function computeValue_(doc, $$value$$$, $$insertErrors$$$) { // Strange name to 
       }
       return result;
     }
-    if($$value$$$.expr.sourceType == RAW) {
-      $$value$$$.v_ = $$value$$$.expr.source;
-    } else if($$value$$$.expr.sourceType == RAWFORMULA) {
+    if($$value$$$.expr.sourceType == RAWFORMULA || $$value$$$.expr.sourceType == RAW) {
       var $$x$$$ = evalWithFunctions($$value$$$.expr.source);
       $$value$$$.v_ = $$x$$$[0];
       $$value$$$.vName_ = $$x$$$[1]; // The value for the name, if any
@@ -466,7 +482,8 @@ function evaluateFormulas(options, docProperties, doc, body) {
       var valueWasUpdated = strV != uneval_(oldOutput);
       if(isUnderSelections_(doc, positions)) {
         var insertedPositions;
-        if(!options.firstlaunch && valueWasUpdated) {
+        if(!options.firstlaunch && (valueWasUpdated || (
+             options.refreshImages == "true" && isElement_(v) && (v[0].toLowerCase() == "img" || v[0].toLowerCase() == "image")))) {
           numUpdated += 1;
           // If positions are ranges, it will delete everything inside first
           insertedPositions = insertRichValue_(doc, positions, v, expr, exprs);
@@ -762,9 +779,7 @@ function formulaValueUnapply_(formulaValue) {
 function formulaOf_(letExp) {
   if(letExp.sourceType == EQUALFORMULA && letExp.source.length > 0)
     return letExp.source.substring(1);
-  if(letExp.sourceType == RAW)
-    return toExpString(letExp.source);
-  if(letExp.sourceType == RAWFORMULA)
+  if(letExp.sourceType == RAW || letExp.sourceType == RAWFORMULA)
     return letExp.source;
   throw ("[Internal error?] Empty formula that should start with equal: " + letExp);
 }
@@ -773,9 +788,7 @@ function newFormulaOf_(letExp, newFormula) {
   if(letExp.sourceType == EQUALFORMULA)
     return "=" + newFormula;
   if(letExp.sourceType == RAW || letExp.sourceType == RAWFORMULA) {
-    if(new RegExp("^\\s*" + stringRegex + "\\s*$").exec(newFormula))
-      return eval(newFormula);
-    else if(/^\s*[\(\[]/.exec(newFormula))
+    if(/^\s*[\(\[]/.exec(newFormula))
       return newFormula
     else
       return "(" + newFormula + ")";
@@ -840,8 +853,8 @@ function updateLetExprs_(doc, env, letExprs) {
          areDifferentValues_(oldOutput, newOutput)) {
         // Here the value was changed directly or indiretly, or a merge of both.
         formulaEnvUpdate = update_(env, formula)(newOutput);
-        Logger.log("After formula update")
-        Logger.log(uneval_(env.head.value.v_))
+        //Logger.log("After formula update")
+        //Logger.log(uneval_(env.head.value.v_))
       }
       return resultCase(
         formulaEnvUpdate, Err,
@@ -1053,11 +1066,11 @@ function updateNamedRanges_(doc, env, exprs) {
               function(newtmptailformula) {
                 var newtmptail = newtmptailformula.env;
                 var newFormula = newtmptailformula.node;
-                Logger.log(formula)
+                /*Logger.log(formula)
                 Logger.log("<--")
                 Logger.log(uneval_(newValue))
                 Logger.log("===")
-                Logger.log(newFormula)
+                Logger.log(newFormula)*/
                 var newSource = newFormulaOf_(tmp.head.value.expr, newFormula);
                 if(newSource != tmp.head.value.expr.source) {
                   var range = tmp.head.value.expr.range;
@@ -1067,8 +1080,12 @@ function updateNamedRanges_(doc, env, exprs) {
                       var txt = positions[0].txt;
                       var start = positions[0].start;
                       var endInclusive = positions[0].endInclusive;
-                      txt.deleteText(start, endInclusive);
-                      txt.insertText(start, newSource);
+                      if(tmp.head.value.expr.sourceType == RAW && sameAsValue(newSource)) {
+                        insertRichValue_(doc, positions, eval(newSource));
+                      } else {
+                        txt.deleteText(start, endInclusive);
+                        txt.insertText(start, newSource);
+                      }
                     }
                   } else if(tmp.head.value.expr.meta) { // sidebarEnv
                     tmp.head.value.expr.source = newSource;
@@ -2046,20 +2063,6 @@ function insertFormulaAtCursor(options, docProperties, formulaValue, doc) {
   }
   return "Inserted " + formula + " at the cursor position";
 }
-
-// Default document properties, shared accross users
-var defaultProperties = {
-  sidebarEnv: ""
-}
-
-// Default user properties
-var defaultOptions = {
-  nameFormulasInline: "false",
-  highlightFormulas: "true",
-  highlightValues: "false",
-  refreshImages: "true",
-  nextReminderDate: "0" // 0 means "not asked yet", -1 means "never", else it's a date.
-};
 /**
  * Gets the stored user preferences for the origin and destination languages,
  * if they exist.

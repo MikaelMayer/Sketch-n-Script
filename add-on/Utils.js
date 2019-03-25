@@ -603,3 +603,51 @@ function areDifferentValues_(oldOutput, newOutput) {
               return false;
             })()
 }
+/*
+function testSameAsValue() {
+  Logger.log("true:"+ sameAsValue("[1, 2]"))
+  Logger.log("false:"+ sameAsValue("[1, a]"))
+  Logger.log("true:"+ sameAsValue("[1, {a: 1}]"))
+  Logger.log("true:"+ sameAsValue("[1, {['1']: 1}]"))
+  Logger.log("false:"+ sameAsValue("[1, {[a]: 1}]"))
+}*/
+
+function array_all(array, pred) {
+  for(var i = 0; i < array.length; i++) {
+    if(!pred(array[i])) return false;
+  }
+  return true;
+}
+
+// Returns true if the expression has the same shape as the value it computes.
+function sameAsValue(oldNode) {
+  var Syntax = esprima.Syntax;
+  if(oldNode == null) return false;
+  if(typeof oldNode == "string") {
+    return sameAsValue(esprima.parse(oldNode));
+  }
+  if (oldNode.type == Syntax.Program) {
+    var script = oldNode;
+    if (script.body.length != 1)
+      return false;
+    var e = script.body[0];
+    if (e.type != Syntax.ExpressionStatement) return false;
+    return sameAsValue(e.expression);
+  }
+  if (oldNode.type == Syntax.Literal) { // Literals can be replaced by clones
+    return true;
+  }
+  if (oldNode.type == Syntax.Identifier) {
+    return false;
+  }
+  if (oldNode.type == Syntax.ArrayExpression) {
+    return array_all(oldNode.elements, sameAsValue);
+  }
+  if (oldNode.type == Syntax.ObjectExpression) {
+    return array_all(oldNode.properties, function(p) {
+      if(p.type == Syntax.SpreadElement) return false;
+      return !p.async && (!p.computed || p.key.type == Syntax.Literal) && p.value && !p.shorthand && !p.method && sameAsValue(p.value)
+    });
+  }
+  return 
+}
