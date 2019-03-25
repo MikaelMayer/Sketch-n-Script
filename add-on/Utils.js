@@ -478,7 +478,7 @@ function isRichText_(value) {
     return typeof value == "object" &&
         Array.isArray(value) &&
         value.length === 2 &&
-        typeof value[0] == "string" &&
+        (typeof value[0] == "string" || typeof value[0] == "number" || typeof value[0] == "boolean") &&
         typeof value[1] == "object";
 }
 function isElement_(value) {

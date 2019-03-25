@@ -1116,10 +1116,10 @@ function updateNamedRanges_(doc, env, exprs) {
   }
 }
 
-// Returns true for strings and objects representing strings
+// Returns true for strings and objects representing strings or inline elements
 function isInserable_(v) {
   return typeof v == "string" || typeof v == "number" || typeof v == "boolean" ||
-         typeof v == "object" && v.length == 2 && (typeof v[0] == "string" || typeof v[0] == "number" || typeof v[0] == "boolean") && typeof v[1] == "object";
+         isRichText_(v);
 }
 
 // Splits an element an the given insertion position

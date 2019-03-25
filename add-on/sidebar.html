@@ -367,8 +367,19 @@
           oldValue = parseInt(this.getAttribute("value"));
           newValue = parseInt(this.value);
         } else if(this.getAttribute("type") == "text") {
-          oldValue= this.getAttribute("value");
-          newValue = this.value;
+          if(this.getAttribute("js") == "true") {
+            try {
+              oldValue= eval(this.getAttribute("value"));
+              newValue = eval(this.value);
+            } catch(error) {
+              showError(error);
+              return;
+            }
+            showError("");
+          } else {
+            oldValue= this.getAttribute("value");
+            newValue = this.value;
+          }
         } else {
           console.log("Unrecognized type:" + this.getAttribute("type"));
           return;
@@ -384,7 +395,8 @@
             element.disabled = false;
             options.freezeUI = false;
             handleScriptFeedback(result);
-            displayFeedback(name + " correctly modified from '" + oldValue + "' to '" + newValue + "'");
+            displayFeedback(name + " correctly modified from '" + element.getAttribute("value") + "' to '" + (
+              typeof element.checked == "boolean" ? element.checked : element.value) + "'");
             })
           .withUserObject(this)
           .modifyName(options, docProperties, name, oldValue, newValue);
@@ -419,24 +431,35 @@
           var disabledBecauseFrozen = frozen ? " disabled" : "";
           if(typeof value == "string") {
             var inputName =
-              $("<input class='changevalue' type='text' title='Change the computed string value of "+name+"' name='"+name+"' value='"+value+"'" + disabledBecauseFrozen + ">");
+              $("<input class='changevalue' type='text' title='Change the computed string value of "+name+"' name='"+name+"'" + disabledBecauseFrozen + ">");
+            inputName.attr("value", value);
             inputName.change(valueChanger);
             insertVariable.append(inputName);
           } else if(typeof value == "boolean") {
             var inputName =
-              $("<input class='changevalue' type='checkbox' title='Change the computed truth value of "+name+"' name='"+name+"' value='"+value+"'"+(value ? " checked" : "")+ disabledBecauseFrozen + " title='"+strvalue+"'>");
+              $("<input class='changevalue' type='checkbox' title='Change the computed truth value of "+name+"' name='"+name+"'"+(value ? " checked" : "")+ disabledBecauseFrozen + " title='"+strvalue+"'>");
+            inputName.attr("value", "" + value);
             inputName.change(valueChanger);
             insertVariable.append(inputName);
           } else if(typeof value == "number") {
             var inputName =
-              $("<input class='changevalue' type='number' title='Change the computed numeric value of "+name+"' name='"+name+"' value='"+value+"'" + disabledBecauseFrozen + ">");
+              $("<input class='changevalue' type='number' title='Change the computed numeric value of "+name+"' name='"+name+"'" + disabledBecauseFrozen + ">");
+            inputName.attr("value", "" + value);
             inputName.change(valueChanger);
             insertVariable.append(inputName);
           } else {
+            var inputName =
+              $("<input class='changevalue' type='text' title='Change the computed value of "+name+"' name='"+name+"' js='true'" + disabledBecauseFrozen + ">");
+            inputName.attr("value", strvalue);
+            inputName.change(valueChanger);
+            insertVariable.append(inputName);
             //feedback = feedback + strvalue + " is a " + typeof value + ",";
           }
 
           $("#predefined-names").append(insertVariable);
+        }
+        if($("#predefined-names").children().length) {
+          $("#predefined-names").prepend("<span title='Click on any of these variables to insert it in the doc'> Variables:</span>");
         }
         if(feedback != "") {
           displayFeedback(feedback);
