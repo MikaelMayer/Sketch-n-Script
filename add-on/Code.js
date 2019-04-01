@@ -397,7 +397,7 @@ function recoverSidebarEnv_(env) {
   while(env && env.head) {
     if(env.head.value && env.head.value.expr && env.head.value.expr.meta) {
       var meta = env.head.value.expr.meta;
-      result = meta.wsBefore + env.head.value.expr.name + meta.equalSign + env.head.value.expr.source +
+      result = meta.wsBefore + env.head.value.expr.name + meta.equalSign + renderFormulaOf_(env.head.value.expr) +
         (meta.wsAfter ? meta.wsAfter : "") + result;
     }
     env = env.tail
@@ -549,10 +549,11 @@ function removeFormulas_(doc, range) {
 
 // Finds all formula ranges and add a namedrange for them, no matter the selection
 // If there were already named ranges, order the ranges.
-function detectFormulaRanges_(doc, body) {
+function detectFormulaRanges_(doc, body, header, footer) {
   var doc = doc || DocumentApp.getActiveDocument();
   var body = body || doc.getBody();
-  var searchResult = null;
+  var header = header || doc.getHeader();
+  var footer = footer || doc.getFooter();
   var namedRanges = getFormulas_(doc);
   var namesFound = [];
   foreachNamedRange_(namedRanges,
@@ -586,43 +587,49 @@ function detectFormulaRanges_(doc, body) {
     return overlapsComputedFormulas;
   }
   
-  var needToReorder = false; 
-  // Search until a formula is found.
-  while (searchResult = body.findText("=([a-zA-Z_$]|\\(|\\[)", searchResult)) {
-    var txt = searchResult.getElement().asText();
-    var start = searchResult.getStartOffset();
-    var endInclusive = getEndOffsetInclusiveFormula_(txt.getText(), start + 1, /* include names */ true);
-    if(endInclusive == -1) continue;
-    var fullmatch = sanitizeQuotes_(txt.getText().substring(start, endInclusive + 1));
-    if(!isPartiallyGenerated(txt, start, endInclusive)) {
-      //Logger.log("Marking " + txt.getText().substring(start, endInclusive + 1) + " as a formula");
-      if(!needToReorder) {
-        foreachNamedRange_(
-          namedRanges,
-          function(name /* Maybe to expand */, range, namedRange) {
-            return foreachDRange_(
-              range,
-              function(txtGenerated, startGenerated, endInclusiveGenerated) {
-                if(isBeforeElement(txt, txtGenerated) || // Newly detected formula is before an already existing one
-                   areSameElement_(txt, txtGenerated) && endInclusive < endInclusiveGenerated) {
-                  needToReorder = true;
-                  return true;
-                }
-              },
-              function(elementGenerated) {
-                if(isBeforeElement(txt, elementGenerated)) {
-                  needToReorder = true;
-                  return true;
-                }
-              });
-          });
+  var needToReorder = false;
+  var sections = [header, body, footer];
+  for(var secIndex = 0; secIndex < sections.length; secIndex++) {
+    var section = sections[secIndex];
+    if(!section) continue;
+    var searchResult = null;
+    // Search until a formula is found.
+    while (searchResult = section.findText("=([a-zA-Z_$]|\\(|\\[)", searchResult)) {
+      var txt = searchResult.getElement().asText();
+      var start = searchResult.getStartOffset();
+      var endInclusive = getEndOffsetInclusiveFormula_(txt.getText(), start + 1, /* include names */ true);
+      if(endInclusive == -1) continue;
+      var fullmatch = sanitizeQuotes_(txt.getText().substring(start, endInclusive + 1));
+      if(!isPartiallyGenerated(txt, start, endInclusive)) {
+        //Logger.log("Marking " + txt.getText().substring(start, endInclusive + 1) + " as a formula");
+        if(!needToReorder) {
+          foreachNamedRange_(
+            namedRanges,
+            function(name /* Maybe to expand */, range, namedRange) {
+              return foreachDRange_(
+                range,
+                function(txtGenerated, startGenerated, endInclusiveGenerated) {
+                  if(isBeforeElement(txt, txtGenerated) || // Newly detected formula is before an already existing one
+                     areSameElement_(txt, txtGenerated) && endInclusive < endInclusiveGenerated) {
+                    needToReorder = true;
+                    return true;
+                  }
+                },
+                function(elementGenerated) {
+                  if(isBeforeElement(txt, elementGenerated)) {
+                    needToReorder = true;
+                    return true;
+                  }
+                });
+            });
+        }
+        addRange_(doc, fullmatch, [TextRange(txt, start, endInclusive)]);
       }
-      addRange_(doc, fullmatch, [TextRange(txt, start, endInclusive)]);
     }
   }
   
   if(needToReorder) {
-    reorderFormulaRanges_(doc, body);
+    reorderFormulaRanges_(doc);
   }
 }
 
@@ -638,9 +645,8 @@ function foreachNamedRange_(namedRanges, callbackNameRange) {
 }
 
 // Takes all the formulas in the document and put them in the order of the document
-function reorderFormulaRanges_(doc, body) {
+function reorderFormulaRanges_(doc) {
   var doc = doc || DocumentApp.getActiveDocument();
-  var body = body || doc.getBody();
   var searchResult = null;
   var namedRanges = getFormulas_(doc);
   var toSort = [];
@@ -652,13 +658,13 @@ function reorderFormulaRanges_(doc, body) {
         range,
         function(txt, start, endInclusive, rangeElement) {
           if(toAdd) {
-            toSort.push([name, range, getPathUntilBody_(txt), start]);
+            toSort.push([name, range, getPathUntilDoc_(txt), start]);
             toAdd = false;
           }
         },
         function(element, rangeElement) {
           if(toAdd) {
-            toSort.push([name, range, getPathUntilBody_(element)]);
+            toSort.push([name, range, getPathUntilDoc_(element)]);
             toAdd = false;
           }
         });
@@ -697,16 +703,14 @@ function removeNamedRanges(doc, body) {
 
 function removeNamedRanges_(doc, body, name) {
   var doc = doc || DocumentApp.getActiveDocument();
-  var body = body || doc.getBody();
   var ranges = doc.getNamedRanges(name);
   for(var i in ranges) {
     ranges[i].remove();
   }
 }
 
-function deleteEvalErrors(doc, body) {
+function deleteEvalErrors(doc) {
   var doc = doc || DocumentApp.getActiveDocument();
-  var body = body || doc.getBody();
   var ranges = doc.getNamedRanges(ERROR_NAME);
   for(var i in ranges) {
     var namedRange = ranges[i];
@@ -771,18 +775,33 @@ function formulaOf_(letExp) {
   throw ("[Internal error?] Empty formula that should start with equal: " + letExp);
 }
 
-function newFormulaOf_(letExp, newFormula) {
+// Maybe use the document's syntax if it's a raw formula (for strings)
+function renderFormulaOf_(letExp) {
+  var formula = letExp.source;
+  if(letExp.sourceType == EQUALFORMULA || letExp.sourceType == EQUALNAMEATFORMULA)
+    return formula;
+  if(letExp.sourceType == RAW || letExp.sourceType == RAWFORMULA) {
+    if(/^\s*[\(\[0-9\.]/.exec(formula) || formula == "true" || formula == "false")
+      return formula;
+    else {
+      if(new RegExp("^" + stringRegex + "$", "").exec(formula)) {
+        var v = eval(formula);
+        if(v.indexOf("\r") == -1 && v.indexOf("\n") == -1) {
+          return v;
+        }
+      }
+      return "(" + formula + ")";
+    }
+  }
+  throw ("[Internal error?] What kind of source type is it? " + letExp.sourceType);
+}
+
+function newFormulaOf_(letExp, newFormula) { // From JS to our surface language's syntax with "=" and "@"
   if(letExp.sourceType == EQUALFORMULA)
     return "=" + newFormula;
   if(letExp.sourceType == EQUALNAMEATFORMULA)
     return "=" + letExp.name + "@" + newFormula;
-  if(letExp.sourceType == RAW || letExp.sourceType == RAWFORMULA) {
-    if(/^\s*[\(\[0-9\.]/.exec(newFormula) || newFormula == "true" || newFormula == "false")
-      return newFormula
-    else
-      return "(" + newFormula + ")";
-  }
-  throw ("[Internal error?] What kind of source type is it? " + letExp.sourceType);
+  return newFormula;
 }
 
 
@@ -1075,7 +1094,7 @@ function updateNamedRanges_(doc, env, exprs) {
                         insertRichValue_(doc, positions, eval(newSource));
                       } else {
                         txt.deleteText(start, endInclusive);
-                        txt.insertText(start, newSource);
+                        txt.insertText(start, renderFormulaOf_(newSource));
                       }
                     }
                   } else if(tmp.head.value.expr.meta) { // sidebarEnv
@@ -2120,10 +2139,10 @@ function hideDefinitions(options, docProperties, doc, body) {
       foreachDRange_(
         range,
         function(txt, start, endInclusive, rangeElement) {
-          toSort.push([name, rangeElement, getPathUntilBody_(txt), start]);
+          toSort.push([name, rangeElement, getPathUntilDoc_(txt), start]);
         },
         function(element, rangeElement) {
-          toSort.push([name, rangeElement, getPathUntilBody_(element)]);
+          toSort.push([name, rangeElement, getPathUntilDoc_(element)]);
         });
       toSort.sort(sortingFunction);
       if(!toSort.length) return;
@@ -2136,7 +2155,7 @@ function hideDefinitions(options, docProperties, doc, body) {
       var tmp = minElement;
       var prev;
       var toRemove = [];
-      while(tmp && comparePaths(getPathUntilBody_(tmp), maxPath) <= 0) {
+      while(tmp && comparePaths(getPathUntilDoc_(tmp), maxPath) <= 0) {
         prev = tmp;
         toRemove.push(tmp);
         var s = tmp.getText();

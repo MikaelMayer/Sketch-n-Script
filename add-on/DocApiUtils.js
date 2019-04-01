@@ -144,23 +144,23 @@ function comparePaths(p1, p2) {
 }
 
 function isBeforeElement(element1, element2) {
-  var p1 = getPathUntilBody_(element1);
-  var p2 = getPathUntilBody_(element2);
+  var p1 = getPathUntilDoc_(element1);
+  var p2 = getPathUntilDoc_(element2);
   if(comparePaths(p1, p2) < 0) return true;
   return false;
 }
 
 function areSameElement_(element1, element2) {
-  return getPathUntilBody_(element1).join("<") == getPathUntilBody_(element2).join("<");
+  return getPathUntilDoc_(element1).join("<") == getPathUntilDoc_(element2).join("<");
 }
 
 function isDescendantOf_(element1, element2) {
-  var path1 = getPathUntilBody_(element1).join(">");
-  var path2 = getPathUntilBody_(element2).join(">");
+  var path1 = getPathUntilDoc_(element1).join(">");
+  var path2 = getPathUntilDoc_(element2).join(">");
   return path2.length <= path1.length && path1.substring(0, path2.length) === path2;
 }
 
-function getPathUntilBody_(element) {
+function getPathUntilDoc_(element) {
   var path = [];
   while(element && element.getType && element.getType() != DocumentApp.ElementType.DOCUMENT && element.getParent()) {
     var parent = element.getParent();

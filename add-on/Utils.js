@@ -486,7 +486,8 @@ function isElement_(value) {
         Array.isArray(value) &&
         value.length === 3 &&
         typeof value[0] == "string" &&
-        typeof value[1] == "object";
+        typeof value[1] == "object" &&
+        !Array.isArray(value[1]);
 }
 
 
