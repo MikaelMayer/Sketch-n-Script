@@ -112,6 +112,8 @@ assertUpdate(undefined, '["hello", "world"]', "helloworld", "\"helloworld\"");
 assertUpdate(undefined, '(1)', 2, '(2)');
 assertUpdate(undefined, '(true)', false, '(false)');
 
+assertUpdate(undefined, 'var x = 1; x', 2, 'var x = 2; x')
+
 console.log(testsPassed + "/" + tests + " passed");
 if(testsPassed !== tests) {
   console.log((tests - testsPassed) + " tests failed");

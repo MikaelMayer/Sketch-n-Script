@@ -8,8 +8,52 @@ type Res<err,ok> = Err<err> | Ok<ok>
 declare function Ok<a>(arg: a): Ok<a>;
 declare function Err<a>(arg: a): Err<a>;
 declare function resultCase<err,ok,a>(arg: Res<err,ok>, cb1: ((e: err) => a), cb2: ((o: ok) => a)): a;
+
+enum HeapValueType {
+  Raw = "Raw",
+  Array = "Array",
+  Object = "Object",
+  Function = "Function",
+  Ref = "Ref"
+}
+type HeapLocation = string
+interface Heap {
+  [loc: HeapLocation]: HeapValue
+}
+enum HeapSourceType {
+  Direct = "Direct",
+  After = "After"
+}
+type HeapSource =
+    {tag: HeapSourceType.Direct, heap: Heap}
+  | {tag: HeapSourceType.After, source: ComputationSource}
+
+// When a value was computed, what led to computing it?
+// Diffs for ComputationSource is always a Reuse specifying individual diffs for Env, expr and heapSource.
+type ComputationSource = { env: Env, expr: AnyNode, heapSource: HeapSource, cached?: any, diffs?: Diffs }
+type HeapValue = {tag: HeapValueType.Raw, value?: string | number | boolean | undefined, source: ComputationSource}
+               | {tag: HeapValueType.Array, value?: HeapLocation[], source: ComputationSource}
+               | {tag: HeapValueType.Object, value?: {[key: string | number]: HeapLocation}, source: ComputationSource}
+               | {tag: HeapValueType.Function, // We shouldn't need the closure to update it.
+                    value: {name: string | undefined,
+                            thisBinding: HeapValue | undefined,
+                           }, source: ComputationSource}
+               | {tag: HeapValueType.Ref, value: HeapLocation, source: ComputationSource}
 type Env = undefined | { head: {name: string, value: EnvValue}, tail: Env}
-type EnvValue = { v_: any, expr: any, env: Env}
+type EnvValue = { v_: any, source: ComputationSource}
+
+type Stack = undefined | { head: StackValue, tail: Stack}
+enum StackValueType {
+  Argument = "Argument", // next argument to compute
+  Call = "Call",
+  Primitive = "Primitive"
+}
+type StackValue =
+    { tag: StackValueType.Argument, env: Env, argument: AnyNode} // The heap is obtained after computing the function.
+  | { tag: StackValueType.Call, env: Env }
+  | { tag: StackValueType.Primitive, env: Env}
+
+// TODO: This function should have a different signature.
 declare function updateVar_(env: Env, name: string, cb: (oldv: EnvValue) => EnvValue): Env
 type AnyNode = Node.ExportableDefaultDeclaration// & { update?: (prog: Prog, newVal: UpdateData) => UpdateAction }
 type Prog = {
