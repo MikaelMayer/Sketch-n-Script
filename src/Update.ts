@@ -30,16 +30,17 @@ type HeapSource =
 
 // When a value was computed, what led to computing it?
 // Diffs for ComputationSource is always a Reuse specifying individual diffs for Env, expr and heapSource.
-type ComputationSource = { env: Env, expr: AnyNode, heapSource: HeapSource, cached?: any, diffs?: Diffs }
+type ComputationSource = { env: Env, expr: AnyNode, heapSource: HeapSource, v_?: any, diffs?: Diffs }
 type HeapValue = {tag: HeapValueType.Raw, value?: string | number | boolean | undefined, source: ComputationSource}
                | {tag: HeapValueType.Array, value?: HeapLocation[], source: ComputationSource}
                | {tag: HeapValueType.Object, value?: {[key: string | number]: HeapLocation}, source: ComputationSource}
                | {tag: HeapValueType.Function, // We shouldn't need the closure to update it.
                     value: {name: string | undefined,
                             thisBinding: HeapValue | undefined,
+                            properties: {[key: string | number]: HeapLocation} // Additional run-time properties
                            }, source: ComputationSource}
                | {tag: HeapValueType.Ref, value: HeapLocation, source: ComputationSource}
-type Env = undefined | { head: {name: string, value: EnvValue}, tail: Env}
+type Env = undefined | { head: {name: string, value: ComputationSource}, tail: Env}
 type EnvValue = { v_: any, source: ComputationSource}
 
 type Stack = undefined | { head: StackValue, tail: Stack}
@@ -53,13 +54,15 @@ type StackValue =
   | { tag: StackValueType.Call, env: Env }
   | { tag: StackValueType.Primitive, env: Env}
 
-// TODO: This function should have a different signature.
+// TODO: This function should return an UpdateAction to actually update the variable's value.
 declare function updateVar_(env: Env, name: string, cb: (oldv: EnvValue) => EnvValue): Env
 type AnyNode = Node.ExportableDefaultDeclaration// & { update?: (prog: Prog, newVal: UpdateData) => UpdateAction }
 type Prog = {
-  context: AnyNode[],
-  env: Env,
-  node: AnyNode}  // Will add heap, stack and expression context later.
+  context: AnyNode[], // Expression context, for clones
+  env: Env,           // Binding from variables to heap locations
+  node: AnyNode,      // Current program being updated
+  heap: Heap,         // Binding from heap locations to computation sources
+  stack: Stack}.      // Stack of remaining operations
 type ProgDiffs = Prog & { diffs: Diffs }
 type UpdateData = {newVal: any, oldVal: any, diffs?: Diffs}
 declare let Logger: { log: (content: any) => any };
@@ -392,6 +395,80 @@ function objectGather(prog: Prog, keys: string[], newNode: Node.ObjectExpression
   }
 }
 
+function walkNode(f) {
+  return function(node) {
+    if(f(node)) return;
+    var toRecurse: AnyNode[] = [];
+    var t = node.Type;
+    if(t === Syntax.ArrayExpression || t === Syntax.ArrayPattern) {
+      toRecurse.push(...node.elements);
+    } else if(t === Syntax.ArrowFunctionExpression || t === Syntax.FunctionDeclaration || t === Syntax.FunctionExpression) {
+      if(node.id) toRecurse.push(node.id);
+      toRecurse.push(node.params, node.body);
+    } else if(t === Syntax.AssignmentExpression || t === Syntax.BinaryExpression || t === Syntax.AssignmentPattern) {
+      toRecurse.push(node.left, node.right);
+    } else if(t === Syntax.AwaitExpression) {
+      toRecurse.push(node.argument);
+    } else if(t === Syntax.BlockStatement) {
+      toRecurse.push(...node.body);
+    } else if(t === Syntax.BreakStatement || t === Syntax.ContinueStatement) {
+      if(node.label) toRecurse.push(node.label);
+    } else if(t === Syntax.CallExpression) {
+      toRecurse.push(node.callee, ...node.arguments);
+    } else if(t === Syntax.CatchClause) {
+      toRecurse.push(node.param, node.body);
+    } else if(t === Syntax.ClassBody) {
+      toRecurse.push(...node.body)
+    } else if(t === Syntax.ClassDeclaration || t === Syntax.ClassExpression) {
+      if(node.id) toRecurse.push(node.id);
+      if(node.superClass) toRecurse.push(node.superClass);
+      toRecurse.push(body);
+    } else if(t === Syntax.MemberExpression) {
+      toRecurse.push(node.object, node.property);
+    } else if(t === Syntax.ConditionalExpression) {
+      toRecurse.push(node.test, node.consequent, node.alternate);
+    } else if(t === Syntax.ExpressionStatement) {
+      toRecurse.push(node.expression);
+    } else if(t === Syntax.DoWhileStatement) {
+      toRecurse.push(node.body);
+      toRecurse.push(node.test);
+    } else if(t === Syntax.ExportAllDeclaration) {
+      toRecurse.push(node.source);
+    } // TODO: continue after ExportDefaultDeclaration
+    for(let x of toRecurse) walkNode(f)(x);
+  }
+}
+
+// Insert var x = undefined if x is defined somewhere below prefixed with var
+function hoistDeclarations(body: AnyNode[]): AnyNode[] {
+  var Syntax = syntax.Syntax || esprima.Syntax;
+  var localVars: { [name: string]: Node.VariableDeclaration } = {}
+  var Node = typeof Node == "undefined" ? esprima.Node : Node;
+  var walkEachNode = walkNode((node) => {
+    if(node.type === Syntax.VariableDeclaration) {
+      for(let declaration of (node as Node.VariableDeclaration).declarations) {
+        if(declaration.id.type === Syntax.Identifier) {
+          localVars[declaration.id.name] =
+            new Node.VariableDeclaration("\n",
+              [new Node.VariableDeclarator(
+                  declaration.id, " ", new Node.Identifier(" ", "undefined", "undefined"))
+              ], [], "var", ";");
+        }
+      }
+    }
+    // If we don't recurse over children, we return true
+    return node.type === Syntax.FunctionDeclaration || node.type === Syntax.FunctionExpression
+  });
+  for(let b of body) {
+    walkEachNode(b);
+  }
+  var prefixed: Node.VariableDeclaration[] = []
+  for(let decl of localVars) {
+    prefixed = decl;
+  }
+  return prefixed.concat(body);
+}
+
 // Update.js is generated by Update.ts
 function getUpdateAction(prog: Prog, updateData: UpdateData): UpdateAction {
   /*if(prog.node.update) { // In case there is a custom update procedure available.
@@ -402,6 +479,12 @@ function getUpdateAction(prog: Prog, updateData: UpdateData): UpdateAction {
   var oldNode = prog.node;
   if(oldNode.type == Syntax.Program) {
     let script: Node.Script = oldNode as Node.Script;
+    if(script.body.length == 0) {
+      return UpdateFail("Cannot update empty script")
+    }
+    // Here we should duplicate declarations into var
+    var init =
+    var last = script.body[script.body.length - 1];
     if(script.body.length != 1)
       return UpdateFail("Reversion currently supports only 1 directive in program, got " + script.body.length);
     var e = script.body[0];
