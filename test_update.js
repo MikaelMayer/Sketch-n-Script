@@ -5,22 +5,35 @@
 //console.log(uneval_(computeDiffs_(12, 12)));
 
 let envX12 = {head: {name: "x", value: {
+    env: undefined,
+    expr: new Node.Literal("", 12, "12"),
+    heapSource: {tag: HeapSourceType.Direct, heap: {}},
     v_: 12
   }},
   tail: undefined};
 
 let envXL = {head: {name: "x", value: {
+    env: undefined,
+    expr: new Node.Literal("", "L", "\"L\""),
+    heapSource: {tag: HeapSourceType.Direct, heap: {}},
     v_: "L"
   }},
   tail: undefined};
 
 let envNiu = {head: {name: "niu", value: {
+    env: undefined,
+    expr: esprima.parse(`["Normal",["italic",{italic:true}],
+         " ", ["underlined", {underline:true}]]`).body[0].expression,
+    heapSource: {tag: HeapSourceType.Direct, heap: {}},
     v_: ["Normal",["italic",{italic:true}],
          " ", ["underlined", {underline:true}]]
   }},
   tail: undefined};
   
 let envS = {head: {name: "s", value: {
+    env: undefined,
+    expr: esprima.parse(`[1,"2"]`).body[0].expression,
+    heapSource: {tag: HeapSourceType.Direct, heap: {}},
     v_: [1,"2"]
   }},
   tail: undefined};
@@ -79,7 +92,7 @@ function assertEqual(x1, x2) {
     console.log("Expected\n" + s2 + "\n, got \n" + s1);
   }
 }
-//*
+/*
 assertEqual(computeDiffs_([1, 2, 2, 3], [2, 2, 3]), [ { ctor: "Update", kind:   { ctor: "NewValue", model:   [ undefined, undefined, undefined]}, children:   { 0:   [ { ctor: "Clone", path:   { up: 0, down:   [ "1"]}, diffs:   [ { ctor: "Update", kind:   { ctor: "Reuse"}, children:   { }}]}, { ctor: "Clone", path:   { up: 0, down:   [ "2"]}, diffs:   [ { ctor: "Update", kind:   { ctor: "Reuse"}, children:   { }}]}], 1:   [ { ctor: "Clone", path:   { up: 0, down:   [ "2"]}, diffs:   [ { ctor: "Update", kind:   { ctor: "Reuse"}, children:   { }}]}, { ctor: "Clone", path:   { up: 0, down:   [ "1"]}, diffs:   [ { ctor: "Update", kind:   { ctor: "Reuse"}, children:   { }}]}], 2:   [ { ctor: "Clone", path:   { up: 0, down:   [ "3"]}, diffs:   [ { ctor: "Update", kind:   { ctor: "Reuse"}, children:   { }}]}]}}]);
 assertUpdate(envX12, "//\n1//x", 2, "//\n2//x");
 assertUpdate(envX12, "//\n'1'//x", 2, "//\n2//x");
@@ -107,12 +120,25 @@ assertUpdate(envXL, "['HE', x, 'L', 'O']", ['SAY', 'HE', 'L', 'L', 'O'], "[\"SAY
 assertUpdate(envXL, "['SAY', 'HE', x, 'L', 'O']", ['HE', 'L', 'L', 'O'], "[ 'HE', x, 'L', 'O']");
 //assertUpdate(envXL, "[x, 'L', 'O']", ['SAY', 'L', 'L', 'O'], "[\"SAY\",x, 'L', 'O']");
 assertUpdate(envXL, "['SAY', x, 'L', 'O']", ['L', 'L', 'O'], "[ x, 'L', 'O']");
-//*/
 assertUpdate(undefined, '["hello", "world"]', "helloworld", "\"helloworld\"");
 assertUpdate(undefined, '(1)', 2, '(2)');
 assertUpdate(undefined, '(true)', false, '(false)');
+//*/
 
-assertUpdate(undefined, 'var x = 1; x', 2, 'var x = 2; x')
+assertUpdate(undefined, '  1', 2,
+                        '  2');
+/*
+assertUpdate(undefined, 'let x = 1; x', 2,
+                        'let x = 2; x');
+assertUpdate(undefined, 'const x = 1; x', 2,
+                        'const x = 2; x');
+assertUpdate(undefined, 'let x = 1; let y = x; y', 2,
+                        'let x = 2; let y = x; y');
+assertUpdate(undefined, 'x = 1; var x; x', 2,
+                        'x = 2; var x; x')
+assertUpdate(undefined, 'x = 1; var x = x; x', 2,
+                        'x = 2; var x = x; x')
+//*/
 
 console.log(testsPassed + "/" + tests + " passed");
 if(testsPassed !== tests) {

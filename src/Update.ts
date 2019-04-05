@@ -18,7 +18,7 @@ enum HeapValueType {
 }
 type HeapLocation = string
 interface Heap {
-  [loc: HeapLocation]: HeapValue
+  [loc: string]: HeapValue
 }
 enum HeapSourceType {
   Direct = "Direct",
@@ -26,18 +26,25 @@ enum HeapSourceType {
 }
 type HeapSource =
     {tag: HeapSourceType.Direct, heap: Heap}
-  | {tag: HeapSourceType.After, source: ComputationSource}
+  | {tag: HeapSourceType.After, source: ComputationSource, heap?: Heap}
 
 // When a value was computed, what led to computing it?
 // Diffs for ComputationSource is always a Reuse specifying individual diffs for Env, expr and heapSource.
-type ComputationSource = { env: Env, expr: AnyNode, heapSource: HeapSource, v_?: any, diffs?: Diffs }
+type ComputationSource = {
+  env: Env,
+  expr: AnyNode,
+  heapSource: HeapSource,
+  v_?: any, ref?: HeapLocation, // Two values computed on demand
+  heapAllocated?: boolean, // true if the computed value should be wrapped by a reference (even if it is a reference), in which case ref contains the reference
+  diffs?: Diffs }
+// v_ = Value after all dereferencing
 type HeapValue = {tag: HeapValueType.Raw, value?: string | number | boolean | undefined, source: ComputationSource}
                | {tag: HeapValueType.Array, value?: HeapLocation[], source: ComputationSource}
-               | {tag: HeapValueType.Object, value?: {[key: string | number]: HeapLocation}, source: ComputationSource}
+               | {tag: HeapValueType.Object, value?: {[key: string]: HeapLocation}, source: ComputationSource}
                | {tag: HeapValueType.Function, // We shouldn't need the closure to update it.
                     value: {name: string | undefined,
                             thisBinding: HeapValue | undefined,
-                            properties: {[key: string | number]: HeapLocation} // Additional run-time properties
+                            properties: {[key: string]: HeapLocation} // Additional run-time properties
                            }, source: ComputationSource}
                | {tag: HeapValueType.Ref, value: HeapLocation, source: ComputationSource}
 type Env = undefined | { head: {name: string, value: ComputationSource}, tail: Env}
@@ -45,24 +52,63 @@ type EnvValue = { v_: any, source: ComputationSource}
 
 type Stack = undefined | { head: StackValue, tail: Stack}
 enum StackValueType {
-  Argument = "Argument", // next argument to compute
-  Call = "Call",
-  Primitive = "Primitive"
+  //Argument = "Argument", // next argument to compute
+  //Call = "Call",
+  //Primitive = "Primitive",
+  Node = "Node" // When processed, before adding to stack, adds the env to the next NodeWithoutEnv in the stack.
 }
 type StackValue =
-    { tag: StackValueType.Argument, env: Env, argument: AnyNode} // The heap is obtained after computing the function.
-  | { tag: StackValueType.Call, env: Env }
-  | { tag: StackValueType.Primitive, env: Env}
+//    { tag: StackValueType.Argument, env: Env, argument: AnyNode} // The heap is obtained after computing the function.
+//  | { tag: StackValueType.Call, env: Env }
+//  | { tag: StackValueType.Primitive, env: Env, name: string}
+      { tag: StackValueType.Node, env?: Env, node: AnyNode, returnedExpressionStatement?: boolean }
+      // Returned mean that if the node is an expressionStatement, its value can be updated.
+      // If the env is not there yet, it is added when the previous statement is processed.
+
+function initStack(env: Env, initNode: AnyNode): Stack {
+  return {head: {tag: StackValueType.Node, env: env, node: initNode}, tail: undefined};
+}
+function initEnv(): Env {
+  var Node = typeof Node == "undefined" ? esprima.Node : Node;
+  return {head: // Global this object available
+    { name: "this",
+      value: { env: undefined,
+               expr: new Node.Identifier("", "this", "this"),
+               heapSource: {
+                 tag: HeapSourceType.Direct,
+                 heap: initHeap()},
+               v_: {},
+               ref: "this" } as ComputationSource },
+    tail: undefined }
+}
+// Equivalent of:
+//     const this = {}
+// Heap used once in initEnv, and another time in initStack
+// Perhaps we should consider just rewriting the initial program?
+function initHeap(): Heap {
+  var Node = typeof Node == "undefined" ? esprima.Node : Node;
+  return { ["this"]: {tag: HeapValueType.Object, value: {}, source: {env: undefined, expr: new Node.ObjectExpression("", [], [], ""), heapSource: {tag: HeapSourceType.Direct, heap: {}}}} }
+}
+function initHeapSource(): HeapSource {
+  return {tag: HeapSourceType.Direct, heap: initHeap()};
+}
+// Converts a node/environment to an initial program
+function initProg(node: AnyNode, env: Env = initEnv()): Prog {
+  return {context: [], stack: initStack(env, node), heapSource: initHeapSource()}
+}
+
+var uniqueID = 0;
+function uniqueRef(name) {
+  return name + (uniqueID++);
+}
 
 // TODO: This function should return an UpdateAction to actually update the variable's value.
 declare function updateVar_(env: Env, name: string, cb: (oldv: EnvValue) => EnvValue): Env
 type AnyNode = Node.ExportableDefaultDeclaration// & { update?: (prog: Prog, newVal: UpdateData) => UpdateAction }
 type Prog = {
-  context: AnyNode[], // Expression context, for clones
-  env: Env,           // Binding from variables to heap locations
-  node: AnyNode,      // Current program being updated
-  heap: Heap,         // Binding from heap locations to computation sources
-  stack: Stack}.      // Stack of remaining operations
+  context: AnyNode[], // Expression context (for clones)
+  heapSource: HeapSource, // Indirect or direct binding from heap locations to computation sources
+  stack: Stack}      // Stack of remaining operations. Initially a initStack(program). Each stack element may or may not contain an environment
 type ProgDiffs = Prog & { diffs: Diffs }
 type UpdateData = {newVal: any, oldVal: any, diffs?: Diffs}
 declare let Logger: { log: (content: any) => any };
@@ -94,12 +140,33 @@ type DClone = { ctor: DType.Clone, path: Path, diffs: Diffs };
 type Diff = DUpdate | DClone;
 type Diffs = Diff[];
 
-function DDReuse(childDiffs): DUpdate[] {
+function DDReuse(childDiffs: ChildDiffs): DUpdate[] {
   return [{
     ctor: DType.Update,
     kind: {ctor: DUType.Reuse },
     children: childDiffs
   }];
+}
+function DDChild(name: string[] | string, childDiffs: Diffs): Diffs {
+  if(typeof name === "string") {
+    return DDReuse({[name]: childDiffs})
+  } else {
+    if(name.length == 0) return childDiffs;
+    return DDChild(name[0], DDChild(name.slice(1), childDiffs));
+  }
+}
+function DDWrap(name: string[] | string, diffs: Diffs, diffUpdater: (ds: Diffs) => Diffs): Diffs {
+  if(typeof name === "string") {
+    return diffs.map(diff =>
+      diff.ctor === DType.Update ?
+          {...diff, children: {...diff.children,
+          [name]: diffUpdater(diff.children[name])}}
+        : diff
+    )
+  } else {
+    if(name.length == 0) return diffUpdater(diffs);
+    return DDWrap(name[0], diffs, d => DDWrap(name.slice(1), d, diffUpdater));
+  }
 }
 function DDNewValue(newVal: any): DUpdate[] {
   return [{ctor: DType.Update, kind: {ctor: DUType.NewValue, model: newVal}, children: {}}];
@@ -209,7 +276,8 @@ function processClone(prog: Prog, newVal: any, oldVal: any, diff: DClone, callba
   var Syntax = syntax.Syntax || esprima.Syntax;
   var Node = typeof Node == "undefined" ? esprima.Node : Node;
   if(diff.path.up <= prog.context.length) {
-    var toClone: AnyNode = diff.path.up == 0 ? prog.node : prog.context[diff.path.up - 1];
+    let oldNode = prog.stack.head.node;
+    var toClone: AnyNode = diff.path.up == 0 ? oldNode : prog.context[diff.path.up - 1];
     var nodePathDown = [];
     for(let downpathelem of diff.path.down) { // We map down path elems to AST
       if(toClone && toClone.type == Syntax.ArrayExpression && typeof (toClone as Node.ArrayExpression).elements[downpathelem] != "undefined") {
@@ -221,13 +289,15 @@ function processClone(prog: Prog, newVal: any, oldVal: any, diff: DClone, callba
     }
     if(isDSame(diff.diffs)) {
       return UpdateResult({...prog,
-        node: Object.create(toClone),
-        diffs: DDClone({up: diff.path.up, down: nodePathDown}, DDSame())}, prog, callback)
+        stack: { head: {...prog.stack.head, node: Object.create(toClone)},
+        tail: prog.stack.tail},
+        diffs: DDChild(["stack", "head", "node"], DDClone({up: diff.path.up, down: nodePathDown}, DDSame()))}, prog, callback)
     } else {
       return UpdateContinue({...prog,
-            node: Object.create(toClone)},
-          {newVal: newVal, oldVal: oldVal, diffs: diff.diffs},
-          callback || UpdateResult);
+        stack: { head: {...prog.stack.head, node: Object.create(toClone)},
+        tail: prog.stack.tail},
+      }, {newVal: newVal, oldVal: oldVal, diffs: diff.diffs},
+      callback || UpdateResult);
     }
   } else {
     return UpdateFail("Difference outside of context");
@@ -290,6 +360,7 @@ function processClones(prog: Prog, updateData: UpdateData,
   var Syntax = syntax.Syntax || esprima.Syntax;
   var Node = typeof Node == "undefined" ? esprima.Node : Node;
   return UpdateAlternative(...updateData.diffs.map(function(diff: Diff): UpdateAction {
+    let oldNode = prog.stack.head.node;
     if(diff.ctor === DType.Clone) {
       return processClone(prog, updateData.newVal, updateData.oldVal, diff);
     } else if(diff.kind.ctor === DUType.NewValue) {
@@ -297,16 +368,23 @@ function processClones(prog: Prog, updateData: UpdateData,
       if((typeof model == "number" ||
            typeof model == "string" ||
            typeof model == "boolean") &&
-             (prog.node.type == Syntax.Literal ||
-              prog.node.type == Syntax.ArrayExpression ||
-              prog.node.type == Syntax.ObjectExpression)) { // TODO: Deal with string literals in a better way.
-        let oldFormat = prog.node.type === Syntax.Literal ? prog.node as Node.Literal : { wsBefore: prog.node.wsBefore, value: undefined, raw: uneval_(model), wsAfter: prog.node.wsAfter || ""};
+             (oldNode.type == Syntax.Literal ||
+              oldNode.type == Syntax.ArrayExpression ||
+              oldNode.type == Syntax.ObjectExpression)) { // TODO: Deal with string literals in a better way.
+        let oldFormat = oldNode.type === Syntax.Literal ? oldNode as Node.Literal : { wsBefore: oldNode.wsBefore, value: undefined, raw: uneval_(model), wsAfter: oldNode.wsAfter || ""};
         let newChildVal = new Node.Literal(oldFormat.wsBefore, oldFormat.value, oldFormat.raw);
         newChildVal.wsAfter = oldFormat.wsAfter;
         newChildVal.value = model;
-        return UpdateResult({...prog, node: newChildVal, diffs: valToNodeDiffs_(newChildVal)}, prog);
+        return UpdateResult(
+          {...prog,
+           stack: {...prog.stack,
+             head: {...prog.stack.head,
+             node: newChildVal}},
+            diffs: DDChild(["stack", "head", "node"], valToNodeDiffs_(newChildVal))
+          }, prog);
       } else if(typeof model == "object") {
-        let oldFormat = prog.node.type === Syntax.ArrayExpression ? prog.node as Node.ArrayExpression : prog.node.type === Syntax.ObjectExpression ? prog.node as Node.ObjectExpression : { wsBefore: "", separators: [], wsBeforeClosing: ""};
+        // TODO: Adapt the Diff
+        let oldFormat = oldNode.type === Syntax.ArrayExpression ? oldNode as Node.ArrayExpression : oldNode.type === Syntax.ObjectExpression ? oldNode as Node.ObjectExpression : { wsBefore: "", separators: [], wsBeforeClosing: ""};
         let newNode = valToNode_(model) as (Node.ArrayExpression | Node.ObjectExpression);
         let separators = oldFormat.separators;
         let numKeys = Array.isArray(model) ? model.length : Object.keys(model).length;
@@ -323,8 +401,8 @@ function processClones(prog: Prog, updateData: UpdateData,
             : objectGather(prog, Object.keys(updateData.newVal), newNode as Node.ObjectExpression, newDiffs);
         let diffToConsider: DUpdate = {...diff};
         let willBeEmpty = false;
-        if(prog.node.type === Syntax.Identifier) {
-          // Identifiers forbid the flow of clones
+        if(oldNode.type === Syntax.Identifier) {
+          // For now, identifiers forbid the flow of (children) clones
           for(var k in diff.children) {
             diffToConsider.children[k] = filterDiffsNoClonesDown(diff.children[k]);
             willBeEmpty = willBeEmpty || diffToConsider.children[k].length == 0;
@@ -334,14 +412,18 @@ function processClones(prog: Prog, updateData: UpdateData,
           if(otherwise) return otherwise(diff);
           return undefined;
         }
-        return updateForeach(prog.env, Object.keys(updateData.newVal),
+        return updateForeach(prog.stack.head.env, Object.keys(updateData.newVal),
           k => callback => {
             let newChildVal = updateData.newVal[k];
             let childDiff = diffToConsider.children[k];
             if(typeof childDiff == "undefined") {
               let newChildNode = valToNode_(newChildVal);
               let newChildNodeDiffs = valToNodeDiffs_(newChildVal);
-              return UpdateResult({...prog, node: newChildNode, diffs: newChildNodeDiffs}, prog, callback);
+              return UpdateResult({...prog,
+                stack: {head: {...prog.stack.head,
+                  node: newChildNode
+                }, tail: prog.stack.tail},
+                diffs: DDChild(["stack", "head", "node"], newChildNodeDiffs)}, prog, callback);
             } else { // Clones and reuse go through this
               let oldChildVal = (updateData.oldVal as any[])[k];
               return UpdateContinue(prog, {
@@ -367,8 +449,8 @@ function updateForeach<elem>(env: Env,
     if(i < collection.length) {
       var elem = collection[i];
       return callbackIterator(elem, i)((newProg: ProgDiffs, oldProg: Prog) => {
-        var mergedEnv = mergeUpdatedEnvs(envSoFar, newProg.env)._0 as Env;
-        return aux(mergedEnv, nodesSoFar.concat(newProg.node), diffsSoFar.concat(newProg.diffs), i + 1);
+        var mergedEnv = mergeUpdatedEnvs(envSoFar, newProg.stack.head.env)._0 as Env;
+        return aux(mergedEnv, nodesSoFar.concat(newProg.stack.head.node), diffsSoFar.concat(newProg.diffs), i + 1);
       })
     } else {
       return gather(envSoFar, nodesSoFar, diffsSoFar);
@@ -380,8 +462,17 @@ function updateForeach<elem>(env: Env,
 function arrayGather(prog: Prog, newNode: Node.ArrayExpression, newDiffs: DUpdate[]) {
   return function(newEnv: Env, newNodes: AnyNode[], newNodesDiffs: Diffs[]): UpdateAction {
     newNode.elements = newNodes;
-    newDiffs[0].children.elements = DDReuse(newNodesDiffs); // FIXME: Not correct: elements form a new array.
-    return UpdateResult({...prog, env: newEnv, node: newNode, diffs: newDiffs}, prog);
+    newDiffs[0].children.elements = DDReuse(newNodesDiffs as unknown as ChildDiffs); // FIXME: Not correct: elements form a new array.
+    return UpdateResult(
+      {...prog,
+       stack: {
+         head: {...prog.stack.head,
+           node: newNode,
+           env: newEnv
+         },
+         tail: prog.stack.tail},
+      diffs: DDChild(["stack", "head", "node"], newDiffs) },
+       prog);
   }
 }
 
@@ -390,83 +481,192 @@ function objectGather(prog: Prog, keys: string[], newNode: Node.ObjectExpression
     keys.map((key, k) => {
       newNode.properties.push(keyValueToProperty(key, newNodes[k] as Node.PropertyValue));
     });
-    newDiffs[0].children.properties = DDReuse(newNodesDiffs.map((newNodeDiff) => DDReuse({value: newNodeDiff}))); // FIXME: Not reuse?!
-    return UpdateResult({...prog, env: newEnv, node: newNode, diffs: newDiffs}, prog);
+    newDiffs[0].children.properties = DDReuse(newNodesDiffs.map((newNodeDiff) => DDReuse({value: newNodeDiff})) as unknown as ChildDiffs); // FIXME: Not reuse?!
+    return UpdateResult(
+      {...prog,
+        stack: {
+         head: {...prog.stack.head,
+           node: newNode,
+           env: newEnv
+         },
+         tail: prog.stack.tail},
+         diffs: DDChild(["stack", "head", "node"], newDiffs)}, prog);
   }
 }
-
-function walkNode(f) {
-  return function(node) {
-    if(f(node)) return;
-    var toRecurse: AnyNode[] = [];
-    var t = node.Type;
-    if(t === Syntax.ArrayExpression || t === Syntax.ArrayPattern) {
-      toRecurse.push(...node.elements);
-    } else if(t === Syntax.ArrowFunctionExpression || t === Syntax.FunctionDeclaration || t === Syntax.FunctionExpression) {
-      if(node.id) toRecurse.push(node.id);
-      toRecurse.push(node.params, node.body);
-    } else if(t === Syntax.AssignmentExpression || t === Syntax.BinaryExpression || t === Syntax.AssignmentPattern) {
-      toRecurse.push(node.left, node.right);
-    } else if(t === Syntax.AwaitExpression) {
-      toRecurse.push(node.argument);
-    } else if(t === Syntax.BlockStatement) {
-      toRecurse.push(...node.body);
-    } else if(t === Syntax.BreakStatement || t === Syntax.ContinueStatement) {
-      if(node.label) toRecurse.push(node.label);
-    } else if(t === Syntax.CallExpression) {
-      toRecurse.push(node.callee, ...node.arguments);
-    } else if(t === Syntax.CatchClause) {
-      toRecurse.push(node.param, node.body);
-    } else if(t === Syntax.ClassBody) {
-      toRecurse.push(...node.body)
-    } else if(t === Syntax.ClassDeclaration || t === Syntax.ClassExpression) {
-      if(node.id) toRecurse.push(node.id);
-      if(node.superClass) toRecurse.push(node.superClass);
-      toRecurse.push(body);
-    } else if(t === Syntax.MemberExpression) {
-      toRecurse.push(node.object, node.property);
-    } else if(t === Syntax.ConditionalExpression) {
-      toRecurse.push(node.test, node.consequent, node.alternate);
-    } else if(t === Syntax.ExpressionStatement) {
-      toRecurse.push(node.expression);
-    } else if(t === Syntax.DoWhileStatement) {
-      toRecurse.push(node.body);
-      toRecurse.push(node.test);
-    } else if(t === Syntax.ExportAllDeclaration) {
-      toRecurse.push(node.source);
-    } // TODO: continue after ExportDefaultDeclaration
-    for(let x of toRecurse) walkNode(f)(x);
+function walkNodes(nodes, preCall?, postCall?, level?) {
+  for(let x of nodes) walkNode(x, preCall, postCall, level);
+}
+var walkers = undefined;
+function walkNode(node, preCall?, postCall?, level?) {
+  if(typeof walkers == "undefined") {
+    var Syntax = syntax.Syntax || esprima.Syntax;
+    var rMany = (sub) => (node, preCall, postCall, level) => {
+      var children = node[sub];
+      if(children == null) return;
+      for(let x of node[sub]) {
+        let r = walkNode(x, preCall, postCall, level + 1);
+        if(typeof r !== "undefined") return r;
+    } };
+    var rChild = (sub) => (node, preCall, postCall, level) => {
+      var child = node[sub];
+      if(typeof child !== "undefined")
+        return walkNode(child, preCall, postCall, level + 1);
+    };
+    var rElements = rMany("elements");
+    var combine = (...rFuns) => (node, preCall, postCall, level) => {
+      for(let rFun of rFuns) {
+        if(typeof rFun === "string") rFun = rChild(rFun);
+        var x = rFun(node, preCall, postCall, level + 1);
+        if(typeof x !== "undefined") return x;
+      }
+    }
+    var rBody = rChild("body");
+    var rFunctions = combine("id", rMany("params"), rBody);
+    var rBinary = combine("left", "right");
+    var rControl = rChild("label");
+    var rClass = combine("id", "superClass", rBody);
+    var rIf = combine("test", "consequent", "alternate");
+    var rMember = combine("object", "property");
+    walkers = {
+      [Syntax.ArrayExpression]: rElements,
+      [Syntax.ArrayPattern]: rElements,
+      [Syntax.ArrowFunctionExpression]: rFunctions,
+      [Syntax.AssignmentExpression]: rBinary,
+      [Syntax.AssignmentPattern]: rBinary,
+      [Syntax.AwaitExpression]: rChild("argument"),
+      [Syntax.BinaryExpression]: rBinary,
+      [Syntax.BlockStatement]: rBody,
+      [Syntax.BreakStatement]: rControl,
+      [Syntax.ContinueStatement]: rControl,
+      [Syntax.CallExpression]: combine("callee", rMany("arguments")),
+      [Syntax.CatchClause]: combine("param", rBody),
+      [Syntax.ClassBody]: rBody,
+      [Syntax.ClassDeclaration]: rClass,
+      [Syntax.ClassExpression]: rClass,
+      [Syntax.ConditionalExpression]: rIf,
+      [Syntax.DoWhileStatement]: combine(rBody, "test"),
+      [Syntax.ExportAllDeclaration]: rChild("source"),
+      [Syntax.ExportDefaultDeclaration]: rChild("declaration"),
+      [Syntax.ExportNamedDeclaration]: combine("declaration", rMany("specifiers")),
+      [Syntax.ExportSpecifier]: combine("exported", "local"),
+      [Syntax.ExpressionStatement]: rChild(node.expression),
+      [Syntax.ForInStatement]: combine(rBinary, rBody),
+      [Syntax.ForOfStatement]: combine(rBinary, rBody),
+      [Syntax.ForStatement]: combine("init", "test", "update", rBody),
+      [Syntax.FunctionDeclaration]: rFunctions,
+      [Syntax.FunctionExpression]: rFunctions,
+      [Syntax.Identifier]: null,
+      [Syntax.MemberExpression]: rMember,
+      [Syntax.IfStatement]: rIf,
+      [Syntax.Import]: null,
+      [Syntax.ImportDeclaration]: combine(rMany("specifiers"), "source"),
+      [Syntax.ImportDefaultSpecifier]: rChild("local"),
+      [Syntax.ImportNamespaceSpecifier]: rChild("local"),
+      [Syntax.ImportSpecifier]: combine("local", "imported"),
+      [Syntax.LabeledStatement]: combine("label", rBody),
+      [Syntax.Literal]: null,
+      [Syntax.MetaProperty]: combine("meta", "property"),
+      [Syntax.MethodDefinition]: combine("key", "value"),
+      [Syntax.Program]: rMany("body"),
+      [Syntax.NewExpression]: combine("callee", rMany("arguments")),
+      [Syntax.ObjectExpression]: rMany("properties"),
+      [Syntax.ObjectPattern]: rMany("properties"),
+      [Syntax.Property]: combine("key", "value"),
+      [Syntax.RestElement]: rChild("argument"),
+      [Syntax.ReturnStatement]: rChild("argument"),
+      [Syntax.SequenceExpression]: rMany("expressions"),
+      [Syntax.SpreadElement]: rChild("argument"),
+      [Syntax.Super]: null,
+      [Syntax.SwitchCase]: combine("test", rMany("consequent")),
+      [Syntax.SwitchStatement]: combine("discriminant", rMany("cases")),
+      [Syntax.TaggedTemplateExpression]: combine("tag", "quasi"),
+      [Syntax.TemplateElement]: null,
+      [Syntax.TemplateLiteral]: combine(rMany("quasis"), rMany("expressions")),
+      [Syntax.ThisExpression]: null,
+      [Syntax.ThrowStatement]: rChild("argument"),
+      [Syntax.TryStatement]: combine("block", "handler", "finalizer"),
+      [Syntax.UnaryExpression]: rChild("argument"),
+      [Syntax.UpdateExpression]: rChild("argument"),
+      [Syntax.VariableDeclaration]: rMany("declarations"),
+      [Syntax.VariableDeclarator]: combine("id", "init"),
+      [Syntax.WhileStatement]: combine("test", rBody),
+      [Syntax.WithStatement]: combine("object", rBody),
+      [Syntax.YieldExpression]: rChild("argument")
+    }
   }
+  var x = preCall ? preCall(node, level) : undefined;
+  if(typeof x !== "undefined") return x;
+  if(node !== null) {
+    var walker = walkers[node.type];
+    if(typeof walker === "function") {
+      var x = walker(node, preCall, postCall, level);
+      if(typeof x !== "undefined") return x;
+    }
+  }
+  var x = postCall ? postCall(node, level) : undefined;
+  if(typeof x !== "undefined") return x;
 }
 
-// Insert var x = undefined if x is defined somewhere below prefixed with var
-function hoistDeclarations(body: AnyNode[]): AnyNode[] {
+// Returns [a list of declarations that will allocate a heap reference -- initially filled with "undefined" (no declarations if declarations = false),
+// a list of definitions that have to be hoisted (e.g. function definitions)]
+function hoistedDeclarationsDefinitions(body: AnyNode[], declarations = true): [AnyNode[], AnyNode[]] {
   var Syntax = syntax.Syntax || esprima.Syntax;
-  var localVars: { [name: string]: Node.VariableDeclaration } = {}
+  var localVars: { [name: string]: Node.VariableDeclaration } = {};
+  var localDefinitions: {[name: string]: Node.AssignmentExpression } = {}; 
   var Node = typeof Node == "undefined" ? esprima.Node : Node;
-  var walkEachNode = walkNode((node) => {
-    if(node.type === Syntax.VariableDeclaration) {
+  walkNodes(body, (node, level) => {
+    // We hoist variable declarations
+    if(declarations && node.type === Syntax.VariableDeclaration) {
       for(let declaration of (node as Node.VariableDeclaration).declarations) {
         if(declaration.id.type === Syntax.Identifier) {
-          localVars[declaration.id.name] =
+          localVars[(declaration.id as Node.Identifier).name] =
             new Node.VariableDeclaration("\n",
               [new Node.VariableDeclarator(
                   declaration.id, " ", new Node.Identifier(" ", "undefined", "undefined"))
-              ], [], "var", ";");
+              ], [], "let", ";");
         }
       }
     }
-    // If we don't recurse over children, we return true
-    return node.type === Syntax.FunctionDeclaration || node.type === Syntax.FunctionExpression
+    // We hoist function declarations.
+    // We hoist function definitions only if they are a top-level child
+    if(node.type === Syntax.FunctionDeclaration) {
+      let fd = node as Node.FunctionDeclaration;
+      if(declarations) {
+        localVars[(fd.id as Node.Identifier).name] =
+          new Node.VariableDeclaration("\n",
+            [new Node.VariableDeclarator(
+              fd.id as Node.Identifier, " ", new Node.Identifier(" ", "undefined", "undefined"))
+            ], [], "let", ";");
+      }
+      if(level == 0) {
+        let fe = new Node.FunctionExpression(
+              fd.wsBeforeFunction, fd.wsBeforeStar, fd.id, fd.wsBeforeParams,
+              fd.params, fd.separators, fd.wsBeforeEndParams, fd.body, fd.generator);
+        fe.wsAfter = fd.wsAfter;
+        localDefinitions[(fd.id as Node.Identifier).name] =
+          new Node.AssignmentExpression(" ","=", fd.id as Node.Identifier, fe);
+      }
+    }
+    // We ignore declarations inside functions of course.
+    if(node.type === Syntax.FunctionDeclaration || node.type === Syntax.FunctionExpression) return true;
   });
-  for(let b of body) {
-    walkEachNode(b);
+  var varDeclarations: Node.VariableDeclaration[] = []
+  for(let decl in localVars) {
+    varDeclarations.push(localVars[decl]);
   }
-  var prefixed: Node.VariableDeclaration[] = []
-  for(let decl of localVars) {
-    prefixed = decl;
+  var definitions: Node.AssignmentExpression[] = []
+  for(let defi in localDefinitions) {
+    definitions.push(localDefinitions[defi]);
   }
-  return prefixed.concat(body);
+  return [varDeclarations, definitions];
+}
+
+function reverseArray(arr) {
+  var newArray = [];
+  for (var i = arr.length - 1; i >= 0; i--) {
+    newArray.push(arr[i]);
+  }
+  return newArray;
 }
 
 // Update.js is generated by Update.ts
@@ -476,100 +676,212 @@ function getUpdateAction(prog: Prog, updateData: UpdateData): UpdateAction {
   }*/
   var Syntax = syntax.Syntax || esprima.Syntax;
   var Node = typeof Node == "undefined" ? esprima.Node : Node;
-  var oldNode = prog.node;
-  if(oldNode.type == Syntax.Program) {
-    let script: Node.Script = oldNode as Node.Script;
-    if(script.body.length == 0) {
-      return UpdateFail("Cannot update empty script")
+  if(!prog.stack) { // Nothing to update, something must be wrong.
+    return UpdateFail("Cannot update empty stack. What's wrong?");
+  }
+  let stack = prog.stack;
+  var stackHead = stack.head;
+  if(stackHead.tag = StackValueType.Node) {
+    var oldNode = stackHead.node;
+    if(!("env" in stackHead)) {
+      console.log(prog);
+      return UpdateFail("[Internal Error] Environment not found at this point.")
     }
-    // Here we should duplicate declarations into var
-    var init =
-    var last = script.body[script.body.length - 1];
-    if(script.body.length != 1)
-      return UpdateFail("Reversion currently supports only 1 directive in program, got " + script.body.length);
-    var e = script.body[0];
-    if(e.type != Syntax.ExpressionStatement)
-      return UpdateFail("Reversion currently supports only expression statements, got " + e.type);
-    var x = (e as Node.ExpressionStatement).expression;
-    return UpdateContinue({ ...prog, node: x}, updateData,
-      function(newX: ProgDiffs, oldX: Prog): UpdateResult {
-        let newNode = Object.create(oldNode); // Deep copy
-        newNode.body[0].expression = newX.node;
-        let diffs = DDReuse({body:DDReuse({"0":DDReuse({expression:newX.diffs})})});
-        return UpdateResult({...newX, node: newNode, diffs: diffs}, prog);
+    var env = stackHead.env;
+    let newStack = stack.tail; // Pop the stack
+    switch(oldNode.type) {
+    case Syntax.Program:
+      let script: Node.Script = oldNode as Node.Script;
+      if(script.body.length == 0) {
+        return UpdateFail("Cannot update empty script")
       }
-    )
-  }
-
-  if(oldNode.type == Syntax.Literal) { // Literals can be replaced by clones
-    return processClones(prog, updateData, (diff: DUpdate) => {
-      let newDiffs = DDReuse({value: DDNewValue(updateData.newVal)}); // TODO: What about string diffs?
-      let newNode = Object.create(oldNode);
-      newNode.value = updateData.newVal;
-      return UpdateResult({ ...prog,
-        node: newNode, diffs: newDiffs}, prog);
-    });
-  }
-
-  if(oldNode.type == Syntax.Identifier) {
-    // TODO: Environment diffs
-    // TODO: Immediately update expression. Will merge expressions later.
-    var newEnv = updateVar_(prog.env, (oldNode as Node.Identifier).name, function(oldValue: EnvValue): EnvValue {
-      return {v_: updateData.newVal,
-              expr: oldValue.expr, // TODO: Update this expression as well !
-              env: oldValue.env};
-    });
-    // Process clone expressions first.
-    return UpdateAlternative(
-      processClones(prog, updateData),
-      UpdateResult({...prog, env: newEnv, diffs: DDSame()}, prog));
-  }
-
-  if(oldNode.type == Syntax.ArrayExpression) {
-    // For arrays of size 2 where
-    // - the second node is an object
-    // - and the first one is a string
-    // it is possible to push back a string (the object is copied)
-    // This should have been take care of before.
-    //var subExpressions = oldNode.
-    //return ;
-    // When there will be a heap, elements can modify the heap; in this case, we should
-    // treat every sub-expression as an assignment,
-    // For now let's suppose they don't.
-    if(typeof updateData.newVal == "string" || typeof updateData.newVal == "number") {
-      // Check the diff: Maybe it's a cloned value, e.g. unwrapped?
-      return UpdateAlternative(...updateData.diffs.map( function(diff) {
-        if(diff.ctor === DType.Clone) {
-          return processClone(prog, updateData.newVal, updateData.oldVal, diff);
-        } else {
-          let newNode = new Node.Literal(oldNode.wsBefore, updateData.newVal, uneval_(updateData.newVal)); // TODO: What about string diffs?
-          return UpdateResult({ ...prog,
-            node: newNode, diffs: DDNewNode(newNode)}, prog);
+      let [declarations, definitions] = hoistedDeclarationsDefinitions(script.body, /*declarations*/true);
+      let isFirst = true;
+      for(let statement of reverseArray(declarations.concat(definitions.concat(script.body)))) {
+        newStack = {head: {tag: StackValueType.Node, node: statement}, tail: newStack};
+        if(isFirst) {
+          newStack.head.returnedExpressionStatement = true;
+          isFirst = false;
         }
-      }));
-    }
-    return processClones(prog, updateData, (diff: DUpdate) => {
-      var elements: AnyNode[] = (oldNode as Node.ArrayExpression).elements;
-      let newNode: Node.ArrayExpression;
-      let newDiffs: DUpdate[];
-      if(diff.kind.ctor === DUType.Reuse) {
-        newNode = Object.create(oldNode);
-        newDiffs = DDReuse({elements: DDSame()});
-        return updateForeach(prog.env, elements, 
-          (element, k) => callback => 
-            typeof diff.children[k] != "undefined" ?
-              UpdateContinue({...prog, context: [oldNode].concat(prog.context), node: element},
-                {newVal: (updateData.newVal as any[])[k],
-                 oldVal: (updateData.oldVal as any[])[k],
-                 diffs: diff.children[k]}, callback) :
-              UpdateResult({...prog, node: element, diffs: DDSame()}, prog, callback),
-          arrayGather(prog, newNode, newDiffs));
-      } else {
-        return UpdateFail("Don't know how to handle this kind of diff on arrays: " + diff.kind.ctor);
       }
-    });
+      newStack = { head: {...newStack.head, env: env}, tail: newStack };
+      return UpdateContinue({...prog, stack: newStack}, updateData,
+        function(newX: ProgDiffs, oldX: Prog): UpdateResult {
+          console.log(newX.stack.head);
+          throw "TODO: Implement me (Program)"
+          // TODO: Reconstruct the original modified program here and its diff
+        });
+    case Syntax.AssignmentExpression:
+    
+      return;
+    case Syntax.VariableDeclaration:
+      let varDecls = (oldNode as Node.VariableDeclaration);
+      let isLet =  varDecls.kind === "let";
+      if(isLet || varDecls.kind === "const") {
+        //const = introduce environment variables
+        //let = will wrap these environment variables by references.
+        //No need to compute value at this point.
+        let newEnv = env;
+        let heapSource = undefined;
+        let isFirst = true;
+        let lastComputationSource: ComputationSource | undefined;
+        for(let decl of reverseArray(varDecls.declarations)) {
+          if(isFirst) {
+            heapSource = prog.heapSource;
+            isFirst = false;
+          } else {
+            heapSource = {tag: HeapSourceType.After, source: lastComputationSource as ComputationSource };
+          }
+          lastComputationSource = {
+            env: newEnv,
+            expr: decl.right as Node.Expression,
+            heapSource: heapSource,
+            heapAllocated: isLet
+          };
+          newEnv = {
+            head: {name: decl.id.name, value: lastComputationSource},
+            tail: newEnv
+          };
+        }
+        if(typeof newStack !== "undefined") {
+          // We propagate the environment to the next stack element.
+          newStack = { head: {...newStack.head, env: newEnv}, tail: newStack.tail};
+        }
+        return UpdateContinue({...prog, stack: newStack}, updateData,
+          function(newX: ProgDiffs, oldX: Prog): UpdateResult {
+          throw "TODO: Implement me (let/const)"
+            // TODO: Recover definitions and the program shape.
+          });
+      } else if(varDecls.kind === "var") {
+        //var = just unroll as variable assignments
+        for(let decl of reverseArray(varDecls.declarations)) {
+          var rewrittenNode = new Node.AssignmentExpression(
+            decl.wsBeforeEq, "=", decl.id,  decl.right === null ? decl.id : decl.right
+          );
+          rewrittenNode.wsBefore = decl.wsBefore;
+          rewrittenNode.wsAfter = decl.wsAfter;
+          newStack = { head: {tag: StackValueType.Node, env: env, node: rewrittenNode}, tail: newStack };
+        }
+        return UpdateContinue({...prog, stack: newStack}, updateData,
+          function(newX: ProgDiffs, oldX: Prog): UpdateResult {
+          throw "TODO: Implement me (var)"
+            // TODO: Reconstruct program and diffs from rewriting
+          }
+        );
+      } else return UpdateFail("Unknown variable declaration kind: " + varDecls.kind);
+    case Syntax.ExpressionStatement:
+      // We compute heap modifications. Only if stackHead marked with returnedExpressionStatement = true can we propagate updateData to the expression.
+      // propagate environment to the next statement
+      newStack = { head: {...newStack.head, env: env}, tail: newStack.tail};
+      let expStatement = oldNode as Node.ExpressionStatement;
+      if(stackHead.returnedExpressionStatement) {
+        // Add the expression to the stack.
+        newStack = { head:  {tag: StackValueType.Node, env: env, node: expStatement.expression}, tail: newStack };
+        return UpdateContinue({ ...prog, stack: newStack}, updateData,
+          function(newX: ProgDiffs, oldX: Prog): UpdateResult {
+            let updatedNode = new Node.ExpressionStatement(newX.stack.head.node, (oldNode as Node.ExpressionStatement).semicolon);
+            updatedNode.wsBefore = (oldNode as Node.ExpressionStatement).wsBefore;
+            updatedNode.wsAfter = (oldNode as Node.ExpressionStatement).wsAfter;
+            let updatedStack = {
+              head: {...newX.stack.head, node: updatedNode}, tail: newX.stack.tail}
+            let updateDiffs = DDWrap(["stack", "head", "node"], newX.diffs, d => DDChild("expression", d));
+            return UpdateResult(
+            {...prog,
+             stack: updatedStack,
+             diffs: updateDiffs,
+            }
+            , prog);
+          }
+        )
+      } else {
+        // No back-propagation at this point. We just move on but the heap is now a reference in case we need it.
+        return UpdateContinue(
+          {...prog,
+          heapSource: {tag: HeapSourceType.After, source:
+            {env: env,
+             expr: expStatement.expression,
+             heapSource: prog.heapSource}
+          },
+        stack: newStack}, updateData,
+        function(newX: ProgDiffs, oldX: Prog): UpdateResult {
+          // TODO: Reconstruct Expression statement and diffs.
+          throw "TODO: Implement me (ExpressionStatement)"
+        });
+      }
+    case Syntax.Literal: // Literals can be replaced by clones
+      // TODO: Make sure this is correct. Make the stack to work.
+      return processClones(prog, updateData, (diff: DUpdate) => {
+        let newDiffs = DDChild(["stack", "head", "node", "value"], DDNewValue(updateData.newVal)); // TODO: What about string diffs?
+        let newNode = Object.create(oldNode);
+        newNode.value = updateData.newVal;
+        return UpdateResult({ ...prog,
+          stack: { head: {...stackHead, node: newNode}, tail: newStack }, diffs: newDiffs}, prog);
+      });
+    case Syntax.Identifier: // Updates the environment, or the heap.
+      // TODO: Immediately update expression. Will merge expressions later in any case.
+      /*var newEnv = updateVar_(prog.env, (oldNode as Node.Identifier).name, function(oldValue: EnvValue): EnvValue {
+        return {v_: updateData.newVal,
+                expr: oldValue.expr, // TODO: Update this expression as well !
+                env: oldValue.env};
+      });
+      // Process clone expressions first (i.e. change shape of program)
+      return UpdateAlternative(
+        processClones(prog, updateData),
+        UpdateResult({...prog, env: newEnv, diffs: DDSame()}, prog));*/
+      throw "TODO: Implement me (Identifier)"
+    case Syntax.ReturnStatement:
+      // We can update its expression with updateData.
+      
+      throw "TODO: Implement me (ReturnStatement)"
+    case Syntax.ArrayExpression:
+      // For arrays of size 2 where
+      // - the second node is an object
+      // - and the first one is a string
+      // it is possible to push back a string (the object is copied)
+      // This should have been take care of before.
+      //var subExpressions = oldNode.
+      //return ;
+      // When there will be a heap, elements can modify the heap; in this case, we should
+      // treat every sub-expression as an assignment,
+      // For now let's suppose they don't.
+      if(typeof updateData.newVal == "string" || typeof updateData.newVal == "number") {
+        // Check the diff: Maybe it's a cloned value, e.g. unwrapped?
+        return UpdateAlternative(...updateData.diffs.map( function(diff) {
+          if(diff.ctor === DType.Clone) {
+            return processClone(prog, updateData.newVal, updateData.oldVal, diff);
+          } else {
+            let newNode = new Node.Literal(oldNode.wsBefore, updateData.newVal, uneval_(updateData.newVal)); // TODO: What about string diffs?
+            return UpdateResult({ ...prog,
+              stack: { head: { ...stackHead, node: newNode}, tail: newStack}, diffs: DDChild(["stack", "head", "node"], DDNewNode(newNode))}, prog);
+          }
+        }));
+      }
+      return processClones(prog, updateData, (diff: DUpdate) => {
+        var elements: AnyNode[] = (oldNode as Node.ArrayExpression).elements;
+        let newNode: Node.ArrayExpression;
+        let newDiffs: DUpdate[];
+        if(diff.kind.ctor === DUType.Reuse) {
+          newNode = Object.create(oldNode);
+          newDiffs = DDReuse({elements: DDSame()});
+          return updateForeach(prog.stack.head.env, elements, 
+            (element, k) => callback => 
+              typeof diff.children[k] != "undefined" ?
+                UpdateContinue({...prog, context: [oldNode].concat(prog.context), stack: {head: {...stackHead, node: element}, tail: newStack} },
+                  {newVal: (updateData.newVal as any[])[k],
+                   oldVal: (updateData.oldVal as any[])[k],
+                   diffs: diff.children[k]}, callback) :
+                UpdateResult(
+                  {...prog, stack: { head: {...stackHead, node: element}, tail: newStack }, diffs: DDSame()}, prog, callback),
+            arrayGather(prog, newNode, newDiffs));
+        } else {
+          return UpdateFail("Don't know how to handle this kind of diff on arrays: " + diff.kind.ctor);
+        }
+      });
+    default:
+      return UpdateFail("Reversion does not currently support nodes of type " + oldNode.type);
+    }
   }
-  return UpdateFail("Reversion does not currently support nodes of type " + oldNode.type);
+  return UpdateFail("Reversion does not support this current stack element: " + stackHead.tag);
 }
 
 // Find all paths from complexVal to simpleVal if complexVal contains simpleVal
@@ -729,7 +1041,9 @@ function update_(env, oldFormula): (newVal: any) => Res<string, Update_Result> {
     console.log("computeDiffs_(" + uneval_(oldVal) + ", " + uneval_(newVal) + ")");
     console.log(uneval_(diffs, ""));
     //*/
-    return formatUpdateResult(UpdateContinue({context: [], env: env, node: oldNode}, {newVal: newVal, oldVal: oldVal, diffs: diffs}))
+    return formatUpdateResult(
+      UpdateContinue(initProg(oldNode, env),
+        {newVal: newVal, oldVal: oldVal, diffs: diffs}));
   }
 }
 
@@ -738,8 +1052,8 @@ function formatUpdateResult(updateAction, callbacks?, forks?): Res<string, Updat
   return resultCase(updated, function(x) { return Err(x); },
     function(progWithAlternatives: ProgWithAlternatives): Res<string, Update_Result> {
       var uResult = {
-        env: progWithAlternatives.prog.env,
-        node: progWithAlternatives.prog.node.unparse(),
+        env: progWithAlternatives.prog.stack.head.env,
+        node: progWithAlternatives.prog.stack.head.node.unparse(),
         next() {
           if(progWithAlternatives.alternatives.length == 0) return undefined;
           var fork = progWithAlternatives.alternatives[0];

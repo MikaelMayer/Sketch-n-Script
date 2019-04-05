@@ -6,6 +6,7 @@
     "noImplicitUseStrict": true,
     "noResolve": true,
     "strict": false,
+    "sourceMap": true
 	},
 	"files": [
     "esprima.d.ts",
