@@ -69,6 +69,13 @@ var List = {
       if(c) return c;
       list = list.tail;
     }
+  },
+  drop: function(list, number) {
+    while(list && list.head && number) {
+      list = list.tail;
+      number--;
+    }
+    return list;
   }
 }
 

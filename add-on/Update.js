@@ -113,6 +113,23 @@ function DDWrap(name, diffs, diffUpdater) {
         return DDWrap(name[0], diffs, function (d) { return DDWrap(name.slice(1), d, diffUpdater); });
     }
 }
+function DDrop(diffs, length) {
+    if (length <= 0)
+        return diffs;
+    var candidates = diffs.map(function (diff) {
+        return diff.ctor == DType.Update ?
+            typeof diff.children.tail != "undefined" ?
+                DDrop(diff.children.tail, length - 1) :
+                DDSame()
+            : undefined;
+    }).filter(function (x) { return typeof x !== "undefined"; });
+    var result = [];
+    for (var _i = 0, candidates_1 = candidates; _i < candidates_1.length; _i++) {
+        var candidate = candidates_1[_i];
+        result.push.apply(result, candidate);
+    }
+    return result;
+}
 function DDNewValue(newVal) {
     return [{ ctor: DType.Update, kind: { ctor: DUType.NewValue, model: newVal }, children: {} }];
 }
@@ -633,9 +650,9 @@ function getUpdateAction(prog, updateData) {
                 if (script.body.length == 0) {
                     return UpdateFail("Cannot update empty script");
                 }
-                var _a = hoistedDeclarationsDefinitions(script.body, /*declarations*/ true), declarations = _a[0], definitions = _a[1];
+                var _a = hoistedDeclarationsDefinitions(script.body, /*declarations*/ true), declarations_1 = _a[0], definitions_1 = _a[1];
                 var isFirst = true;
-                for (var _i = 0, _b = reverseArray(declarations.concat(definitions.concat(script.body))); _i < _b.length; _i++) {
+                for (var _i = 0, _b = reverseArray(declarations_1.concat(definitions_1.concat(script.body))); _i < _b.length; _i++) {
                     var statement = _b[_i];
                     newStack_1 = { head: { tag: StackValueType.Node, node: statement }, tail: newStack_1 };
                     if (isFirst) {
@@ -644,9 +661,18 @@ function getUpdateAction(prog, updateData) {
                     }
                 }
                 newStack_1 = { head: __assign({}, newStack_1.head, { env: env }), tail: newStack_1 };
-                return UpdateContinue(__assign({}, prog, { stack: newStack_1 }), updateData, function (newX, oldX) {
-                    console.log(newX.stack.head);
-                    throw "TODO: Implement me (Program)";
+                return UpdateContinue(__assign({}, prog, { stack: newStack_1 }), updateData, function (updatedProgDiffs, prog) {
+                    var updatedStack = updatedProgDiffs.stack;
+                    // We can skip declarations.
+                    var updatedStackWithoutDeclarations = List.drop(updatedStack, declarations_1.length);
+                    var updatedDiffsWithoutDeclarations = DDrop(updatedProgDiffs.diffs, declarations_1.length);
+                    // We cannot skip definitions, we need to merge them at the correct place.
+                    if (definitions_1.length > 0) {
+                        console.log(updatedProgDiffs.stack.head);
+                        throw "TODO: Implement me (Program with hoisted definitions)";
+                    }
+                    var updatedStackFinal = updatedStackWithoutDeclarations;
+                    return UpdateResult(__assign({}, updatedProgDiffs, { stack: updatedStackFinal, diffs: updatedDiffsWithoutDeclarations }), prog);
                     // TODO: Reconstruct the original modified program here and its diff
                 });
             case Syntax.AssignmentExpression:
@@ -686,7 +712,7 @@ function getUpdateAction(prog, updateData) {
                         // We propagate the environment to the next stack element.
                         newStack_1 = { head: __assign({}, newStack_1.head, { env: newEnv }), tail: newStack_1.tail };
                     }
-                    return UpdateContinue(__assign({}, prog, { stack: newStack_1 }), updateData, function (newX, oldX) {
+                    return UpdateContinue(__assign({}, prog, { stack: newStack_1 }), updateData, function (updatedProgDiffs, prog) {
                         throw "TODO: Implement me (let/const)";
                         // TODO: Recover definitions and the program shape.
                     });
@@ -700,7 +726,7 @@ function getUpdateAction(prog, updateData) {
                         rewrittenNode.wsAfter = decl.wsAfter;
                         newStack_1 = { head: { tag: StackValueType.Node, env: env, node: rewrittenNode }, tail: newStack_1 };
                     }
-                    return UpdateContinue(__assign({}, prog, { stack: newStack_1 }), updateData, function (newX, oldX) {
+                    return UpdateContinue(__assign({}, prog, { stack: newStack_1 }), updateData, function (updatedProgDiffs, prog) {
                         throw "TODO: Implement me (var)";
                         // TODO: Reconstruct program and diffs from rewriting
                     });
@@ -715,14 +741,14 @@ function getUpdateAction(prog, updateData) {
                 if (stackHead.returnedExpressionStatement) {
                     // Add the expression to the stack.
                     newStack_1 = { head: { tag: StackValueType.Node, env: env, node: expStatement.expression }, tail: newStack_1 };
-                    return UpdateContinue(__assign({}, prog, { stack: newStack_1 }), updateData, function (newX, oldX) {
-                        var updatedNode = new Node.ExpressionStatement(newX.stack.head.node, oldNode.semicolon);
+                    return UpdateContinue(__assign({}, prog, { stack: newStack_1 }), updateData, function (updatedProgDiffs, prog) {
+                        var updatedNode = new Node.ExpressionStatement(updatedProgDiffs.stack.head.node, oldNode.semicolon);
                         updatedNode.wsBefore = oldNode.wsBefore;
                         updatedNode.wsAfter = oldNode.wsAfter;
                         var updatedStack = {
-                            head: __assign({}, newX.stack.head, { node: updatedNode }), tail: newX.stack.tail
+                            head: __assign({}, updatedProgDiffs.stack.head, { node: updatedNode }), tail: updatedProgDiffs.stack.tail
                         };
-                        var updateDiffs = DDWrap(["stack", "head", "node"], newX.diffs, function (d) { return DDChild("expression", d); });
+                        var updateDiffs = DDWrap(["stack", "head", "node"], updatedProgDiffs.diffs, function (d) { return DDChild("expression", d); });
                         return UpdateResult(__assign({}, prog, { stack: updatedStack, diffs: updateDiffs }), prog);
                     });
                 }
@@ -731,7 +757,7 @@ function getUpdateAction(prog, updateData) {
                     return UpdateContinue(__assign({}, prog, { heapSource: { tag: HeapSourceType.After, source: { env: env,
                                 expr: expStatement.expression,
                                 heapSource: prog.heapSource }
-                        }, stack: newStack_1 }), updateData, function (newX, oldX) {
+                        }, stack: newStack_1 }), updateData, function (updatedProgDiffs, prog) {
                         // TODO: Reconstruct Expression statement and diffs.
                         throw "TODO: Implement me (ExpressionStatement)";
                     });

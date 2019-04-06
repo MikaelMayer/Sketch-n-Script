@@ -8,6 +8,8 @@ type Res<err,ok> = Err<err> | Ok<ok>
 declare function Ok<a>(arg: a): Ok<a>;
 declare function Err<a>(arg: a): Err<a>;
 declare function resultCase<err,ok,a>(arg: Res<err,ok>, cb1: ((e: err) => a), cb2: ((o: ok) => a)): a;
+type List<a> = undefined | { head: a, tail: List<a>}
+declare var List: { drop: <a>(list: List<a>, k: number) => List<a>}
 
 enum HeapValueType {
   Raw = "Raw",
@@ -167,6 +169,21 @@ function DDWrap(name: string[] | string, diffs: Diffs, diffUpdater: (ds: Diffs) 
     if(name.length == 0) return diffUpdater(diffs);
     return DDWrap(name[0], diffs, d => DDWrap(name.slice(1), d, diffUpdater));
   }
+}
+function DDrop(diffs: Diffs, length: number): Diffs {
+  if(length <= 0) return diffs;
+  var candidates = diffs.map(diff =>
+    diff.ctor == DType.Update ?
+      typeof diff.children.tail != "undefined" ?
+        DDrop(diff.children.tail, length - 1) :
+        DDSame()
+      : undefined
+  ).filter(x => typeof x !== "undefined");
+  var result = [];
+  for(let candidate of candidates) {
+    result.push(...candidate);
+  }
+  return result;
 }
 function DDNewValue(newVal: any): DUpdate[] {
   return [{ctor: DType.Update, kind: {ctor: DUType.NewValue, model: newVal}, children: {}}];
@@ -706,9 +723,21 @@ function getUpdateAction(prog: Prog, updateData: UpdateData): UpdateAction {
       }
       newStack = { head: {...newStack.head, env: env}, tail: newStack };
       return UpdateContinue({...prog, stack: newStack}, updateData,
-        function(newX: ProgDiffs, oldX: Prog): UpdateResult {
-          console.log(newX.stack.head);
-          throw "TODO: Implement me (Program)"
+        function(updatedProgDiffs: ProgDiffs, prog: Prog): UpdateResult {
+          let updatedStack = updatedProgDiffs.stack;
+          // We can skip declarations.
+          let updatedStackWithoutDeclarations = List.drop(updatedStack, declarations.length);
+          let updatedDiffsWithoutDeclarations = DDrop(updatedProgDiffs.diffs, declarations.length);
+          // We cannot skip definitions, we need to merge them at the correct place.
+          if(definitions.length > 0) {
+            console.log(updatedProgDiffs.stack.head);
+            throw "TODO: Implement me (Program with hoisted definitions)"
+          }
+          let updatedStackFinal = updatedStackWithoutDeclarations;
+          return UpdateResult({...updatedProgDiffs,
+            stack: updatedStackFinal,
+            diffs: updatedDiffsWithoutDeclarations
+          }, prog);
           // TODO: Reconstruct the original modified program here and its diff
         });
     case Syntax.AssignmentExpression:
@@ -748,7 +777,7 @@ function getUpdateAction(prog: Prog, updateData: UpdateData): UpdateAction {
           newStack = { head: {...newStack.head, env: newEnv}, tail: newStack.tail};
         }
         return UpdateContinue({...prog, stack: newStack}, updateData,
-          function(newX: ProgDiffs, oldX: Prog): UpdateResult {
+          function(updatedProgDiffs: ProgDiffs, prog: Prog): UpdateResult {
           throw "TODO: Implement me (let/const)"
             // TODO: Recover definitions and the program shape.
           });
@@ -763,7 +792,7 @@ function getUpdateAction(prog: Prog, updateData: UpdateData): UpdateAction {
           newStack = { head: {tag: StackValueType.Node, env: env, node: rewrittenNode}, tail: newStack };
         }
         return UpdateContinue({...prog, stack: newStack}, updateData,
-          function(newX: ProgDiffs, oldX: Prog): UpdateResult {
+          function(updatedProgDiffs: ProgDiffs, prog: Prog): UpdateResult {
           throw "TODO: Implement me (var)"
             // TODO: Reconstruct program and diffs from rewriting
           }
@@ -778,13 +807,13 @@ function getUpdateAction(prog: Prog, updateData: UpdateData): UpdateAction {
         // Add the expression to the stack.
         newStack = { head:  {tag: StackValueType.Node, env: env, node: expStatement.expression}, tail: newStack };
         return UpdateContinue({ ...prog, stack: newStack}, updateData,
-          function(newX: ProgDiffs, oldX: Prog): UpdateResult {
-            let updatedNode = new Node.ExpressionStatement(newX.stack.head.node, (oldNode as Node.ExpressionStatement).semicolon);
+          function(updatedProgDiffs: ProgDiffs, prog: Prog): UpdateResult {
+            let updatedNode = new Node.ExpressionStatement(updatedProgDiffs.stack.head.node, (oldNode as Node.ExpressionStatement).semicolon);
             updatedNode.wsBefore = (oldNode as Node.ExpressionStatement).wsBefore;
             updatedNode.wsAfter = (oldNode as Node.ExpressionStatement).wsAfter;
             let updatedStack = {
-              head: {...newX.stack.head, node: updatedNode}, tail: newX.stack.tail}
-            let updateDiffs = DDWrap(["stack", "head", "node"], newX.diffs, d => DDChild("expression", d));
+              head: {...updatedProgDiffs.stack.head, node: updatedNode}, tail: updatedProgDiffs.stack.tail}
+            let updateDiffs = DDWrap(["stack", "head", "node"], updatedProgDiffs.diffs, d => DDChild("expression", d));
             return UpdateResult(
             {...prog,
              stack: updatedStack,
@@ -803,7 +832,7 @@ function getUpdateAction(prog: Prog, updateData: UpdateData): UpdateAction {
              heapSource: prog.heapSource}
           },
         stack: newStack}, updateData,
-        function(newX: ProgDiffs, oldX: Prog): UpdateResult {
+        function(updatedProgDiffs: ProgDiffs, prog: Prog): UpdateResult {
           // TODO: Reconstruct Expression statement and diffs.
           throw "TODO: Implement me (ExpressionStatement)"
         });
