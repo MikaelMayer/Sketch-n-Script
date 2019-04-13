@@ -18,6 +18,7 @@ declare var List: {
 declare function cons_<a>(arg: a, tail: List<a>): List<a>
 declare function array_flatten<a>(arg: (a | undefined)[][]): a[]
 declare function array_repeat<a>(arg: a, n: number): a[]
+declare var arrayAll: <a>(arr: a[], callback: (arg: a, i: number) => boolean) => boolean
 
 enum HeapValueType {
   Raw = "Raw",
@@ -282,8 +283,17 @@ function isDDSame(diffs: Diffs): boolean {
   if(diff.kind.ctor != DUType.Reuse) return false;
   return Object.keys(diff.children).length == 0;
 }
+function insertionCompatible(diffs: Diffs | undefined): boolean {
+  if(typeof diffs == "undefined") return false; // Means the "undefined" is the final value in the array.
+  return arrayAll(diffs,
+    diff =>
+      diff.ctor == DType.Clone ||
+      diff.ctor == DType.Update && diff.kind.ctor == DUType.NewValue &&
+      arrayAll(Object.keys(diff.children), key => insertionCompatible(diff.children[key])));
+}
 // Merges two diffs made on the same object.
 function DDMerge(diffs1: Diffs, diffs2: Diffs): Diffs {
+  //console.log("DDMerge(\n" + uneval_(diffs1, "") + ",\n " + uneval_(diffs2, "") + ")")
   if(isDDSame(diffs1)) return diffs2;
   if(isDDSame(diffs2)) return diffs1;
   let result: Diffs = [];
@@ -313,6 +323,30 @@ function DDMerge(diffs1: Diffs, diffs2: Diffs): Diffs {
           result.push({ctor: DType.Update, kind: { ctor: DUType.Reuse}, children: resultingChildren});
           continue;
         }
+        if(diff1.kind.ctor == DUType.NewValue && diff2.kind.ctor == DUType.NewValue &&
+          Array.isArray(diff1.kind.model) && Array.isArray(diff2.kind.model)) {
+          // Two array that have changed. We treat modified children that are new as insertions so that we can merge them in one way or the other. This works only if all children are either clones or new values, and the model does not contain built-in values
+          if(arrayAll(diff1.kind.model, (x, i) => typeof x === "undefined" && insertionCompatible((diff1 as DUpdate).children[i])) &&
+             arrayAll(diff2.kind.model, (x, i) => typeof x === "undefined" && insertionCompatible((diff2 as DUpdate).children[i]))) {
+            // All keys are described by Clone or New Children.
+            // We just need to concatenate them.
+            let l1 = diff1.kind.model.length;
+            let l2 = diff2.kind.model.length;
+            let newModel = Array(l1 + l2);
+            for(var i = 0; i < l1 + l2; i++) newModel[i] = undefined;
+            let newChildren1 = copy(diff1.children);
+            for(var i = 0; i < l2; i++) {
+              newChildren1[i + l1] = diff2.children[i];
+            }
+            let newChildren2 = copy(diff2.children);
+            for(var i = 0; i < l1; i++) {
+              newChildren2[i + l2] = diff1.children[i];
+            }
+            return [{ctor: DType.Update, kind: { ctor: DUType.NewValue, model: newModel }, children: newChildren1},
+              {ctor: DType.Update, kind: { ctor: DUType.NewValue, model: newModel }, children: newChildren2},
+            ];
+          }
+        }
         if(diff2.kind.ctor == DUType.NewValue) {
           // If there is a {ctor: DType.Clone, path: [], diffs: DSame()} below, we can merge it with the current diffs.
           let c2 = diff2.children;
@@ -325,7 +359,7 @@ function DDMerge(diffs1: Diffs, diffs2: Diffs): Diffs {
         }
         if(diff1.kind.ctor == DUType.NewValue) {
           // If there is a {ctor: DType.Clone, path: [], diffs: DSame()} below, we can merge it with the current diffs.
-          let c1 = diff2.children;
+          let c1 = diff1.children;
           let resultingChildren = {};
           for(let k in c1) {
             let merged: Diffs = DDMerge(c1[k], [diff2]);

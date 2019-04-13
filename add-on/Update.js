@@ -235,16 +235,26 @@ function isDDSame(diffs) {
         return false;
     return Object.keys(diff.children).length == 0;
 }
+function insertionCompatible(diffs) {
+    if (typeof diffs == "undefined")
+        return false; // Means the "undefined" is the final value in the array.
+    return arrayAll(diffs, function (diff) {
+        return diff.ctor == DType.Clone ||
+            diff.ctor == DType.Update && diff.kind.ctor == DUType.NewValue &&
+                arrayAll(Object.keys(diff.children), function (key) { return insertionCompatible(diff.children[key]); });
+    });
+}
 // Merges two diffs made on the same object.
 function DDMerge(diffs1, diffs2) {
+    //console.log("DDMerge(\n" + uneval_(diffs1, "") + ",\n " + uneval_(diffs2, "") + ")")
     if (isDDSame(diffs1))
         return diffs2;
     if (isDDSame(diffs2))
         return diffs1;
     var result = [];
-    for (var id1 = 0; id1 < diffs1.length; id1++) {
+    var _loop_1 = function (id1) {
         var diff1 = diffs1[id1];
-        for (var id2 = 0; id2 < diffs2.length; id2++) {
+        var _loop_2 = function (id2) {
             var diff2 = diffs2[id2];
             if (diff1.ctor == DType.Update && diff2.ctor == DType.Update) {
                 if (diff1.kind.ctor == DUType.Reuse && diff2.kind.ctor == DUType.Reuse) {
@@ -267,7 +277,32 @@ function DDMerge(diffs1, diffs2) {
                         }
                     }
                     result.push({ ctor: DType.Update, kind: { ctor: DUType.Reuse }, children: resultingChildren });
-                    continue;
+                    return "continue";
+                }
+                if (diff1.kind.ctor == DUType.NewValue && diff2.kind.ctor == DUType.NewValue &&
+                    Array.isArray(diff1.kind.model) && Array.isArray(diff2.kind.model)) {
+                    // Two array that have changed. We treat modified children that are new as insertions so that we can merge them in one way or the other. This works only if all children are either clones or new values, and the model does not contain built-in values
+                    if (arrayAll(diff1.kind.model, function (x, i) { return typeof x === "undefined" && insertionCompatible(diff1.children[i]); }) &&
+                        arrayAll(diff2.kind.model, function (x, i) { return typeof x === "undefined" && insertionCompatible(diff2.children[i]); })) {
+                        // All keys are described by Clone or New Children.
+                        // We just need to concatenate them.
+                        var l1 = diff1.kind.model.length;
+                        var l2 = diff2.kind.model.length;
+                        var newModel = Array(l1 + l2);
+                        for (var i = 0; i < l1 + l2; i++)
+                            newModel[i] = undefined;
+                        var newChildren1 = copy(diff1.children);
+                        for (var i = 0; i < l2; i++) {
+                            newChildren1[i + l1] = diff2.children[i];
+                        }
+                        var newChildren2 = copy(diff2.children);
+                        for (var i = 0; i < l1; i++) {
+                            newChildren2[i + l2] = diff1.children[i];
+                        }
+                        return { value: [{ ctor: DType.Update, kind: { ctor: DUType.NewValue, model: newModel }, children: newChildren1 },
+                                { ctor: DType.Update, kind: { ctor: DUType.NewValue, model: newModel }, children: newChildren2 },
+                            ] };
+                    }
                 }
                 if (diff2.kind.ctor == DUType.NewValue) {
                     // If there is a {ctor: DType.Clone, path: [], diffs: DSame()} below, we can merge it with the current diffs.
@@ -281,7 +316,7 @@ function DDMerge(diffs1, diffs2) {
                 }
                 if (diff1.kind.ctor == DUType.NewValue) {
                     // If there is a {ctor: DType.Clone, path: [], diffs: DSame()} below, we can merge it with the current diffs.
-                    var c1 = diff2.children;
+                    var c1 = diff1.children;
                     var resultingChildren = {};
                     for (var k in c1) {
                         var merged = DDMerge(c1[k], [diff2]);
@@ -297,12 +332,22 @@ function DDMerge(diffs1, diffs2) {
                 if (diff2.ctor == DType.Clone) {
                     // If same clone, we discard
                     if (diff1.ctor == DType.Clone && diff1.path.up === diff2.path.up && diff1.path.down.join(" ") === diff2.path.down.join(" ")) {
-                        continue;
+                        return "continue";
                     }
                     result.push(diff2);
                 }
             }
+        };
+        for (var id2 = 0; id2 < diffs2.length; id2++) {
+            var state_2 = _loop_2(id2);
+            if (typeof state_2 === "object")
+                return state_2;
         }
+    };
+    for (var id1 = 0; id1 < diffs1.length; id1++) {
+        var state_1 = _loop_1(id1);
+        if (typeof state_1 === "object")
+            return state_1.value;
     }
     return result;
 }
@@ -1204,14 +1249,14 @@ function allClonePaths_(complexVal, simpleVal) {
         return [{ up: 0, down: [] }];
     if (typeof complexVal == "object") {
         var diffs = [];
-        var _loop_1 = function (k) {
+        var _loop_3 = function (k) {
             diffs.push.apply(diffs, allClonePaths_(complexVal[k], simpleVal).map(function (p) {
                 p.down.unshift(k);
                 return p;
             }));
         };
         for (var k in complexVal) {
-            _loop_1(k);
+            _loop_3(k);
         }
         return diffs;
     }
@@ -1249,7 +1294,7 @@ function computeDiffs_(oldVal, newVal) {
         var childDiffs = {};
         var model = Array.isArray(newVal) ? Array(newVal.length) : {};
         var lastClosestOffset = 0;
-        var _loop_2 = function () {
+        var _loop_4 = function () {
             if (typeof oldVal == "object" && lastClosestOffset == 0 &&
                 uneval_(oldVal[key]) == uneval_(newVal[key])) {
                 // Same key, we try not to find fancy diffs with it.
@@ -1283,7 +1328,7 @@ function computeDiffs_(oldVal, newVal) {
         };
         var cd;
         for (var key in newVal) {
-            _loop_2();
+            _loop_4();
         }
         diffs.push.apply(diffs, DDNewObject(childDiffs, model));
         return diffs;

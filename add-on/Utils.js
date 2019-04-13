@@ -15,7 +15,7 @@ function wrapsWithParens(s) {
 
 function arrayAll(array, predicate) {
   for(var i in array) {
-    if(!predicate(array[i])) return false;
+    if(!predicate(array[i], i)) return false;
   }
   return true;
 }

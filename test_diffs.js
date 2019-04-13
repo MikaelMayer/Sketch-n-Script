@@ -24,7 +24,7 @@ assertEqual(
   )
   , "Two insertions in empty list"
 );
-/*
+
 assertEqual(
   DDMerge(DDNewObject({0: DDNewValue(1)}, [undefined]),
     DDNewObject({0: DDNewValue(2)}, [undefined])),
@@ -33,7 +33,7 @@ assertEqual(
   ),
   "Two insertions in empty array/object"
 );
-assertEqual(
+/*assertEqual(
   DDMerge(DDNewObject({0: DDClone([1]), 1: DDClone([0])}, [undefined, undefined]),
     DDNewObject({0: DDClone([0]), 1: DDClone([1]), 2: DDClone([1])}, [undefined, undefined, undefined])
   ),
