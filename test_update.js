@@ -125,11 +125,13 @@ assertUpdate(undefined, '(1)', 2, '(2)');
 assertUpdate(undefined, '(true)', false, '(false)');
 //*/
 
+/*
 assertUpdate(undefined, '  1', 2,
                         '  2');
-/*
+//*/
 assertUpdate(undefined, 'let x = 1; x', 2,
                         'let x = 2; x');
+/*
 assertUpdate(undefined, 'const x = 1; x', 2,
                         'const x = 2; x');
 assertUpdate(undefined, 'let x = 1; let y = x; y', 2,

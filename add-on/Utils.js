@@ -76,6 +76,30 @@ var List = {
       number--;
     }
     return list;
+  },
+  reverseInsert: function(toInsert, list) {
+    while(toInsert && toInsert.head) {
+      list = {head: toInsert.head, tail: list}
+      toInsert = toInsert.tail;
+    }
+    return list;
+  },
+  length: function(list) {
+    var result = 0;
+    while(list) {
+      list = list.tail;
+      result++;
+    }
+    return result;
+  },
+  toArray: function(list, map) {
+    var result = [];
+    var index = 0;
+    while(list) {
+      result.push(map ? map(list.head, index) : list.head);
+      list = list.tail;
+      index++;
+    }
   }
 }
 
@@ -636,7 +660,26 @@ function array_all(array, pred) {
   }
   return true;
 }
-
+// Flatten an array. Ignore undefined
+function array_flatten(array) {
+  var result = [];
+  for(var i = 0; i < array.length; i++) {
+    var element = array[i];
+    if(!element) continue;
+    for(var j = 0; j < element.length; j++) {
+      result.push(element[j]);
+    }
+  }
+  return result;
+}
+function array_repeat(element, number) {
+  var result = [];
+  while(number > 0) {
+    result.push(element);
+    number--;
+  }
+  return result;
+}
 // Returns true if the expression has the same shape as the value it computes.
 function sameAsValue(oldNode) {
   var Syntax = esprima.Syntax;

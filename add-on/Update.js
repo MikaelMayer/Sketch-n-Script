@@ -18,35 +18,33 @@ var HeapValueType;
     HeapValueType["Function"] = "Function";
     HeapValueType["Ref"] = "Ref";
 })(HeapValueType || (HeapValueType = {}));
-var HeapSourceType;
-(function (HeapSourceType) {
-    HeapSourceType["Direct"] = "Direct";
-    HeapSourceType["After"] = "After";
-})(HeapSourceType || (HeapSourceType = {}));
-var StackValueType;
-(function (StackValueType) {
+var ValueType;
+(function (ValueType) {
+    ValueType["Raw"] = "Raw";
+    ValueType["Ref"] = "Ref";
+    ValueType["Fun"] = "Fun";
+    ValueType["Obj"] = "Obj";
+    ValueType["Arr"] = "Arr";
+})(ValueType || (ValueType = {}));
+var ComputationType;
+(function (ComputationType) {
     //Argument = "Argument", // next argument to compute
-    //Call = "Call",
+    ComputationType["Call"] = "Call";
+    ComputationType["Assign"] = "Assign";
+    ComputationType["MaybeDeref"] = "MaybeDeref";
+    ComputationType["FunctionEnd"] = "FunctionEnd";
     //Primitive = "Primitive",
-    StackValueType["Node"] = "Node"; // When processed, before adding to stack, adds the env to the next NodeWithoutEnv in the stack.
-})(StackValueType || (StackValueType = {}));
-// Returned mean that if the node is an expressionStatement, its value can be updated.
-// If the env is not there yet, it is added when the previous statement is processed.
+    ComputationType["Node"] = "Node"; // When processed, before adding to stack, adds the env to the next NodeWithoutEnv in the stack.
+})(ComputationType || (ComputationType = {}));
 function initStack(env, initNode) {
-    return { head: { tag: StackValueType.Node, env: env, node: initNode }, tail: undefined };
+    return { values: undefined, computations: { head: { tag: ComputationType.Node, env: env, node: initNode }, tail: undefined } };
 }
+var __globalThisName__ = "global";
 function initEnv() {
     var Node = typeof Node == "undefined" ? esprima.Node : Node;
-    return { head: // Global this object available
-        { name: "this",
-            value: { env: undefined,
-                expr: new Node.Identifier("", "this", "this"),
-                heapSource: {
-                    tag: HeapSourceType.Direct,
-                    heap: initHeap()
-                },
-                v_: {},
-                ref: "this" } },
+    return { head: // Global 'this' object available
+        { name: __globalThisName__,
+            value: { tag: ValueType.Ref, name: __globalThisName__ } },
         tail: undefined };
 }
 // Equivalent of:
@@ -55,20 +53,61 @@ function initEnv() {
 // Perhaps we should consider just rewriting the initial program?
 function initHeap() {
     var _a;
-    var Node = typeof Node == "undefined" ? esprima.Node : Node;
-    return _a = {}, _a["this"] = { tag: HeapValueType.Object, value: {}, source: { env: undefined, expr: new Node.ObjectExpression("", [], [], ""), heapSource: { tag: HeapSourceType.Direct, heap: {} } } }, _a;
-}
-function initHeapSource() {
-    return { tag: HeapSourceType.Direct, heap: initHeap() };
+    return _a = {}, _a[__globalThisName__] = { tag: ValueType.Obj, value: {} }, _a;
 }
 // Converts a node/environment to an initial program
 function initProg(node, env) {
     if (env === void 0) { env = initEnv(); }
-    return { context: [], stack: initStack(env, node), heapSource: initHeapSource() };
+    return { context: [], stack: initStack(env, node), heap: initHeap() };
 }
 var uniqueID = 0;
 function uniqueRef(name) {
     return name + (uniqueID++);
+}
+// Deep clones an object.
+// Possibility to provide overrides and reuses
+//   as nested objects where leaves are
+//   For overrides:
+//     {__with__: X} for overrides
+//     name: X if the name was not present already in the object
+//   For reuses:
+//     true to just return the entire object
+//     {__reuse__: true} to reuse all children not touched by overrides fields
+function copy(object, overrides, reuses) {
+    if (typeof overrides == "object" && ("__with__" in overrides)) {
+        return overrides.__with__;
+    }
+    if (typeof reuses == "boolean" && reuses === true) {
+        return object;
+    }
+    if (typeof overrides == "undefined" && typeof reuses == "object" && ("__reuse__" in reuses)) {
+        return object;
+    }
+    if (typeof object == "object") {
+        var model = void 0;
+        if (Array.isArray(object)) {
+            model = [];
+        }
+        else {
+            model = {};
+        }
+        for (var k in object) {
+            model[k] =
+                copy(object[k], typeof overrides == "object" ? overrides[k] : undefined, typeof reuses == "object" ? ("__reuse__" in reuses ? reuses : reuses[k]) : undefined);
+        }
+        if (typeof overrides == "object") {
+            for (var k in overrides) {
+                if (k !== "__with__" && !(k in object)) {
+                    var newEntry = overrides[k];
+                    if ("__with__" in newEntry) // Just in case it was described as an override
+                        newEntry = newEntry.__with__;
+                    model[k] = newEntry;
+                }
+            }
+        }
+        return model;
+    }
+    return object;
 }
 var DType;
 (function (DType) {
@@ -83,10 +122,30 @@ var DUType;
 })(DUType || (DUType = {}));
 ;
 function DDReuse(childDiffs) {
+    var existSame = false;
+    for (var cd in childDiffs) {
+        if (isDDSame(childDiffs[cd])) {
+            existSame = true;
+            break;
+        }
+    }
+    var filteredChildDiffs;
+    if (existSame) {
+        filteredChildDiffs = {};
+        for (var cd in childDiffs) {
+            if (!isDDSame(childDiffs[cd])) {
+                filteredChildDiffs[cd] = childDiffs[cd];
+            }
+        }
+    }
+    else {
+        filteredChildDiffs = childDiffs;
+    }
+    // Do some filtering on childDiffs, remove DDSame
     return [{
             ctor: DType.Update,
             kind: { ctor: DUType.Reuse },
-            children: childDiffs
+            children: filteredChildDiffs
         }];
 }
 function DDChild(name, childDiffs) {
@@ -100,17 +159,38 @@ function DDChild(name, childDiffs) {
         return DDChild(name[0], DDChild(name.slice(1), childDiffs));
     }
 }
-function DDWrap(name, diffs, diffUpdater) {
+function DDExtract(name, diffs) {
+    if (typeof name === "string") {
+        return array_flatten(diffs.map(function (diff) {
+            return diff.ctor === DType.Update ?
+                diff.kind.ctor === DUType.Reuse ?
+                    diff.children[name] || DDSame()
+                    : undefined
+                : undefined;
+        }));
+    }
+    else {
+        if (name.length == 0)
+            return diffs;
+        return DDExtract(name.slice(1), DDExtract(name[0], diffs));
+    }
+}
+function DDMap(name, diffs, diffUpdater) {
     if (typeof name === "string") {
         return diffs.map(function (diff) {
             var _a;
-            return diff.ctor === DType.Update ? __assign({}, diff, { children: __assign({}, diff.children, (_a = {}, _a[name] = diffUpdater(diff.children[name]), _a)) }) : diff;
+            return diff.ctor === DType.Update ?
+                copy(diff, {
+                    children: (_a = {},
+                        _a[name] = diffUpdater(diff.children[name]),
+                        _a)
+                }, { __reuse__: true }) : diff;
         });
     }
     else {
         if (name.length == 0)
             return diffUpdater(diffs);
-        return DDWrap(name[0], diffs, function (d) { return DDWrap(name.slice(1), d, diffUpdater); });
+        return DDMap(name[0], diffs, function (d) { return DDMap(name.slice(1), d, diffUpdater); });
     }
 }
 function DDrop(diffs, length) {
@@ -122,13 +202,8 @@ function DDrop(diffs, length) {
                 DDrop(diff.children.tail, length - 1) :
                 DDSame()
             : undefined;
-    }).filter(function (x) { return typeof x !== "undefined"; });
-    var result = [];
-    for (var _i = 0, candidates_1 = candidates; _i < candidates_1.length; _i++) {
-        var candidate = candidates_1[_i];
-        result.push.apply(result, candidate);
-    }
-    return result;
+    });
+    return array_flatten(candidates);
 }
 function DDNewValue(newVal) {
     return [{ ctor: DType.Update, kind: { ctor: DUType.NewValue, model: newVal }, children: {} }];
@@ -150,6 +225,137 @@ function DDClone(path, diffs) {
 function DDSame() {
     return [{ ctor: DType.Update, kind: { ctor: DUType.Reuse }, children: {} }];
 }
+function isDDSame(diffs) {
+    if (diffs.length != 1)
+        return false;
+    var diff = diffs[0];
+    if (diff.ctor != DType.Update)
+        return false;
+    if (diff.kind.ctor != DUType.Reuse)
+        return false;
+    return Object.keys(diff.children).length == 0;
+}
+// Merges two diffs made on the same object.
+function DDMerge(diffs1, diffs2) {
+    if (isDDSame(diffs1))
+        return diffs2;
+    if (isDDSame(diffs2))
+        return diffs1;
+    var result = [];
+    for (var id1 = 0; id1 < diffs1.length; id1++) {
+        var diff1 = diffs1[id1];
+        for (var id2 = 0; id2 < diffs2.length; id2++) {
+            var diff2 = diffs2[id2];
+            if (diff1.ctor == DType.Update && diff2.ctor == DType.Update) {
+                if (diff1.kind.ctor == DUType.Reuse && diff2.kind.ctor == DUType.Reuse) {
+                    var c1 = diff1.children;
+                    var c2 = diff2.children;
+                    var resultingChildren = {};
+                    for (var k in c1) {
+                        var merged = void 0;
+                        if (k in c2) {
+                            merged = DDMerge(c1[k], c2[k]);
+                        }
+                        else {
+                            merged = c1[k];
+                        }
+                        resultingChildren[k] = merged;
+                    }
+                    for (var k in c2) {
+                        if (!(k in resultingChildren)) {
+                            resultingChildren[k] = c2[k];
+                        }
+                    }
+                    result.push({ ctor: DType.Update, kind: { ctor: DUType.Reuse }, children: resultingChildren });
+                    continue;
+                }
+                if (diff2.kind.ctor == DUType.NewValue) {
+                    // If there is a {ctor: DType.Clone, path: [], diffs: DSame()} below, we can merge it with the current diffs.
+                    var c2 = diff2.children;
+                    var resultingChildren = {};
+                    for (var k in c2) {
+                        var merged = DDMerge([diff1], c2[k]);
+                        resultingChildren[k] = merged;
+                    }
+                    result.push({ ctor: DType.Update, kind: { ctor: DUType.NewValue, model: diff2.kind.model }, children: resultingChildren });
+                }
+                if (diff1.kind.ctor == DUType.NewValue) {
+                    // If there is a {ctor: DType.Clone, path: [], diffs: DSame()} below, we can merge it with the current diffs.
+                    var c1 = diff2.children;
+                    var resultingChildren = {};
+                    for (var k in c1) {
+                        var merged = DDMerge(c1[k], [diff2]);
+                        resultingChildren[k] = merged;
+                    }
+                    result.push({ ctor: DType.Update, kind: { ctor: DUType.NewValue, model: diff1.kind.model }, children: resultingChildren });
+                }
+            }
+            else { // One of them is a clone, so an entire replacement. Clones discard other changes.
+                if (diff1.ctor == DType.Clone) {
+                    result.push(diff1);
+                }
+                if (diff2.ctor == DType.Clone) {
+                    // If same clone, we discard
+                    if (diff1.ctor == DType.Clone && diff1.path.up === diff2.path.up && diff1.path.down.join(" ") === diff2.path.down.join(" ")) {
+                        continue;
+                    }
+                    result.push(diff2);
+                }
+            }
+        }
+    }
+    return result;
+}
+function model_list_drop(length) {
+    var tmp = [];
+    while (length > 0) {
+        tmp.push("tail");
+    }
+    return { __clone__: tmp };
+}
+function model_list_toArray(initPath, length, mapPath) {
+    var model = [];
+    var path = initPath.slice(0);
+    while (length > 0) {
+        var p = path.concat("head");
+        if (typeof mapPath !== "undefined")
+            p = p.concat(mapPath);
+        model.push({ __clone__: p });
+        path.push("tail");
+        length - 1;
+    }
+    return model;
+}
+// Given an object-only model with {__clone__: ...} references to the object,
+// and the diffs of the new object, builds the value and the diffs associated to the model
+function DDRewrite(model, obj, diffs) {
+    if (typeof model === "object") {
+        if (typeof model.__clone__ === "string" || Array.isArray(model.__clone__)) {
+            var ds = DDExtract(model.__clone__, diffs);
+            var x = obj;
+            var path = typeof model.__clone__ === "string" ? [model.__clone__] : model.__clone__;
+            for (var i = 0; i < path.length; i++) {
+                x = x[path[i]];
+            }
+            return [x, ds];
+        }
+        // Regular object
+        var finalValue = Array.isArray(model) ? [] : {};
+        var childDiffs = {};
+        for (var k in model) {
+            var ds = model[k];
+            var _a = DDRewrite(model[k], obj, diffs), childValue = _a[0], childDiffs_1 = _a[1];
+            finalValue[k] = childValue;
+            childDiffs_1[k] = childDiffs_1;
+        }
+        var finalDiffs = DDReuse(childDiffs);
+        return [finalValue, finalDiffs];
+    }
+    else {
+        console.log(model);
+        throw "DDRewrite called with non-object as a model";
+    }
+}
 var UType;
 (function (UType) {
     UType[UType["Result"] = 0] = "Result";
@@ -161,8 +367,8 @@ var UType;
 function UpdateContinue(p, n, c) {
     return { ctor: UType.Continue, prog: p, updateData: n, callback: c };
 }
-function UpdateResult(p, oldP, c) {
-    return { ctor: UType.Result, newProg: p, oldProg: oldP, callback: c };
+function UpdateResult(p, d, oldP, c) {
+    return { ctor: UType.Result, newProg: p, diffs: d, oldProg: oldP, callback: c };
 }
 function UpdateFail(msg) {
     return { ctor: UType.Fail, msg: msg };
@@ -194,7 +400,7 @@ function processUpdateAction(action, callbacks, forks) {
         if (action.ctor == UType.Result) {
             if (action.callback)
                 callbacks.push(action.callback);
-            action = callbacks.pop()(action.newProg, action.oldProg);
+            action = callbacks.pop()(action.newProg, action.diffs, action.oldProg);
         }
         else if (action.ctor == UType.Continue) {
             if (action.callback)
@@ -229,7 +435,7 @@ function processUpdateAction(action, callbacks, forks) {
             return Err("Unknown update action: " + action.ctor);
         }
     }
-    return Ok({ prog: action.newProg, alternatives: forks });
+    return Ok({ prog: action.newProg, diffs: action.diffs, alternatives: forks });
 }
 function isDSame(diffs) {
     return diffs.length === 1 && diffs[0].ctor === DType.Update && diffs[0].kind === DUType.Reuse && diffs[0].children.length === 0;
@@ -239,7 +445,7 @@ function processClone(prog, newVal, oldVal, diff, callback) {
     var Syntax = syntax.Syntax || esprima.Syntax;
     var Node = typeof Node == "undefined" ? esprima.Node : Node;
     if (diff.path.up <= prog.context.length) {
-        var oldNode = prog.stack.head.node;
+        var oldNode = prog.stack.computations.head.node;
         var toClone = diff.path.up == 0 ? oldNode : prog.context[diff.path.up - 1];
         var nodePathDown = [];
         for (var _i = 0, _a = diff.path.down; _i < _a.length; _i++) { // We map down path elems to AST
@@ -253,12 +459,10 @@ function processClone(prog, newVal, oldVal, diff, callback) {
                 return UpdateFail("Cloning path not supported for " + downpathelem + " on " + (toClone ? toClone.type : " empty path"));
         }
         if (isDSame(diff.diffs)) {
-            return UpdateResult(__assign({}, prog, { stack: { head: __assign({}, prog.stack.head, { node: Object.create(toClone) }),
-                    tail: prog.stack.tail }, diffs: DDChild(["stack", "head", "node"], DDClone({ up: diff.path.up, down: nodePathDown }, DDSame())) }), prog, callback);
+            return UpdateResult(copy(prog, { stack: { computations: { head: { node: { __with__: copy(toClone) } } } } }, { __reuse__: true }), DDChild(["stack", "head", "node"], DDClone({ up: diff.path.up, down: nodePathDown }, DDSame())), prog, callback);
         }
         else {
-            return UpdateContinue(__assign({}, prog, { stack: { head: __assign({}, prog.stack.head, { node: Object.create(toClone) }),
-                    tail: prog.stack.tail } }), { newVal: newVal, oldVal: oldVal, diffs: diff.diffs }, callback || UpdateResult);
+            return UpdateContinue(copy(prog, { stack: { computations: { head: { node: { __with__: copy(toClone) } } } } }, { __reuse__: true }), { newVal: newVal, oldVal: oldVal, diffs: diff.diffs }, callback || UpdateResult);
         }
     }
     else {
@@ -321,7 +525,7 @@ function processClones(prog, updateData, otherwise) {
     var Syntax = syntax.Syntax || esprima.Syntax;
     var Node = typeof Node == "undefined" ? esprima.Node : Node;
     return UpdateAlternative.apply(void 0, updateData.diffs.map(function (diff) {
-        var oldNode = prog.stack.head.node;
+        var oldNode = prog.stack.computations.head.node;
         if (diff.ctor === DType.Clone) {
             return processClone(prog, updateData.newVal, updateData.oldVal, diff);
         }
@@ -337,7 +541,7 @@ function processClones(prog, updateData, otherwise) {
                 var newChildVal = new Node.Literal(oldFormat.wsBefore, oldFormat.value, oldFormat.raw);
                 newChildVal.wsAfter = oldFormat.wsAfter;
                 newChildVal.value = model;
-                return UpdateResult(__assign({}, prog, { stack: __assign({}, prog.stack, { head: __assign({}, prog.stack.head, { node: newChildVal }) }), diffs: DDChild(["stack", "head", "node"], valToNodeDiffs_(newChildVal)) }), prog);
+                return UpdateResult(copy(prog, { stack: { computations: { head: { node: { __with__: newChildVal } } } } }, { __reuse__: true }), DDChild(["stack", "head", "node"], valToNodeDiffs_(newChildVal)), prog);
             }
             else if (typeof model == "object") {
                 // TODO: Adapt the Diff
@@ -369,13 +573,13 @@ function processClones(prog, updateData, otherwise) {
                         return otherwise(diff);
                     return undefined;
                 }
-                return updateForeach(prog.stack.head.env, Object.keys(updateData.newVal), function (k) { return function (callback) {
+                return updateForeach(prog.stack.computations.head.env, Object.keys(updateData.newVal), function (k) { return function (callback) {
                     var newChildVal = updateData.newVal[k];
                     var childDiff = diffToConsider_1.children[k];
                     if (typeof childDiff == "undefined") {
                         var newChildNode = valToNode_(newChildVal);
                         var newChildNodeDiffs = valToNodeDiffs_(newChildVal);
-                        return UpdateResult(__assign({}, prog, { stack: { head: __assign({}, prog.stack.head, { node: newChildNode }), tail: prog.stack.tail }, diffs: DDChild(["stack", "head", "node"], newChildNodeDiffs) }), prog, callback);
+                        return UpdateResult(copy(prog, { stack: { computations: { head: { node: { __with__: newChildNode } } } } }, { __reuse__: true }), DDChild(["stack", "head", "node"], newChildNodeDiffs), prog, callback);
                     }
                     else { // Clones and reuse go through this
                         var oldChildVal = updateData.oldVal[k];
@@ -401,9 +605,9 @@ function updateForeach(env, collection, callbackIterator, gather) {
     var aux = function (envSoFar, nodesSoFar, diffsSoFar, i) {
         if (i < collection.length) {
             var elem = collection[i];
-            return callbackIterator(elem, i)(function (newProg, oldProg) {
-                var mergedEnv = mergeUpdatedEnvs(envSoFar, newProg.stack.head.env)._0;
-                return aux(mergedEnv, nodesSoFar.concat(newProg.stack.head.node), diffsSoFar.concat(newProg.diffs), i + 1);
+            return callbackIterator(elem, i)(function (newProg, diffs, oldProg) {
+                var mergedEnv = mergeUpdatedEnvs(envSoFar, newProg.stack.computations.head.env)._0;
+                return aux(mergedEnv, nodesSoFar.concat(newProg.stack.computations.head.node), diffsSoFar.concat(diffs), i + 1);
             });
         }
         else {
@@ -416,10 +620,8 @@ function arrayGather(prog, newNode, newDiffs) {
     return function (newEnv, newNodes, newNodesDiffs) {
         newNode.elements = newNodes;
         newDiffs[0].children.elements = DDReuse(newNodesDiffs); // FIXME: Not correct: elements form a new array.
-        return UpdateResult(__assign({}, prog, { stack: {
-                head: __assign({}, prog.stack.head, { node: newNode, env: newEnv }),
-                tail: prog.stack.tail
-            }, diffs: DDChild(["stack", "head", "node"], newDiffs) }), prog);
+        return UpdateResult(copy(prog, { stack: { head: { node: { __with__: newNode },
+                    env: { __with__: newEnv } } } }, { __reuse__: true }), DDChild(["stack", "head", "node"], newDiffs), prog);
     };
 }
 function objectGather(prog, keys, newNode, newDiffs) {
@@ -428,10 +630,8 @@ function objectGather(prog, keys, newNode, newDiffs) {
             newNode.properties.push(keyValueToProperty(key, newNodes[k]));
         });
         newDiffs[0].children.properties = DDReuse(newNodesDiffs.map(function (newNodeDiff) { return DDReuse({ value: newNodeDiff }); })); // FIXME: Not reuse?!
-        return UpdateResult(__assign({}, prog, { stack: {
-                head: __assign({}, prog.stack.head, { node: newNode, env: newEnv }),
-                tail: prog.stack.tail
-            }, diffs: DDChild(["stack", "head", "node"], newDiffs) }), prog);
+        return UpdateResult(copy(prog, { stack: { head: { node: { __with__: newNode },
+                    env: { __with__: newEnv } } } }, { __reuse__: true }), DDChild(["stack", "head", "node"], newDiffs), prog);
     };
 }
 function walkNodes(nodes, preCall, postCall, level) {
@@ -502,7 +702,9 @@ function walkNode(node, preCall, postCall, level) {
             _a[Syntax.ClassDeclaration] = rClass,
             _a[Syntax.ClassExpression] = rClass,
             _a[Syntax.ConditionalExpression] = rIf,
+            _a[Syntax.DebuggerStatement] = null,
             _a[Syntax.DoWhileStatement] = combine(rBody, "test"),
+            _a[Syntax.EmptyStatement] = null,
             _a[Syntax.ExportAllDeclaration] = rChild("source"),
             _a[Syntax.ExportDefaultDeclaration] = rChild("declaration"),
             _a[Syntax.ExportNamedDeclaration] = combine("declaration", rMany("specifiers")),
@@ -523,6 +725,7 @@ function walkNode(node, preCall, postCall, level) {
             _a[Syntax.ImportSpecifier] = combine("local", "imported"),
             _a[Syntax.LabeledStatement] = combine("label", rBody),
             _a[Syntax.Literal] = null,
+            _a[Syntax.LogicalExpression] = rBinary,
             _a[Syntax.MetaProperty] = combine("meta", "property"),
             _a[Syntax.MethodDefinition] = combine("key", "value"),
             _a[Syntax.Program] = rMany("body"),
@@ -624,8 +827,81 @@ function reverseArray(arr) {
     }
     return newArray;
 }
+// A rewrite model is either {__clone__: clone path} or
+// an object or array whose values are models.
+// In the forward direction, a model demonstrates how to build the new value
+// A reverse rewrite model is either {__reverseClone__: clone path[]} or an object or array whose values are reverse rewrite models.
+// In the backward direction, a model prevents modifications made to non-cloned nodes, and merges modifications made to nodes that were cloned several times.
+// Modify the reverseModel on place
+function apply_model(obj, model, modelPath, reverseModel) {
+    if (typeof model == "object") {
+        if ("__clone__" in model) {
+            var c = model.__clone__;
+            if (typeof c === "string") {
+                return apply_model(obj, { __clone__: [c] }, modelPath, reverseModel);
+            }
+            else if (Array.isArray(c)) {
+                var result = obj;
+                var rTmp = reverseModel;
+                for (var i = 0; i < c.length; i++) {
+                    result = result[c[i]];
+                    if (i < c.length - 1)
+                        rTmp = rTmp[c[i]];
+                }
+                var toReplace = rTmp[c[c.length - 1]];
+                if (typeof toReplace !== "object" || !("__reverseClone__" in toReplace)) {
+                    rTmp[c[c.length - 1]] = ({ __reverseClone__: [modelPath] });
+                }
+                else {
+                    toReplace.__reverseClone__.push(modelPath);
+                }
+                return result;
+            }
+            else {
+                console.log(c);
+                throw "__clone__ should be a string or an array, got something else. See console.";
+            }
+        }
+        // Regular objects
+        var finalValue = Array.isArray(model) ? [] : {};
+        for (var k in model) {
+            var childValue = apply_model(obj, model[k], modelPath.concat([k]), reverseModel);
+            finalValue[k] = childValue;
+        }
+        return finalValue;
+    }
+    return model;
+}
+/*
+prog: {a: { b: 1}, c: [2, 2], d: 3}
+model: {a: {__clone__: "c"}, c: {__clone__: ["a", "b"]}, d: {__clone__: "c"}}
+reverseModel: {a: {b: {__clone__: "c"}}, c: {__clone__: "a", __clone__2: "d"}, d: 3}
+subProg: {a: [2, 2], c: 1, d: [2, 2]}
+uSubProg: {a: [3, 2], c: 4, d: [2, 5]}
+uSubDiffs: DDReuse({a: DDReuse({0: DDNewValue(3)}), c: DDNewValue(4), d: DDReuse({1: DDNewValue(5)})})
+Expected uProg: {a: {b: 4}, c: [3, 5], d: 3}
+Expected uDiffs: DDReuse({a: DDReuse({b: DDNewValue(4)}), c: DDReuse({0: DDNewValue(3), 1: DDNewValue(5)}))
+
+*/
+function update_model(model, reverseModel, uSubProg, uSubDiffs, callback) {
+    // Let's reverse the sub-prog and sub-diffs, recover the prog and recover the diffs.
+    console.log(model);
+    console.log(reverseModel);
+    console.log(uSubProg);
+    console.log(uSubDiffs);
+    throw "Implement me: update_model";
+}
+function UpdateRewrite(prog, model_subProg, updateData) {
+    var rewriteModel_subprog = copy(prog);
+    var subProg = apply_model(prog, model_subProg, [], rewriteModel_subprog);
+    return;
+    UpdateContinue(subProg, updateData, function (uSubProg, subDiffs, subProg) {
+        return update_model(model_subProg, rewriteModel_subprog, uSubProg, subDiffs, function (uProg, uDiffs) { return UpdateResult(uProg, uDiffs, prog); });
+    });
+}
 // Update.js is generated by Update.ts
 function getUpdateAction(prog, updateData) {
+    var _a;
     /*if(prog.node.update) { // In case there is a custom update procedure available.
       return prog.node.update{prog, diff};
     }*/
@@ -635,98 +911,122 @@ function getUpdateAction(prog, updateData) {
         return UpdateFail("Cannot update empty stack. What's wrong?");
     }
     var stack = prog.stack;
-    var stackHead = stack.head;
-    if (stackHead.tag = StackValueType.Node) {
-        var oldNode = stackHead.node;
-        if (!("env" in stackHead)) {
+    var computations = stack.computations;
+    var currentComputation = computations.head;
+    console.log("currentComputation");
+    console.log(currentComputation);
+    if (currentComputation.tag === ComputationType.Node) {
+        var oldNode_1 = currentComputation.node;
+        if (!("env" in currentComputation)) {
             console.log(prog);
-            return UpdateFail("[Internal Error] Environment not found at this point.");
+            return UpdateFail("[Internal Error] Environment not found at this point. See console for more details.");
         }
-        var env = stackHead.env;
-        var newStack_1 = stack.tail; // Pop the stack
-        switch (oldNode.type) {
+        var env = currentComputation.env;
+        var remainingComputations_1 = computations.tail; // Pops the computations
+        switch (oldNode_1.type) {
             case Syntax.Program:
-                var script = oldNode;
-                if (script.body.length == 0) {
-                    return UpdateFail("Cannot update empty script");
+                var script = oldNode_1;
+                var _b = hoistedDeclarationsDefinitions(script.body, /*declarations*/ true), declarations = _b[0], definitions = _b[1];
+                /*
+                let model_subBody = hoistDeclarations(script.body, true);
+                let model_subRemainingComputations = ...model_subBody__;
+                let model_subProg = ...model_subRemainingComputations...;
+                
+                return UpdateRewrite(prog, model_subProg, updateData);
+                
+                
+                let isFirst = true;
+                // The last computation will be to
+                remainingComputations = cons_(
+                  { tag: ComputationType.FunctionEnd }, remainingComputations);
+                for(let statement of reverseArray(declarations.concat(definitions.concat(script.body)))) {
+                  remainingComputations =
+                    cons_({tag: ComputationType.Node, node: statement}, remainingComputations);
+                  if(isFirst) {
+                    remainingComputations.head.returnedExpressionStatement = true;
+                    isFirst = false;
+                  }
                 }
-                var _a = hoistedDeclarationsDefinitions(script.body, /*declarations*/ true), declarations_1 = _a[0], definitions_1 = _a[1];
-                var isFirst = true;
-                for (var _i = 0, _b = reverseArray(declarations_1.concat(definitions_1.concat(script.body))); _i < _b.length; _i++) {
-                    var statement = _b[_i];
-                    newStack_1 = { head: { tag: StackValueType.Node, node: statement }, tail: newStack_1 };
-                    if (isFirst) {
-                        newStack_1.head.returnedExpressionStatement = true;
-                        isFirst = false;
+                remainingComputations = { head: {...remainingComputations.head, env: env}, tail: remainingComputations };
+                let subProg = {...prog, stack: {values: stack.values, computations: remainingComputations};
+                return UpdateContinue(subProg, updateData,
+                  function(updatedSubProg: Prog, subDiffs: diffs, subProg: Prog):UpdateAction {
+                    if(definitions.length > 0) {
+                      console.log(updatedSubProg.stack.computations.head);
+                      return UpdateFail("TODO: Implement me (Program with hoisted definitions)");
+                      // We cannot skip definitions, we need to merge them at the correct place.
                     }
-                }
-                newStack_1 = { head: __assign({}, newStack_1.head, { env: env }), tail: newStack_1 };
-                return UpdateContinue(__assign({}, prog, { stack: newStack_1 }), updateData, function (updatedProgDiffs, prog) {
-                    var updatedStack = updatedProgDiffs.stack;
-                    // We can skip declarations.
-                    var updatedStackWithoutDeclarations = List.drop(updatedStack, declarations_1.length);
-                    var updatedDiffsWithoutDeclarations = DDrop(updatedProgDiffs.diffs, declarations_1.length);
-                    // We cannot skip definitions, we need to merge them at the correct place.
-                    if (definitions_1.length > 0) {
-                        console.log(updatedProgDiffs.stack.head);
-                        throw "TODO: Implement me (Program with hoisted definitions)";
-                    }
-                    var updatedStackFinal = updatedStackWithoutDeclarations;
-                    return UpdateResult(__assign({}, updatedProgDiffs, { stack: updatedStackFinal, diffs: updatedDiffsWithoutDeclarations }), prog);
+                    let uStack = updatedSubProg.stack;
+                    let m1 = model_list_toArray(
+                      model_list_drop(declarations.length + definitions.length).__clone__, script.body.length, "node")
+                    );
+                    let [recoveredBody, recoveredBodyDiffs] =
+                      DDRewrite(m1, updatedSubProg, subDiffs);
+                    DDRewrite
+                    return UpdateResult({...updatedSubProg,
+                      stack: updatedStackFinal},
+                      updatedDiffsWithoutDeclarations, prog);
                     // TODO: Reconstruct the original modified program here and its diff
-                });
+                  });*/
+                throw "Finish me (Script update)";
             case Syntax.AssignmentExpression:
-                return;
+                return UpdateFail("TODO - Implement me (AssignmentExpression)");
             case Syntax.VariableDeclaration:
-                var varDecls = oldNode;
+                var varDecls = oldNode_1;
                 var isLet = varDecls.kind === "let";
                 if (isLet || varDecls.kind === "const") {
+                    // TODO: Duplicate the effect of each let so that it first declares the variables
+                    // and then assign them. Else no recursion possible!
                     //const = introduce environment variables
                     //let = will wrap these environment variables by references.
                     //No need to compute value at this point.
                     var newEnv = env;
-                    var heapSource = undefined;
-                    var isFirst_1 = true;
-                    var lastComputationSource = void 0;
-                    for (var _c = 0, _d = reverseArray(varDecls.declarations); _c < _d.length; _c++) {
-                        var decl = _d[_c];
-                        if (isFirst_1) {
-                            heapSource = prog.heapSource;
-                            isFirst_1 = false;
-                        }
-                        else {
-                            heapSource = { tag: HeapSourceType.After, source: lastComputationSource };
-                        }
-                        lastComputationSource = {
-                            env: newEnv,
-                            expr: decl.right,
-                            heapSource: heapSource,
-                            heapAllocated: isLet
-                        };
-                        newEnv = {
-                            head: { name: decl.id.name, value: lastComputationSource },
-                            tail: newEnv
-                        };
+                    var newHeap = prog.heap;
+                    var isFirst = true;
+                    // First allocate a reference in the environemnt pointing to nothing.
+                    for (var _i = 0, _c = reverseArray(varDecls.declarations); _i < _c.length; _i++) {
+                        var decl = _c[_i];
+                        if (typeof decl.id.name !== "string")
+                            return UpdateFail("TODO - Implement me (complex patterns)");
+                        var newRef = uniqueRef(decl.id.name); // TODO: 
+                        newHeap = copy(newHeap, (_a = {}, _a[newRef] = { __with__: {
+                                tag: HeapValueType.Raw,
+                                value: undefined
+                            }
+                        }, _a), { __reuse__: true });
+                        newEnv = cons_({ name: decl.id.name,
+                            value: { tag: ValueType.Ref, name: newRef }
+                        }, newEnv);
                     }
-                    if (typeof newStack_1 !== "undefined") {
-                        // We propagate the environment to the next stack element.
-                        newStack_1 = { head: __assign({}, newStack_1.head, { env: newEnv }), tail: newStack_1.tail };
+                    // Now rewrite all initializations as assignments.
+                    for (var _d = 0, _e = reverseArray(varDecls.declarations); _d < _e.length; _d++) {
+                        var decl = _e[_d];
+                        var rewrittenNode = new Node.AssignmentExpression(decl.wsBeforeEq, "=", decl.id, decl.init === null ? decl.id : decl.init);
+                        rewrittenNode.wsBefore = decl.wsBefore;
+                        rewrittenNode.wsAfter = decl.wsAfter;
+                        remainingComputations_1 = { head: { tag: ComputationType.Node, env: env, node: rewrittenNode }, tail: remainingComputations_1 };
                     }
-                    return UpdateContinue(__assign({}, prog, { stack: newStack_1 }), updateData, function (updatedProgDiffs, prog) {
-                        throw "TODO: Implement me (let/const)";
+                    if (typeof remainingComputations_1 !== "undefined") {
+                        // We propagate the environment to the next stack element
+                        remainingComputations_1 = copy(remainingComputations_1, { head: { env: { __with__: newEnv } } }, { __reuse__: true });
+                    }
+                    var subProg = copy(prog, { stack: { computations: { __with__: remainingComputations_1 } } }, { __reuse__: true });
+                    return UpdateContinue(subProg, updateData, function (uSubProg, subDiffs, subProg) {
+                        return UpdateFail("TODO: Implement me (let/const)");
                         // TODO: Recover definitions and the program shape.
                     });
                 }
                 else if (varDecls.kind === "var") {
                     //var = just unroll as variable assignments
-                    for (var _e = 0, _f = reverseArray(varDecls.declarations); _e < _f.length; _e++) {
-                        var decl = _f[_e];
-                        var rewrittenNode = new Node.AssignmentExpression(decl.wsBeforeEq, "=", decl.id, decl.right === null ? decl.id : decl.right);
+                    for (var _f = 0, _g = reverseArray(varDecls.declarations); _f < _g.length; _f++) {
+                        var decl = _g[_f];
+                        var rewrittenNode = new Node.AssignmentExpression(decl.wsBeforeEq, "=", decl.id, decl.init === null ? decl.id : decl.init);
                         rewrittenNode.wsBefore = decl.wsBefore;
                         rewrittenNode.wsAfter = decl.wsAfter;
-                        newStack_1 = { head: { tag: StackValueType.Node, env: env, node: rewrittenNode }, tail: newStack_1 };
+                        remainingComputations_1 = { head: { tag: ComputationType.Node, env: env, node: rewrittenNode }, tail: remainingComputations_1 };
                     }
-                    return UpdateContinue(__assign({}, prog, { stack: newStack_1 }), updateData, function (updatedProgDiffs, prog) {
+                    var subProg = copy(prog, { stack: { computations: remainingComputations_1 } }, { __reuse__: true });
+                    return UpdateContinue(subProg, updateData, function (uSubProg, subDiffs, prog) {
                         throw "TODO: Implement me (var)";
                         // TODO: Reconstruct program and diffs from rewriting
                     });
@@ -734,54 +1034,116 @@ function getUpdateAction(prog, updateData) {
                 else
                     return UpdateFail("Unknown variable declaration kind: " + varDecls.kind);
             case Syntax.ExpressionStatement:
-                // We compute heap modifications. Only if stackHead marked with returnedExpressionStatement = true can we propagate updateData to the expression.
+                // We compute heap modifications. Only if currentComputation marked with returnedExpressionStatement = true can we propagate updateData to the expression.
                 // propagate environment to the next statement
-                newStack_1 = { head: __assign({}, newStack_1.head, { env: env }), tail: newStack_1.tail };
-                var expStatement = oldNode;
-                if (stackHead.returnedExpressionStatement) {
+                if (typeof remainingComputations_1 !== "undefined") {
+                    remainingComputations_1 = copy(remainingComputations_1, { head: { env: { __with__: env } } }, { __reuse__: true });
+                }
+                var expStatement = oldNode_1;
+                if (currentComputation.returnedExpressionStatement) {
                     // Add the expression to the stack.
-                    newStack_1 = { head: { tag: StackValueType.Node, env: env, node: expStatement.expression }, tail: newStack_1 };
-                    return UpdateContinue(__assign({}, prog, { stack: newStack_1 }), updateData, function (updatedProgDiffs, prog) {
-                        var updatedNode = new Node.ExpressionStatement(updatedProgDiffs.stack.head.node, oldNode.semicolon);
-                        updatedNode.wsBefore = oldNode.wsBefore;
-                        updatedNode.wsAfter = oldNode.wsAfter;
-                        var updatedStack = {
-                            head: __assign({}, updatedProgDiffs.stack.head, { node: updatedNode }), tail: updatedProgDiffs.stack.tail
-                        };
-                        var updateDiffs = DDWrap(["stack", "head", "node"], updatedProgDiffs.diffs, function (d) { return DDChild("expression", d); });
-                        return UpdateResult(__assign({}, prog, { stack: updatedStack, diffs: updateDiffs }), prog);
+                    remainingComputations_1 = { head: { tag: ComputationType.Node, env: env, node: expStatement.expression }, tail: remainingComputations_1 };
+                    var subProg = copy(prog, { stack: { __with__: remainingComputations_1 } }, { __reuse__: true });
+                    return UpdateContinue(subProg, updateData, function (uSubProg, subDiffs, prog) {
+                        var updatedNode = new Node.ExpressionStatement(uSubProg.stack.computations.head.node, oldNode_1.semicolon);
+                        updatedNode.wsBefore = oldNode_1.wsBefore;
+                        updatedNode.wsAfter = oldNode_1.wsAfter;
+                        var updateDiffs = DDMap(["stack", "head", "node"], subDiffs, function (d) { return DDChild("expression", d); });
+                        return UpdateResult(copy(prog, { stack: { computations: { head: { node: { __with__: updatedNode } } } } }, { __reuse__: true }), updateDiffs, prog);
                     });
                 }
                 else {
+                    throw "TODO: Implement me (ExpressionStatement)";
+                    /*
                     // No back-propagation at this point. We just move on but the heap is now a reference in case we need it.
-                    return UpdateContinue(__assign({}, prog, { heapSource: { tag: HeapSourceType.After, source: { env: env,
-                                expr: expStatement.expression,
-                                heapSource: prog.heapSource }
-                        }, stack: newStack_1 }), updateData, function (updatedProgDiffs, prog) {
-                        // TODO: Reconstruct Expression statement and diffs.
-                        throw "TODO: Implement me (ExpressionStatement)";
-                    });
+                    let subProg = {...prog,
+                      heap: // TODO
+                      ,
+                    stack: remainingComputations};
+                    return UpdateContinue(subProg, updateData,
+                    function(uSubProg: Prog, subDiffs: Diffs, prog: Prog):UpdateAction {
+                      // TODO: Reconstruct Expression statement and diffs.
+                      throw "TODO: Implement me (ExpressionStatement)"
+                    });*/
                 }
             case Syntax.Literal: // Literals can be replaced by clones
                 // TODO: Make sure this is correct. Make the stack to work.
                 return processClones(prog, updateData, function (diff) {
                     var newDiffs = DDChild(["stack", "head", "node", "value"], DDNewValue(updateData.newVal)); // TODO: What about string diffs?
-                    var newNode = Object.create(oldNode);
+                    var newNode = copy(oldNode_1);
                     newNode.value = updateData.newVal;
-                    return UpdateResult(__assign({}, prog, { stack: { head: __assign({}, stackHead, { node: newNode }), tail: newStack_1 }, diffs: newDiffs }), prog);
+                    return UpdateResult(copy(prog, { stack: { computations: { head: { node: { __with__: newNode } }, tail: { __with__: remainingComputations_1 } } } }), newDiffs, prog);
                 });
-            case Syntax.Identifier: // Updates the environment, or the heap.
-                // TODO: Immediately update expression. Will merge expressions later in any case.
-                /*var newEnv = updateVar_(prog.env, (oldNode as Node.Identifier).name, function(oldValue: EnvValue): EnvValue {
-                  return {v_: updateData.newVal,
-                          expr: oldValue.expr, // TODO: Update this expression as well !
-                          env: oldValue.env};
-                });
-                // Process clone expressions first (i.e. change shape of program)
-                return UpdateAlternative(
-                  processClones(prog, updateData),
-                  UpdateResult({...prog, env: newEnv, diffs: DDSame()}, prog));*/
-                throw "TODO: Implement me (Identifier)";
+            case Syntax.Identifier:
+                throw "TODO: Identifier";
+            // Updates the environment, or the heap.
+            // TODO: Immediately update expression. Will merge expressions later in any case.
+            /*var newEnv = updateVar_(prog.env, (oldNode as Node.Identifier).name, function(oldValue: EnvValue): EnvValue {
+              return {v_: updateData.newVal,
+                      expr: oldValue.expr, // TODO: Update this expression as well !
+                      env: oldValue.env};
+            });
+            // Process clone expressions first (i.e. change shape of program)
+            return UpdateAlternative(
+              processClones(prog, updateData),
+              UpdateResult({...prog, env: newEnv, diffs: DDSame()}, prog));*/
+            /*
+            let id = oldNode as Node.Identifier;
+            let name = id.name;
+            // Either in environment, or replace by global.name.
+            let relevantEnv = env;
+            console.log(env.head);
+            let moreRecentUntouchedEnv: Env = undefined;
+            while(relevantEnv && relevantEnv.head.name !== name) {
+              moreRecentUntouchedEnv = { head: relevantEnv.head, tail: moreRecentUntouchedEnv };
+              relevantEnv = relevantEnv.tail;
+            }
+            if(!relevantEnv) {
+              throw "TODO: Implement me (global identifier)";
+            }
+            let binding = relevantEnv.head.value;
+            let varProg: Prog = {
+              context: [], // We do not consider the context where the variable is used.
+              stack: {
+                values:
+                computations: {
+                  head: {
+                    tag: ComputationType.Node,
+                    env: binding.env,
+                    node: binding.expr
+                  },
+                  tail: remainingComputations}
+                }
+              heap: binding.heap
+            }
+            return UpdateContinue(varProg, updateData,
+              function(updatedVarProg, varProg) {
+                let [updatedBinding, updatedBindingDiffs]: [ComputationSource, Diffs] =
+                  DDRewrite(
+                    {env: {__clone__: ["stack", "head", "env"]},
+                     expr: {__clone__: ["stack", "head", "node"]},
+                     heap: {__clone__: ["heap"]}
+                     }, updatedVarProg, updatedVarProg.diffs
+                  );
+                let updatedEnv =
+                  List.reverseInsert(moreRecentUntouchedEnv,
+                  {head: {name: name, value: updatedBinding}, tail: relevantEnv.tail});
+                let updatedEnvDiffs =
+                  DDChild(array_repeat("tail", List.length(moreRecentUntouchedEnv)).concat(
+                    ["head", "value"]), updatedBindingDiffs);
+                let updatedDiffs: Diffs =
+                  DDReuse({head: DDChild("env", updatedEnvDiffs),
+                           tail: DDExtract(["stack", "tail"], updatedVarProg.diffs)});
+                return UpdateResult({
+                  context: prog.context,
+                  stack: { head: {tag: ComputationType.Node, env: updatedEnv, node: oldNode}
+                         , tail: updatedVarProg.stack.tail},
+                  heap: prog.heap,
+                  diffs: updatedDiffs
+                }, prog);
+              });
+            throw "TODO: Implement me (local identifier)";
+            */
             case Syntax.ReturnStatement:
                 // We can update its expression with updateData.
                 throw "TODO: Implement me (ReturnStatement)";
@@ -803,24 +1165,27 @@ function getUpdateAction(prog, updateData) {
                             return processClone(prog, updateData.newVal, updateData.oldVal, diff);
                         }
                         else {
-                            var newNode = new Node.Literal(oldNode.wsBefore, updateData.newVal, uneval_(updateData.newVal)); // TODO: What about string diffs?
-                            return UpdateResult(__assign({}, prog, { stack: { head: __assign({}, stackHead, { node: newNode }), tail: newStack_1 }, diffs: DDChild(["stack", "head", "node"], DDNewNode(newNode)) }), prog);
+                            var newNode = new Node.Literal(oldNode_1.wsBefore, updateData.newVal, uneval_(updateData.newVal)); // TODO: What about string diffs?
+                            return UpdateResult(copy(prog, { stack: { computations: {
+                                        head: { node: { __with__: newNode } }
+                                    } } }, { __reuse__: true }), DDChild(["stack", "computations", "head", "node"], DDNewNode(newNode)), prog);
                         }
                     }));
                 }
                 return processClones(prog, updateData, function (diff) {
-                    var elements = oldNode.elements;
+                    var elements = oldNode_1.elements;
                     var newNode;
                     var newDiffs;
                     if (diff.kind.ctor === DUType.Reuse) {
-                        newNode = Object.create(oldNode);
+                        newNode = copy(oldNode_1);
                         newDiffs = DDReuse({ elements: DDSame() });
-                        return updateForeach(prog.stack.head.env, elements, function (element, k) { return function (callback) {
+                        return updateForeach(prog.stack.computations.head.env, elements, function (element, k) { return function (callback) {
                             return typeof diff.children[k] != "undefined" ?
-                                UpdateContinue(__assign({}, prog, { context: [oldNode].concat(prog.context), stack: { head: __assign({}, stackHead, { node: element }), tail: newStack_1 } }), { newVal: updateData.newVal[k],
+                                UpdateContinue(copy(prog, { context: { __with__: [oldNode_1].concat(prog.context) },
+                                    stack: { computations: { head: { node: { __with__: element } } } } }, { __reuse__: true }), { newVal: updateData.newVal[k],
                                     oldVal: updateData.oldVal[k],
                                     diffs: diff.children[k] }, callback) :
-                                UpdateResult(__assign({}, prog, { stack: { head: __assign({}, stackHead, { node: element }), tail: newStack_1 }, diffs: DDSame() }), prog, callback);
+                                UpdateResult(prog, DDSame(), prog, callback);
                         }; }, arrayGather(prog, newNode, newDiffs));
                     }
                     else {
@@ -828,10 +1193,10 @@ function getUpdateAction(prog, updateData) {
                     }
                 });
             default:
-                return UpdateFail("Reversion does not currently support nodes of type " + oldNode.type);
+                return UpdateFail("Reversion does not currently support nodes of type " + oldNode_1.type);
         }
     }
-    return UpdateFail("Reversion does not support this current stack element: " + stackHead.tag);
+    return UpdateFail("Reversion does not support this current stack element: " + currentComputation.tag);
 }
 // Find all paths from complexVal to simpleVal if complexVal contains simpleVal
 function allClonePaths_(complexVal, simpleVal) {
@@ -999,11 +1364,13 @@ function update_(env, oldFormula) {
     };
 }
 function formatUpdateResult(updateAction, callbacks, forks) {
+    var Node = typeof Node == "undefined" ? esprima.Node : Node;
     var updated = processUpdateAction(updateAction, callbacks, forks);
     return resultCase(updated, function (x) { return Err(x); }, function (progWithAlternatives) {
+        var headNode = progWithAlternatives.prog.stack.computations.head;
         var uResult = {
-            env: progWithAlternatives.prog.stack.head.env,
-            node: progWithAlternatives.prog.stack.head.node.unparse(),
+            env: headNode.env,
+            node: Node.unparse(headNode),
             next: function () {
                 if (progWithAlternatives.alternatives.length == 0)
                     return undefined;

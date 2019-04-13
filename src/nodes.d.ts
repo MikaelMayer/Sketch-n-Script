@@ -23,7 +23,7 @@ export declare type UnparseElement = {
 export declare type UnparseArray = UnparseElement[];
 export interface Unparsable {
     wsBefore: string;
-    unparse(unparsable?: Unparsable): string;
+    type: string;
     wsAfter: string;
 }
 export declare type UnparsableOrNull = Unparsable | null;
@@ -36,7 +36,6 @@ export declare class ArrayExpression {
     wsBeforeClosing: string;
     separators: string[];
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, elements: ArrayExpressionElement[], separators: string[], wsBeforeClosing: string);
 }
 export declare class ArrayPattern {
@@ -46,7 +45,6 @@ export declare class ArrayPattern {
     wsBeforeClosing: string;
     separators: string[];
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, elements: ArrayPatternElement[], separators: string[], wsBeforeClosing: string);
 }
 export declare class ArrowFunctionExpression {
@@ -66,7 +64,6 @@ export declare class ArrowFunctionExpression {
     wsBeforeArrow: string;
     arrow: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBeforeOpening: string, params: FunctionParameter[], separators: string[], wsBeforeClosing: string, noparens: boolean, wsBeforeArrow: string, body: BlockStatement | Expression, expression: boolean);
 }
 export declare class AssignmentExpression {
@@ -77,7 +74,6 @@ export declare class AssignmentExpression {
     wsBefore: string;
     wsBeforeOp: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBeforeOp: string, operator: string, left: Expression, right: Expression);
 }
 export declare class AssignmentPattern {
@@ -87,7 +83,6 @@ export declare class AssignmentPattern {
     wsBefore: string;
     wsBeforeOp: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(left: BindingIdentifier | BindingPattern, wsBeforeOp: string, right: Expression);
 }
 export declare class AsyncArrowFunctionExpression {
@@ -107,7 +102,6 @@ export declare class AsyncArrowFunctionExpression {
     wsBeforeArrow: string;
     arrow: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBeforeAsync: string, wsBeforeOpening: string, params: FunctionParameter[], separators: string[], wsBeforeClosing: string, noparens: boolean, wsBeforeArrow: string, body: BlockStatement | Expression, expression: boolean);
 }
 export declare type AnyFunctionExpression = AsyncFunctionDeclaration | FunctionDeclaration | AsyncFunctionExpression | FunctionExpression;
@@ -127,7 +121,6 @@ export declare class AsyncFunctionDeclaration {
     separators: string[];
     wsBeforeEndParams: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBeforeAsync: string, wsBeforeFunction: string, id: Identifier | null, wsBeforeParams: string, params: FunctionParameter[], separators: string[], wsBeforeEndParams: string, body: BlockStatement);
 }
 export declare class AsyncFunctionExpression {
@@ -146,7 +139,6 @@ export declare class AsyncFunctionExpression {
     separators: string[];
     wsBeforeEndParams: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBeforeAsync: string, wsBeforeFunction: string, id: Identifier | null, wsBeforeParams: string, params: FunctionParameter[], separators: string[], wsBeforeEndParams: string, body: BlockStatement);
 }
 export declare class AwaitExpression {
@@ -154,7 +146,6 @@ export declare class AwaitExpression {
     argument: Expression;
     wsBefore: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, argument: Expression);
 }
 export declare class BinaryExpression {
@@ -165,7 +156,6 @@ export declare class BinaryExpression {
     wsBefore: string;
     wsBeforeOp: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(operator: string, left: Expression, right: Expression, wsBeforeOp: string);
 }
 export declare class BlockStatement {
@@ -174,7 +164,6 @@ export declare class BlockStatement {
     wsBefore: string;
     wsBeforeEnd: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, body: StatementListItem[], wsBeforeEnd: string);
 }
 export declare class BreakStatement {
@@ -183,7 +172,6 @@ export declare class BreakStatement {
     wsBefore: string;
     semicolon: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, label: Identifier | null, semicolon: string);
 }
 export declare class CallExpression {
@@ -195,7 +183,6 @@ export declare class CallExpression {
     separators: string[];
     wsBeforeEndArgs: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(callee: Expression | Import, wsBeforeArgs: string, args: ArgumentListElement[], separators: string[], wsBeforeEndArgs: string);
 }
 export declare class CatchClause {
@@ -206,7 +193,6 @@ export declare class CatchClause {
     wsBeforeOpening: string;
     wsBeforeClosing: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, wsBeforeOpening: string, param: BindingIdentifier | BindingPattern, wsBeforeClosing: string, body: BlockStatement);
 }
 export declare class ClassBody {
@@ -217,7 +203,6 @@ export declare class ClassBody {
     wsAfterOpening: string;
     wsBeforeClosing: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBeforeOpening: string, wsAfterOpening: string, body: Property[], wsBeforeClosing: string);
 }
 export declare class ClassDeclaration {
@@ -228,7 +213,6 @@ export declare class ClassDeclaration {
     wsBefore: string;
     wsBeforeExtends: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, id: Identifier | null, wsBeforeExtends: string, superClass: Identifier | null, body: ClassBody);
 }
 export declare class ClassExpression {
@@ -239,7 +223,6 @@ export declare class ClassExpression {
     wsBefore: string;
     wsBeforeExtends: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, id: Identifier | null, wsBeforeExtends: string, superClass: Identifier | null, body: ClassBody);
 }
 export declare class ComputedMemberExpression {
@@ -251,7 +234,6 @@ export declare class ComputedMemberExpression {
     wsBeforeOpening: string;
     wsBeforeClosing: string;
     wsAfter: string;
-    unparse(): any;
     constructor(object: Expression, wsBeforeOpening: string, property: Expression, wsBeforeClosing: string);
 }
 export declare class ConditionalExpression {
@@ -263,7 +245,6 @@ export declare class ConditionalExpression {
     wsBeforeQues: string;
     wsBeforeColon: string;
     wsAfter: string;
-    unparse(): any;
     constructor(test: Expression, wsBeforeQues: string, consequent: Expression, wsBeforeColon: string, alternate: Expression);
 }
 export declare class ContinueStatement {
@@ -272,7 +253,6 @@ export declare class ContinueStatement {
     wsBefore: string;
     semicolon: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, label: Identifier | null, semicolon: string);
 }
 export declare class DebuggerStatement {
@@ -280,7 +260,6 @@ export declare class DebuggerStatement {
     wsBefore: string;
     semicolon: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, semicolon: string);
 }
 export declare class Directive {
@@ -290,7 +269,6 @@ export declare class Directive {
     wsBefore: string;
     semicolon: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(expression: Expression, directive: string, semicolon: string);
 }
 export declare class DoWhileStatement {
@@ -304,7 +282,6 @@ export declare class DoWhileStatement {
     closingParens: string;
     semicolon: string;
     wsAfter: string;
-    unparse(): any;
     constructor(wsBefore: string, body: Statement, wsBeforeWhile: string, wsBeforeOpening: string, test: Expression, wsBeforeClosing: string, semicolon: string, closingParens?: string);
 }
 export declare class EmptyStatement {
@@ -312,7 +289,6 @@ export declare class EmptyStatement {
     wsBefore: string;
     semicolon: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, semicolon?: string);
 }
 export declare class ExportAllDeclaration {
@@ -323,7 +299,6 @@ export declare class ExportAllDeclaration {
     wsBeforeFrom: string;
     semicolon: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, wsBeforeStar: string, wsBeforeFrom: string, source: Literal, semicolon?: string);
 }
 export declare class ExportDefaultDeclaration {
@@ -333,7 +308,6 @@ export declare class ExportDefaultDeclaration {
     wsBeforeDefault: string;
     semicolon: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, wsBeforeDefault: string, declaration: ExportableDefaultDeclaration, semicolon?: string);
 }
 export declare class ExportNamedDeclaration {
@@ -349,7 +323,6 @@ export declare class ExportNamedDeclaration {
     wsBeforeFrom: string;
     semicolon: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, declaration: ExportableNamedDeclaration | null, hasBrackets: boolean, wsBeforeOpening: string, specifiers: ExportSpecifier[], separators: string[], wsBeforeClosing: string, wsBeforeFrom: string, source: Literal | null, semicolon?: string);
 }
 export declare class ExportSpecifier {
@@ -360,7 +333,6 @@ export declare class ExportSpecifier {
     wsBefore: string;
     wsBeforeAs: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(local: Identifier, noAs: boolean, wsBeforeAs: string, exported: Identifier);
 }
 export declare class ExpressionStatement {
@@ -369,7 +341,6 @@ export declare class ExpressionStatement {
     semicolon: string;
     wsBefore: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(expression: Expression, semicolon: string);
 }
 export declare class ForInStatement {
@@ -385,7 +356,6 @@ export declare class ForInStatement {
     wsBeforeClosing: string;
     closingParens: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBeforeFor: string, wsBeforeOpening: string, left: Expression, wsBeforeKeyword: string, right: Expression, wsBeforeClosing: string, body: Statement, closingParens?: string);
 }
 export declare class ForOfStatement {
@@ -400,7 +370,6 @@ export declare class ForOfStatement {
     wsBeforeClosing: string;
     closingParens: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBeforeFor: string, wsBeforeOpening: string, left: Expression, wsBeforeKeyword: string, right: Expression, wsBeforeClosing: string, body: Statement, closingParens?: string);
 }
 export declare class ForStatement {
@@ -417,7 +386,6 @@ export declare class ForStatement {
     wsBeforeClosing: string;
     closingParens: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBeforeFor: string, wsBeforeOpening: string, init: Expression | null, wsBeforeSemicolon1: string, test: Expression | null, wsBeforeSemicolon2: string, update: Expression | null, wsBeforeClosing: string, body: Statement, closingParens?: string);
 }
 export declare class FunctionDeclaration {
@@ -436,7 +404,6 @@ export declare class FunctionDeclaration {
     separators: string[];
     wsBeforeEndParams: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBeforeFunction: string, wsBeforeStar: string, id: Identifier | null, wsBeforeParams: string, params: FunctionParameter[], separators: string[], wsBeforeEndParams: string, body: BlockStatement, generator: boolean);
 }
 export declare class FunctionExpression {
@@ -455,7 +422,6 @@ export declare class FunctionExpression {
     separators: string[];
     wsBeforeEndParams: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBeforeFunction: string, wsBeforeStar: string, id: Identifier | null, wsBeforeParams: string, params: FunctionParameter[], separators: string[], wsBeforeEndParams: string, body: BlockStatement, generator: boolean);
 }
 export declare class Identifier {
@@ -465,8 +431,7 @@ export declare class Identifier {
     nameRaw: string;
     wsBefore: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
-    constructor(wsBefore: string, name: string, nameRaw: string);
+    constructor(wsBefore: string, name: string, nameRaw?: string);
 }
 export declare class IfStatement {
     type: string;
@@ -480,14 +445,12 @@ export declare class IfStatement {
     closingParens: string;
     wsBeforeElse: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, ifKeyword: string, wsBeforeOpening: string, test: Expression, wsBeforeClosing: string, consequent: Statement, wsBeforeElse: string, alternate: Statement | null, closingParens?: string);
 }
 export declare class Import {
     type: string;
     wsBefore: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: any);
 }
 export declare class ImportDeclaration {
@@ -502,7 +465,6 @@ export declare class ImportDeclaration {
     wsBeforeFrom: string;
     semicolon: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, wsBeforeOpening: string, hasBrackets: boolean, specifiers: ImportDeclarationSpecifier[], separators: string[], wsBeforeClosing: string, wsBeforeFrom: string, source: any, semicolon?: string);
 }
 export declare class ImportDefaultSpecifier {
@@ -510,7 +472,6 @@ export declare class ImportDefaultSpecifier {
     local: Identifier;
     wsBefore: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(local: Identifier);
 }
 export declare class ImportNamespaceSpecifier {
@@ -519,7 +480,6 @@ export declare class ImportNamespaceSpecifier {
     wsBefore: string;
     wsBeforeAs: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, wsBeforeAs: string, local: Identifier);
 }
 export declare class ImportSpecifier {
@@ -530,7 +490,6 @@ export declare class ImportSpecifier {
     wsBefore: string;
     wsBeforeAs: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(local: Identifier, asPresent: boolean, wsBeforeAs: string, imported: Identifier);
 }
 export declare class LabeledStatement {
@@ -540,7 +499,6 @@ export declare class LabeledStatement {
     wsBefore: string;
     wsBeforeColon: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(label: Identifier, wsBeforeColon: string, body: Statement | ClassDeclaration);
 }
 export declare function uneval(x: any): string;
@@ -551,7 +509,6 @@ export declare class Literal {
     original: boolean | number | string | null;
     wsBefore: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, value: boolean | number | string | null, raw: string);
 }
 export declare class MetaProperty {
@@ -561,7 +518,6 @@ export declare class MetaProperty {
     wsBefore: string;
     wsBeforeDot: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(meta: Identifier, wsBeforeDot: string, property: Identifier);
 }
 export declare class MethodDefinition {
@@ -577,7 +533,6 @@ export declare class MethodDefinition {
     wsBeforeClosing: string;
     wsBeforeStatic: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBeforeStatic: string, wsBeforeGetSet: any, key: Expression, computed: boolean, wsBeforeOpening: string, wsBeforeClosing: string, value: AsyncFunctionExpression | FunctionExpression | null, kind: 'init' | 'method' | 'constructor' | 'set' | 'get', isStatic: boolean);
 }
 export declare class Module {
@@ -586,7 +541,6 @@ export declare class Module {
     sourceType: string;
     wsBefore: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(body: StatementListItem[], wsAfter: string);
 }
 export declare class NewExpression {
@@ -600,7 +554,6 @@ export declare class NewExpression {
     separators: string[];
     wsBeforeClosing: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBeforeNew: string, callee: Expression, parentheses: boolean, wsBeforeOpening: string, args: ArgumentListElement[], separators: string[], wsBeforeClosing: string);
 }
 export declare class ObjectExpression {
@@ -610,7 +563,6 @@ export declare class ObjectExpression {
     wsBeforeClosing: string;
     separators: string[];
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, properties: ObjectExpressionProperty[], separators: string[], wsBeforeClosing: string);
 }
 export declare class ObjectPattern {
@@ -620,7 +572,6 @@ export declare class ObjectPattern {
     separators: string[];
     wsBeforeClosing: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, properties: ObjectPatternProperty[], separators: string[], wsBeforeClosing: string);
 }
 export declare class Property {
@@ -637,7 +588,6 @@ export declare class Property {
     wsBeforeGetSet: string;
     wsBeforeColon: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(kind: 'init' | 'get' | 'set', key: PropertyKey, wsBeforeGetSet: string, wsBeforeOpening: string, wsBeforeClosing: string, wsBeforeColon: string, computed: boolean, value: PropertyValue | null, method: boolean, shorthand: boolean);
 }
 export declare class RegexLiteral {
@@ -654,7 +604,6 @@ export declare class RegexLiteral {
     };
     wsBefore: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, value: RegExp, raw: string, pattern: string, flags: string);
 }
 export declare class RestElement {
@@ -662,7 +611,6 @@ export declare class RestElement {
     argument: BindingIdentifier | BindingPattern;
     wsBefore: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, argument: BindingIdentifier | BindingPattern);
 }
 export declare class ReturnStatement {
@@ -671,7 +619,6 @@ export declare class ReturnStatement {
     wsBefore: string;
     semicolon: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, argument: Expression | null, semicolon: string);
 }
 export declare class Script {
@@ -680,7 +627,6 @@ export declare class Script {
     sourceType: string;
     wsBefore: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(body: StatementListItem[], wsAfter: string);
 }
 export declare class SequenceExpression {
@@ -692,7 +638,6 @@ export declare class SequenceExpression {
     parentheses: boolean;
     separators: string[];
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(parentheses: boolean, wsBeforeOpening: string, expressions: Expression[], separators: string[], wsBeforeClosing: string);
 }
 export declare class SpreadElement {
@@ -700,7 +645,6 @@ export declare class SpreadElement {
     argument: Expression;
     wsBefore: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, argument: Expression);
 }
 export declare class StaticMemberExpression {
@@ -712,14 +656,12 @@ export declare class StaticMemberExpression {
     wsBeforeOpening: string;
     wsBeforeClosing: string;
     wsAfter: string;
-    unparse(): any;
     constructor(object: Expression, wsBeforeOpening: string, property: Expression);
 }
 export declare class Super {
     type: string;
     wsBefore: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string);
 }
 export declare class SwitchCase {
@@ -729,7 +671,6 @@ export declare class SwitchCase {
     wsBefore: string;
     wsBeforeColon: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, test: Expression, wsBeforeColon: string, consequent: StatementListItem[]);
 }
 export declare class SwitchStatement {
@@ -742,7 +683,6 @@ export declare class SwitchStatement {
     wsBeforeBlockOpening: string;
     wsBeforeBlockClosing: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, wsBeforeOpening: string, discriminant: Expression, wsBeforeClosing: string, wsBeforeBlockOpening: string, cases: SwitchCase[], wsBeforeBlockClosing: string);
 }
 export declare class TaggedTemplateExpression {
@@ -751,7 +691,6 @@ export declare class TaggedTemplateExpression {
     quasi: TemplateLiteral;
     wsBefore: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(tag: Expression, quasi: TemplateLiteral);
 }
 interface TemplateElementValue {
@@ -765,7 +704,6 @@ export declare class TemplateElement {
     tail: boolean;
     wsBefore: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(value: TemplateElementValue, tail: boolean);
 }
 export declare class TemplateLiteral {
@@ -774,14 +712,12 @@ export declare class TemplateLiteral {
     expressions: Expression[];
     wsBefore: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, quasis: TemplateElement[], expressions: Expression[]);
 }
 export declare class ThisExpression {
     type: string;
     wsBefore: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string);
 }
 export declare class ThrowStatement {
@@ -790,7 +726,6 @@ export declare class ThrowStatement {
     wsBefore: string;
     semicolon: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, argument: Expression, semicolon: string);
 }
 export declare class TryStatement {
@@ -801,7 +736,6 @@ export declare class TryStatement {
     wsBefore: string;
     wsBeforeFinally: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, block: BlockStatement, handler: CatchClause | null, wsBeforeFinally: string, finalizer: BlockStatement | null);
 }
 export declare class UnaryExpression {
@@ -811,7 +745,6 @@ export declare class UnaryExpression {
     prefix: boolean;
     wsBefore: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, operator: any, argument: any);
 }
 export declare class UpdateExpression {
@@ -821,7 +754,6 @@ export declare class UpdateExpression {
     prefix: boolean;
     wsBefore: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, operator: any, argument: any, prefix: any);
 }
 export declare class VariableDeclaration {
@@ -832,7 +764,6 @@ export declare class VariableDeclaration {
     separators: string[];
     semicolon: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, declarations: VariableDeclarator[], separators: string[], kind: string, semicolon: string);
 }
 export declare class VariableDeclarator {
@@ -842,7 +773,6 @@ export declare class VariableDeclarator {
     wsBefore: string;
     wsBeforeEq: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(id: BindingIdentifier | BindingPattern, wsBeforeEq: string, init: Expression | null);
 }
 export declare class WhileStatement {
@@ -854,7 +784,6 @@ export declare class WhileStatement {
     wsBeforeClosing: string;
     closingParens: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, wsBeforeOpening: string, test: Expression, wsBeforeClosing: string, body: Statement, closingParens?: string);
 }
 export declare class WithStatement {
@@ -866,7 +795,6 @@ export declare class WithStatement {
     wsBeforeClosing: string;
     closingParens: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, wsBeforeOpening: string, object: Expression, wsBeforeClosing: string, body: Statement, closingParens?: string);
 }
 export declare class YieldExpression {
@@ -877,7 +805,8 @@ export declare class YieldExpression {
     wsBeforeStar: string;
     semicolon: string;
     wsAfter: string;
-    unparse(parent?: Unparsable): string;
     constructor(wsBefore: string, wsBeforeStar: string, argument: Expression | null, delegate: boolean, semicolon: string);
 }
+export declare var unparsers: any;
+export declare function unparse(e: UnparsableOrNull | undefined, parent?: Unparsable): string;
 export {};

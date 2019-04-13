@@ -1061,12 +1061,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.name = name;
 	        this.wsAfterName = wsAfterName;
 	    }
-	    JSXClosingElement.prototype.unparse = function (parent) {
-	        return this.wsBefore + '</' + Node.unparseChild(this)(this.name) + this.wsAfterName + '>' + this.wsAfter;
-	    };
 	    return JSXClosingElement;
 	}());
 	exports.JSXClosingElement = JSXClosingElement;
+	var unparseJSXClosingElement = function (e, parent) {
+	    return e.wsBefore + '</' + Node.unparseChild(e)(e.name) + e.wsAfterName + '>' + e.wsAfter;
+	};
 	var JSXElement = /** @class */ (function () {
 	    function JSXElement(wsBefore, openingElement, children, closingElement) {
 	        this.wsAfter = '';
@@ -1076,27 +1076,27 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.closingElement = closingElement;
 	        this.wsBefore = wsBefore;
 	    }
-	    JSXElement.prototype.unparse = function (parent) {
-	        return this.wsBefore + Node.unparseChild(this)(this.openingElement) +
-	            Node.unparseChildren(this, '')(this.children) +
-	            (this.closingElement ? Node.unparseChild(this)(this.closingElement) : '') +
-	            this.wsAfter;
-	    };
 	    return JSXElement;
 	}());
 	exports.JSXElement = JSXElement;
+	var unparseJSXElement = function (e, parent) {
+	    return e.wsBefore + Node.unparseChild(e)(e.openingElement) +
+	        Node.unparseChildren(e, '')(e.children) +
+	        (e.closingElement ? Node.unparseChild(e)(e.closingElement) : '') +
+	        e.wsAfter;
+	};
 	var JSXEmptyExpression = /** @class */ (function () {
 	    function JSXEmptyExpression(wsBefore) {
 	        this.wsAfter = '';
 	        this.type = jsx_syntax_1.JSXSyntax.JSXEmptyExpression;
 	        this.wsBefore = wsBefore;
 	    }
-	    JSXEmptyExpression.prototype.unparse = function (parent) {
-	        return this.wsBefore + this.wsAfter;
-	    };
 	    return JSXEmptyExpression;
 	}());
 	exports.JSXEmptyExpression = JSXEmptyExpression;
+	var unparseJSXEmptyExpression = function (e, parent) {
+	    return e.wsBefore + e.wsAfter;
+	};
 	var JSXExpressionContainer = /** @class */ (function () {
 	    function JSXExpressionContainer(wsBefore, expression, wsBeforeClosing) {
 	        this.wsAfter = '';
@@ -1105,12 +1105,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBefore = wsBefore;
 	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
-	    JSXExpressionContainer.prototype.unparse = function (parent) {
-	        return this.wsBefore + '{' + Node.unparseChild(this)(this.expression) + this.wsBeforeClosing + '}' + this.wsAfter;
-	    };
 	    return JSXExpressionContainer;
 	}());
 	exports.JSXExpressionContainer = JSXExpressionContainer;
+	var unparseJSXExpressionContainer = function (e, parent) {
+	    return e.wsBefore + '{' + Node.unparseChild(e)(e.expression) + e.wsBeforeClosing + '}' + e.wsAfter;
+	};
 	var JSXIdentifier = /** @class */ (function () {
 	    function JSXIdentifier(wsBefore, name) {
 	        this.wsAfter = '';
@@ -1118,12 +1118,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBefore = wsBefore;
 	        this.name = name;
 	    }
-	    JSXIdentifier.prototype.unparse = function (parent) {
-	        return this.wsBefore + this.name + this.wsAfter;
-	    };
 	    return JSXIdentifier;
 	}());
 	exports.JSXIdentifier = JSXIdentifier;
+	var unparseJSXIdentifier = function (e, parent) {
+	    return e.wsBefore + e.name + e.wsAfter;
+	};
 	var JSXMemberExpression = /** @class */ (function () {
 	    function JSXMemberExpression(object, property) {
 	        this.wsBefore = '';
@@ -1132,15 +1132,15 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.object = object;
 	        this.property = property;
 	    }
-	    JSXMemberExpression.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            Node.unparseChild(this)(this.object) + '.' +
-	            Node.unparseChild(this)(this.property) +
-	            this.wsAfter;
-	    };
 	    return JSXMemberExpression;
 	}());
 	exports.JSXMemberExpression = JSXMemberExpression;
+	var unparseJSXMemberExpression = function (e, parent) {
+	    return e.wsBefore +
+	        Node.unparseChild(e)(e.object) + '.' +
+	        Node.unparseChild(e)(e.property) +
+	        e.wsAfter;
+	};
 	var JSXAttribute = /** @class */ (function () {
 	    function JSXAttribute(wsBefore, name, wsBeforeEq, value) {
 	        this.wsAfter = '';
@@ -1150,14 +1150,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBefore = wsBefore;
 	        this.wsBeforeEq = wsBeforeEq;
 	    }
-	    JSXAttribute.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            Node.unparseChild(this)(this.name) + this.wsBeforeEq + (this.value ? '=' + Node.unparseChild(this)(this.value) : '') +
-	            this.wsAfter;
-	    };
 	    return JSXAttribute;
 	}());
 	exports.JSXAttribute = JSXAttribute;
+	var unparseJSXAttribute = function (e, parent) {
+	    return e.wsBefore +
+	        Node.unparseChild(e)(e.name) + e.wsBeforeEq + (e.value ? '=' + Node.unparseChild(e)(e.value) : '') +
+	        e.wsAfter;
+	};
 	var JSXNamespacedName = /** @class */ (function () {
 	    function JSXNamespacedName(namespace, name) {
 	        this.wsBefore = '';
@@ -1166,13 +1166,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.namespace = namespace;
 	        this.name = name;
 	    }
-	    JSXNamespacedName.prototype.unparse = function (parent) {
-	        return this.wsBefore + Node.unparseChild(this)(this.namespace) + ':' + Node.unparseChild(this)(this.name) +
-	            this.wsAfter;
-	    };
 	    return JSXNamespacedName;
 	}());
 	exports.JSXNamespacedName = JSXNamespacedName;
+	var unparseJSXNamespacedName = function (e, parent) {
+	    return e.wsBefore + Node.unparseChild(e)(e.namespace) + ':' + Node.unparseChild(e)(e.name) +
+	        e.wsAfter;
+	};
 	var JSXOpeningElement = /** @class */ (function () {
 	    function JSXOpeningElement(wsBefore, name, selfClosing, attributes, wsBeforeEnd, wsBeforeGt) {
 	        this.wsAfter = '';
@@ -1184,16 +1184,16 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeEnd = wsBeforeEnd;
 	        this.wsBeforeGt = wsBeforeGt;
 	    }
-	    JSXOpeningElement.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            '<' + Node.unparseChild(this)(this.name) +
-	            Node.unparseChildren(this)(this.attributes) +
-	            this.wsBeforeEnd + (this.selfClosing ? '/' : '') + this.wsBeforeGt + '>' +
-	            this.wsAfter;
-	    };
 	    return JSXOpeningElement;
 	}());
 	exports.JSXOpeningElement = JSXOpeningElement;
+	var unparseJSXOpeningElement = function (e, parent) {
+	    return e.wsBefore +
+	        '<' + Node.unparseChild(e)(e.name) +
+	        Node.unparseChildren(e)(e.attributes) +
+	        e.wsBeforeEnd + (e.selfClosing ? '/' : '') + e.wsBeforeGt + '>' +
+	        e.wsAfter;
+	};
 	var JSXSpreadAttribute = /** @class */ (function () {
 	    function JSXSpreadAttribute(wsBefore, argument, wsBeforeClosing) {
 	        this.wsAfter = '';
@@ -1202,12 +1202,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBefore = wsBefore;
 	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
-	    JSXSpreadAttribute.prototype.unparse = function (parent) {
-	        return this.wsBefore + '{...' + Node.unparseChild(this)(this.argument) + this.wsBeforeClosing + '}' + this.wsAfter;
-	    };
 	    return JSXSpreadAttribute;
 	}());
 	exports.JSXSpreadAttribute = JSXSpreadAttribute;
+	var unparseJSXSpreadAttribute = function (e, parent) {
+	    return e.wsBefore + '{...' + Node.unparseChild(e)(e.argument) + e.wsBeforeClosing + '}' + e.wsAfter;
+	};
 	var JSXText = /** @class */ (function () {
 	    function JSXText(value, raw) {
 	        this.wsBefore = '';
@@ -1217,12 +1217,23 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.originalValue = value;
 	        this.raw = raw;
 	    }
-	    JSXText.prototype.unparse = function (parent) {
-	        return this.wsBefore + (this.value === this.originalValue ? this.raw : this.value) + this.wsAfter;
-	    };
 	    return JSXText;
 	}());
 	exports.JSXText = JSXText;
+	var unparseJSXText = function (e, parent) {
+	    return e.wsBefore + (e.value === e.originalValue ? e.raw : e.value) + e.wsAfter;
+	};
+	Node.unparsers[jsx_syntax_1.JSXSyntax.JSXClosingElement] = unparseJSXClosingElement;
+	Node.unparsers[jsx_syntax_1.JSXSyntax.JSXElement] = unparseJSXElement;
+	Node.unparsers[jsx_syntax_1.JSXSyntax.JSXEmptyExpression] = unparseJSXEmptyExpression;
+	Node.unparsers[jsx_syntax_1.JSXSyntax.JSXExpressionContainer] = unparseJSXExpressionContainer;
+	Node.unparsers[jsx_syntax_1.JSXSyntax.JSXIdentifier] = unparseJSXIdentifier;
+	Node.unparsers[jsx_syntax_1.JSXSyntax.JSXMemberExpression] = unparseJSXMemberExpression;
+	Node.unparsers[jsx_syntax_1.JSXSyntax.JSXAttribute] = unparseJSXAttribute;
+	Node.unparsers[jsx_syntax_1.JSXSyntax.JSXNamespacedName] = unparseJSXNamespacedName;
+	Node.unparsers[jsx_syntax_1.JSXSyntax.JSXOpeningElement] = unparseJSXOpeningElement;
+	Node.unparsers[jsx_syntax_1.JSXSyntax.JSXSpreadAttribute] = unparseJSXSpreadAttribute;
+	Node.unparsers[jsx_syntax_1.JSXSyntax.JSXText] = unparseJSXText;
 
 
 /***/ },
@@ -1252,6 +1263,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	"use strict";
 	Object.defineProperty(exports, "__esModule", { value: true });
+	var _a;
 	var syntax_1 = __webpack_require__(2);
 	exports.unparseChildren = function (parent, join, defaultJoin) {
 	    if (parent === void 0) { parent = undefined; }
@@ -1259,7 +1271,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    if (defaultJoin === void 0) { defaultJoin = ''; }
 	    return function (children) {
 	        if (children) {
-	            var renderedChildren = children.map(function (child) { return child ? child.unparse(parent) : ''; });
+	            var renderedChildren = children.map(function (child) { return unparse(child, parent); });
 	            if (typeof join === 'string') {
 	                return renderedChildren.join(join);
 	            }
@@ -1285,15 +1297,15 @@ return /******/ (function(modules) { // webpackBootstrap
 	};
 	exports.unparseChild = function (parent) {
 	    if (parent === void 0) { parent = undefined; }
-	    return function (node) { return node ? node.unparse(parent) : ''; };
+	    return function (node) { return unparse(node, parent); };
 	};
-	function unparseArray(parent) {
-	    return this.wsBefore +
+	function unparseArray(e, parent) {
+	    return e.wsBefore +
 	        '[' +
-	        exports.unparseChildren(this, this.separators, ', ')(this.elements) +
-	        this.wsBeforeClosing +
+	        exports.unparseChildren(e, e.separators, ', ')(e.elements) +
+	        e.wsBeforeClosing +
 	        ']' +
-	        this.wsAfter;
+	        e.wsAfter;
 	}
 	/* tslint:disable:max-classes-per-file */
 	/* type alias UnparseElement =
@@ -1308,12 +1320,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeClosing = wsBeforeClosing;
 	        this.separators = separators;
 	    }
-	    ArrayExpression.prototype.unparse = function (parent) {
-	        return unparseArray.bind(this)(parent);
-	    };
 	    return ArrayExpression;
 	}());
 	exports.ArrayExpression = ArrayExpression;
+	var unparseArrayExpression = unparseArray;
 	var ArrayPattern = /** @class */ (function () {
 	    function ArrayPattern(wsBefore, elements, separators, wsBeforeClosing) {
 	        this.wsAfter = '';
@@ -1323,24 +1333,22 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeClosing = wsBeforeClosing;
 	        this.separators = separators;
 	    }
-	    ArrayPattern.prototype.unparse = function (parent) {
-	        return unparseArray.bind(this)(parent);
-	    };
 	    return ArrayPattern;
 	}());
 	exports.ArrayPattern = ArrayPattern;
-	var arrowFunctionUnparser = function (parent) {
-	    return this.wsBefore +
-	        (this.async ? this.wsBeforeAsync + 'async' : '') +
-	        this.wsBeforeOpening +
-	        (this.params.length === 1 && this.noparens ? '' : '(') +
-	        exports.unparseChildren(this, this.separators, ', ')(this.params) +
-	        this.wsBeforeClosing +
-	        (this.params.length === 1 && this.noparens ? '' : ')') +
-	        this.wsBeforeArrow +
-	        this.arrow +
-	        exports.unparseChild(this)(this.body) +
-	        this.wsAfter;
+	var unparseArrayPattern = unparseArray;
+	var arrowFunctionUnparser = function (e, parent) {
+	    return e.wsBefore +
+	        (e.async ? e.wsBeforeAsync + 'async' : '') +
+	        e.wsBeforeOpening +
+	        (e.params.length === 1 && e.noparens ? '' : '(') +
+	        exports.unparseChildren(e, e.separators, ', ')(e.params) +
+	        e.wsBeforeClosing +
+	        (e.params.length === 1 && e.noparens ? '' : ')') +
+	        e.wsBeforeArrow +
+	        e.arrow +
+	        exports.unparseChild(e)(e.body) +
+	        e.wsAfter;
 	};
 	var ArrowFunctionExpression = /** @class */ (function () {
 	    function ArrowFunctionExpression(wsBeforeOpening, params, separators, wsBeforeClosing, noparens, wsBeforeArrow, body, expression) {
@@ -1361,19 +1369,17 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeArrow = wsBeforeArrow;
 	        this.noparens = noparens;
 	    }
-	    ArrowFunctionExpression.prototype.unparse = function (parent) {
-	        return arrowFunctionUnparser.bind(this)(parent);
-	    };
 	    return ArrowFunctionExpression;
 	}());
 	exports.ArrowFunctionExpression = ArrowFunctionExpression;
-	function binaryUnparser(parent) {
-	    return this.wsBefore +
-	        exports.unparseChild(this)(this.left) +
-	        this.wsBeforeOp +
-	        (isAssignmentPattern(this) ? '=' : this.operator) +
-	        exports.unparseChild(this)(this.right) +
-	        this.wsAfter;
+	var unparseArrowFunctionExpression = arrowFunctionUnparser;
+	function binaryUnparser(e, parent) {
+	    return e.wsBefore +
+	        exports.unparseChild(e)(e.left) +
+	        e.wsBeforeOp +
+	        (isAssignmentPattern(e) ? '=' : e.operator) +
+	        exports.unparseChild(e)(e.right) +
+	        e.wsAfter;
 	}
 	var AssignmentExpression = /** @class */ (function () {
 	    function AssignmentExpression(wsBeforeOp, operator, left, right) {
@@ -1385,12 +1391,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.right = right;
 	        this.wsBeforeOp = wsBeforeOp;
 	    }
-	    AssignmentExpression.prototype.unparse = function (parent) {
-	        return binaryUnparser.bind(this)(parent);
-	    };
 	    return AssignmentExpression;
 	}());
 	exports.AssignmentExpression = AssignmentExpression;
+	var unparseAssignmentExpression = binaryUnparser;
 	var AssignmentPattern = /** @class */ (function () {
 	    function AssignmentPattern(left, wsBeforeOp, right) {
 	        this.wsBefore = '';
@@ -1400,12 +1404,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.right = right;
 	        this.wsBeforeOp = wsBeforeOp;
 	    }
-	    AssignmentPattern.prototype.unparse = function (parent) {
-	        return binaryUnparser.bind(this)(parent);
-	    };
 	    return AssignmentPattern;
 	}());
 	exports.AssignmentPattern = AssignmentPattern;
+	var unparseAssignmentPattern = binaryUnparser;
 	var AsyncArrowFunctionExpression = /** @class */ (function () {
 	    function AsyncArrowFunctionExpression(wsBeforeAsync, wsBeforeOpening, params, separators, wsBeforeClosing, noparens, wsBeforeArrow, body, expression) {
 	        this.wsBefore = '';
@@ -1425,30 +1427,28 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeClosing = wsBeforeClosing;
 	        this.wsBeforeAsync = wsBeforeAsync;
 	    }
-	    AsyncArrowFunctionExpression.prototype.unparse = function (parent) {
-	        return arrowFunctionUnparser.bind(this)(parent);
-	    };
 	    return AsyncArrowFunctionExpression;
 	}());
 	exports.AsyncArrowFunctionExpression = AsyncArrowFunctionExpression;
+	var unparseArrowFunctionExpression = arrowFunctionUnparser;
 	// Context-sensitive unparsing definition.
 	// If a method, the async and generator (*) are already managed, and the word "function" does not appear.
-	var functionDeclarationUnparser = function (parent) {
+	var functionDeclarationUnparser = function (e, parent) {
 	    var isFunctionMethod = parent && (parent.type === syntax_1.Syntax.Property && (parent.method || parent.kind === 'get' || parent.kind === 'set') || parent.type === syntax_1.Syntax.MethodDefinition);
-	    return this.wsBefore +
+	    return e.wsBefore +
 	        (isFunctionMethod ? '' :
-	            this.async ? this.wsBeforeAsync + 'async' : '') +
-	        this.wsBeforeFunction +
+	            e.async ? e.wsBeforeAsync + 'async' : '') +
+	        e.wsBeforeFunction +
 	        (isFunctionMethod ? '' : 'function' +
-	            (this.generator ? this.wsBeforeStar + '*' : '')) +
-	        exports.unparseChild(this)(this.id) +
-	        this.wsBeforeParams +
+	            (e.generator ? e.wsBeforeStar + '*' : '')) +
+	        exports.unparseChild(e)(e.id) +
+	        e.wsBeforeParams +
 	        '(' +
-	        exports.unparseChildren(this, this.separators, ', ')(this.params) +
-	        this.wsBeforeEndParams +
+	        exports.unparseChildren(e, e.separators, ', ')(e.params) +
+	        e.wsBeforeEndParams +
 	        ')' +
-	        exports.unparseChild(this)(this.body) +
-	        this.wsAfter;
+	        exports.unparseChild(e)(e.body) +
+	        e.wsAfter;
 	};
 	var AsyncFunctionDeclaration = /** @class */ (function () {
 	    function AsyncFunctionDeclaration(wsBeforeAsync, wsBeforeFunction, id, wsBeforeParams, params, separators, wsBeforeEndParams, body) {
@@ -1468,9 +1468,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.separators = separators;
 	        this.wsBeforeEndParams = wsBeforeEndParams;
 	    }
-	    AsyncFunctionDeclaration.prototype.unparse = function (parent) {
-	        return functionDeclarationUnparser.bind(this)(parent);
-	    };
 	    return AsyncFunctionDeclaration;
 	}());
 	exports.AsyncFunctionDeclaration = AsyncFunctionDeclaration;
@@ -1492,9 +1489,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.separators = separators;
 	        this.wsBeforeEndParams = wsBeforeEndParams;
 	    }
-	    AsyncFunctionExpression.prototype.unparse = function (parent) {
-	        return functionDeclarationUnparser.bind(this)(parent);
-	    };
 	    return AsyncFunctionExpression;
 	}());
 	exports.AsyncFunctionExpression = AsyncFunctionExpression;
@@ -1505,13 +1499,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.argument = argument;
 	        this.wsBefore = wsBefore;
 	    }
-	    AwaitExpression.prototype.unparse = function (parent) {
-	        return this.wsBefore + 'await' +
-	            exports.unparseChild(this)(this.argument) + this.wsAfter;
-	    };
 	    return AwaitExpression;
 	}());
 	exports.AwaitExpression = AwaitExpression;
+	var unparseAwaitExpression = function (e, parent) {
+	    return e.wsBefore + 'await' +
+	        exports.unparseChild(e)(e.argument) + e.wsAfter;
+	};
 	var BinaryExpression = /** @class */ (function () {
 	    function BinaryExpression(operator, left, right, wsBeforeOp) {
 	        this.wsBefore = '';
@@ -1523,12 +1517,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.right = right;
 	        this.wsBeforeOp = wsBeforeOp;
 	    }
-	    BinaryExpression.prototype.unparse = function (parent) {
-	        return binaryUnparser.bind(this)(parent);
-	    };
 	    return BinaryExpression;
 	}());
 	exports.BinaryExpression = BinaryExpression;
+	var unparseBinaryExpression = binaryUnparser;
+	var unparseLogicalExpression = binaryUnparser;
 	var BlockStatement = /** @class */ (function () {
 	    function BlockStatement(wsBefore, body, wsBeforeEnd) {
 	        this.wsAfter = '';
@@ -1537,24 +1530,24 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBefore = wsBefore;
 	        this.wsBeforeEnd = wsBeforeEnd;
 	    }
-	    BlockStatement.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            '{' +
-	            exports.unparseChildren(this)(this.body) +
-	            this.wsBeforeEnd +
-	            '}' +
-	            this.wsAfter;
-	    };
 	    return BlockStatement;
 	}());
 	exports.BlockStatement = BlockStatement;
-	var controlLabelStatementUnparseData = function (parent, name) {
-	    return this.wsBefore +
-	        name +
-	        exports.unparseChild(this)(this.label) +
-	        this.semicolon +
-	        this.wsAfter;
+	var unparseBlockStatement = function (e, parent) {
+	    return e.wsBefore +
+	        '{' +
+	        exports.unparseChildren(e)(e.body) +
+	        e.wsBeforeEnd +
+	        '}' +
+	        e.wsAfter;
 	};
+	var controlLabelStatementUnparseData = function (name) { return function (e, parent) {
+	    return e.wsBefore +
+	        name +
+	        exports.unparseChild(e)(e.label) +
+	        e.semicolon +
+	        e.wsAfter;
+	}; };
 	var BreakStatement = /** @class */ (function () {
 	    function BreakStatement(wsBefore, label, semicolon) {
 	        this.wsAfter = '';
@@ -1563,12 +1556,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBefore = wsBefore;
 	        this.semicolon = semicolon;
 	    }
-	    BreakStatement.prototype.unparse = function (parent) {
-	        return controlLabelStatementUnparseData.bind(this)(parent, 'break');
-	    };
 	    return BreakStatement;
 	}());
 	exports.BreakStatement = BreakStatement;
+	var unparseBreakStatement = controlLabelStatementUnparseData("break");
 	var CallExpression = /** @class */ (function () {
 	    function CallExpression(callee, wsBeforeArgs, args, separators, wsBeforeEndArgs) {
 	        this.wsBefore = '';
@@ -1580,19 +1571,19 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.separators = separators;
 	        this.wsBeforeEndArgs = wsBeforeEndArgs;
 	    }
-	    CallExpression.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            exports.unparseChild(this)(this.callee) +
-	            this.wsBeforeArgs +
-	            '(' +
-	            exports.unparseChildren(this, this.separators, ', ')(this.arguments) +
-	            this.wsBeforeEndArgs +
-	            ')' +
-	            this.wsAfter;
-	    };
 	    return CallExpression;
 	}());
 	exports.CallExpression = CallExpression;
+	var unparseCallExpression = function (e, parent) {
+	    return e.wsBefore +
+	        exports.unparseChild(e)(e.callee) +
+	        e.wsBeforeArgs +
+	        '(' +
+	        exports.unparseChildren(e, e.separators, ', ')(e.arguments) +
+	        e.wsBeforeEndArgs +
+	        ')' +
+	        e.wsAfter;
+	};
 	var CatchClause = /** @class */ (function () {
 	    function CatchClause(wsBefore, wsBeforeOpening, param, wsBeforeClosing, body) {
 	        this.wsAfter = '';
@@ -1603,20 +1594,20 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeOpening = wsBeforeOpening;
 	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
-	    CatchClause.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            'catch' +
-	            this.wsBeforeOpening +
-	            '(' +
-	            exports.unparseChild(this)(this.param) +
-	            this.wsBeforeClosing +
-	            ')' +
-	            exports.unparseChild(this)(this.body) +
-	            this.wsAfter;
-	    };
 	    return CatchClause;
 	}());
 	exports.CatchClause = CatchClause;
+	var unparseCatchClause = function (e, parent) {
+	    return e.wsBefore +
+	        'catch' +
+	        e.wsBeforeOpening +
+	        '(' +
+	        exports.unparseChild(e)(e.param) +
+	        e.wsBeforeClosing +
+	        ')' +
+	        exports.unparseChild(e)(e.body) +
+	        e.wsAfter;
+	};
 	var ClassBody = /** @class */ (function () {
 	    function ClassBody(wsBeforeOpening, wsAfterOpening, body, wsBeforeClosing) {
 	        this.wsBefore = '';
@@ -1627,27 +1618,27 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsAfterOpening = wsAfterOpening;
 	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
-	    ClassBody.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            this.wsBeforeOpening +
-	            '{' +
-	            this.wsAfterOpening +
-	            exports.unparseChildren(this)(this.body) +
-	            this.wsBeforeClosing +
-	            '}' +
-	            this.wsAfter;
-	    };
 	    return ClassBody;
 	}());
 	exports.ClassBody = ClassBody;
-	var classDeclarationUnparser = function (parent) {
-	    return this.wsBefore +
+	var unparseClassBody = function (e, parent) {
+	    return e.wsBefore +
+	        e.wsBeforeOpening +
+	        '{' +
+	        e.wsAfterOpening +
+	        exports.unparseChildren(e)(e.body) +
+	        e.wsBeforeClosing +
+	        '}' +
+	        e.wsAfter;
+	};
+	var classDeclarationUnparser = function (e, parent) {
+	    return e.wsBefore +
 	        'class' +
-	        exports.unparseChild(this)(this.id) +
-	        (this.superClass ? this.wsBeforeExtends + 'extends' +
-	            exports.unparseChild(this)(this.superClass) : '') +
-	        exports.unparseChild(this)(this.body) +
-	        this.wsAfter;
+	        exports.unparseChild(e)(e.id) +
+	        (e.superClass ? e.wsBeforeExtends + 'extends' +
+	            exports.unparseChild(e)(e.superClass) : '') +
+	        exports.unparseChild(e)(e.body) +
+	        e.wsAfter;
 	};
 	var ClassDeclaration = /** @class */ (function () {
 	    function ClassDeclaration(wsBefore, id, wsBeforeExtends, superClass, body) {
@@ -1659,12 +1650,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeExtends = wsBeforeExtends;
 	        this.body = body;
 	    }
-	    ClassDeclaration.prototype.unparse = function (parent) {
-	        return classDeclarationUnparser.bind(this)(parent);
-	    };
 	    return ClassDeclaration;
 	}());
 	exports.ClassDeclaration = ClassDeclaration;
+	var unparseClassDeclaration = classDeclarationUnparser;
 	var ClassExpression = /** @class */ (function () {
 	    function ClassExpression(wsBefore, id, wsBeforeExtends, superClass, body) {
 	        this.wsAfter = '';
@@ -1675,12 +1664,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeExtends = wsBeforeExtends;
 	        this.body = body;
 	    }
-	    ClassExpression.prototype.unparse = function (parent) {
-	        return classDeclarationUnparser.bind(this)(parent);
-	    };
 	    return ClassExpression;
 	}());
 	exports.ClassExpression = ClassExpression;
+	var unparseClassExpression = classDeclarationUnparser;
 	var ComputedMemberExpression = /** @class */ (function () {
 	    function ComputedMemberExpression(object, wsBeforeOpening, property, wsBeforeClosing) {
 	        this.wsBefore = '';
@@ -1692,19 +1679,19 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeOpening = wsBeforeOpening;
 	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
-	    ComputedMemberExpression.prototype.unparse = function () {
-	        return this.wsBefore +
-	            exports.unparseChild(this)(this.object) +
-	            this.wsBeforeOpening +
-	            (this.computed ? '[' : '.') +
-	            exports.unparseChild(this)(this.property) +
-	            this.wsBeforeClosing +
-	            (this.computed ? ']' : '') +
-	            this.wsAfter;
-	    };
 	    return ComputedMemberExpression;
 	}());
 	exports.ComputedMemberExpression = ComputedMemberExpression;
+	var unparseMemberExpression = function (e, parent) {
+	    return e.wsBefore +
+	        exports.unparseChild(e)(e.object) +
+	        e.wsBeforeOpening +
+	        (e.computed ? '[' : '.') +
+	        exports.unparseChild(e)(e.property) +
+	        e.wsBeforeClosing +
+	        (e.computed ? ']' : '') +
+	        e.wsAfter;
+	};
 	var ConditionalExpression = /** @class */ (function () {
 	    function ConditionalExpression(test, wsBeforeQues, consequent, wsBeforeColon, alternate) {
 	        this.wsBefore = '';
@@ -1716,20 +1703,20 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeQues = wsBeforeQues;
 	        this.wsBeforeColon = wsBeforeColon;
 	    }
-	    ConditionalExpression.prototype.unparse = function () {
-	        return this.wsBefore +
-	            exports.unparseChild(this)(this.test) +
-	            this.wsBeforeQues +
-	            '?' +
-	            exports.unparseChild(this)(this.consequent) +
-	            this.wsBeforeColon +
-	            ':' +
-	            exports.unparseChild(this)(this.alternate) +
-	            this.wsAfter;
-	    };
 	    return ConditionalExpression;
 	}());
 	exports.ConditionalExpression = ConditionalExpression;
+	var unparseConditionalExpression = function (e, parent) {
+	    return e.wsBefore +
+	        exports.unparseChild(e)(e.test) +
+	        e.wsBeforeQues +
+	        '?' +
+	        exports.unparseChild(e)(e.consequent) +
+	        e.wsBeforeColon +
+	        ':' +
+	        exports.unparseChild(e)(e.alternate) +
+	        e.wsAfter;
+	};
 	var ContinueStatement = /** @class */ (function () {
 	    function ContinueStatement(wsBefore, label, semicolon) {
 	        this.wsAfter = '';
@@ -1738,12 +1725,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBefore = wsBefore;
 	        this.semicolon = semicolon;
 	    }
-	    ContinueStatement.prototype.unparse = function (parent) {
-	        return controlLabelStatementUnparseData.bind(this)(parent, 'continue');
-	    };
 	    return ContinueStatement;
 	}());
 	exports.ContinueStatement = ContinueStatement;
+	var unparseContinueStatement = controlLabelStatementUnparseData("continue");
 	var DebuggerStatement = /** @class */ (function () {
 	    function DebuggerStatement(wsBefore, semicolon) {
 	        this.wsAfter = '';
@@ -1751,14 +1736,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBefore = wsBefore;
 	        this.semicolon = semicolon;
 	    }
-	    DebuggerStatement.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            'debugger' +
-	            this.semicolon;
-	    };
 	    return DebuggerStatement;
 	}());
 	exports.DebuggerStatement = DebuggerStatement;
+	var unparseDebuggerStatement = function (e, parent) {
+	    return e.wsBefore +
+	        'debugger' +
+	        e.semicolon;
+	};
 	var Directive = /** @class */ (function () {
 	    function Directive(expression, directive, semicolon) {
 	        this.wsBefore = '';
@@ -1768,12 +1753,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.directive = directive;
 	        this.semicolon = semicolon;
 	    }
-	    Directive.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            exports.unparseChild(this)(this.expression) +
-	            this.semicolon +
-	            this.wsAfter;
-	    };
 	    return Directive;
 	}());
 	exports.Directive = Directive;
@@ -1791,22 +1770,22 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.closingParens = closingParens;
 	        this.semicolon = semicolon;
 	    }
-	    DoWhileStatement.prototype.unparse = function () {
-	        return this.wsBefore +
-	            'do' +
-	            exports.unparseChild(this)(this.body) +
-	            this.wsBeforeWhile +
-	            'while' +
-	            this.wsBeforeOpening +
-	            '(' +
-	            exports.unparseChild(this)(this.test) +
-	            this.wsBeforeClosing +
-	            this.closingParens + this.semicolon +
-	            this.wsAfter;
-	    };
 	    return DoWhileStatement;
 	}());
 	exports.DoWhileStatement = DoWhileStatement;
+	var unparseDoWhileStatement = function (e, parent) {
+	    return e.wsBefore +
+	        'do' +
+	        exports.unparseChild(e)(e.body) +
+	        e.wsBeforeWhile +
+	        'while' +
+	        e.wsBeforeOpening +
+	        '(' +
+	        exports.unparseChild(e)(e.test) +
+	        e.wsBeforeClosing +
+	        e.closingParens + e.semicolon +
+	        e.wsAfter;
+	};
 	var EmptyStatement = /** @class */ (function () {
 	    function EmptyStatement(wsBefore, semicolon) {
 	        if (semicolon === void 0) { semicolon = ';'; }
@@ -1815,12 +1794,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBefore = wsBefore;
 	        this.semicolon = semicolon;
 	    }
-	    EmptyStatement.prototype.unparse = function (parent) {
-	        return this.wsBefore + this.semicolon + this.wsAfter;
-	    };
 	    return EmptyStatement;
 	}());
 	exports.EmptyStatement = EmptyStatement;
+	var unparseEmptyStatement = function (e, parent) {
+	    return e.wsBefore + e.semicolon + e.wsAfter;
+	};
 	var ExportAllDeclaration = /** @class */ (function () {
 	    function ExportAllDeclaration(wsBefore, wsBeforeStar, wsBeforeFrom, source, semicolon) {
 	        if (semicolon === void 0) { semicolon = ''; }
@@ -1832,20 +1811,20 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.source = source;
 	        this.semicolon = semicolon;
 	    }
-	    ExportAllDeclaration.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            'export' +
-	            this.wsBeforeStar +
-	            '*' +
-	            this.wsBeforeFrom +
-	            'from' +
-	            exports.unparseChild(this)(this.source) +
-	            this.semicolon +
-	            this.wsAfter;
-	    };
 	    return ExportAllDeclaration;
 	}());
 	exports.ExportAllDeclaration = ExportAllDeclaration;
+	var unparseExportAllDeclaration = function (e, parent) {
+	    return e.wsBefore +
+	        'export' +
+	        e.wsBeforeStar +
+	        '*' +
+	        e.wsBeforeFrom +
+	        'from' +
+	        exports.unparseChild(e)(e.source) +
+	        e.semicolon +
+	        e.wsAfter;
+	};
 	var ExportDefaultDeclaration = /** @class */ (function () {
 	    function ExportDefaultDeclaration(wsBefore, wsBeforeDefault, declaration, semicolon) {
 	        if (semicolon === void 0) { semicolon = ''; }
@@ -1856,18 +1835,18 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeDefault = wsBeforeDefault;
 	        this.semicolon = semicolon;
 	    }
-	    ExportDefaultDeclaration.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            'export' +
-	            this.wsBeforeDefault +
-	            'default' +
-	            exports.unparseChild(this)(this.declaration) +
-	            this.semicolon +
-	            this.wsAfter;
-	    };
 	    return ExportDefaultDeclaration;
 	}());
 	exports.ExportDefaultDeclaration = ExportDefaultDeclaration;
+	var unparseExportDefaultDeclaration = function (e, parent) {
+	    return e.wsBefore +
+	        'export' +
+	        e.wsBeforeDefault +
+	        'default' +
+	        exports.unparseChild(e)(e.declaration) +
+	        e.semicolon +
+	        e.wsAfter;
+	};
 	var ExportNamedDeclaration = /** @class */ (function () {
 	    function ExportNamedDeclaration(wsBefore, declaration, hasBrackets, wsBeforeOpening, specifiers, separators, wsBeforeClosing, wsBeforeFrom, source, semicolon) {
 	        if (semicolon === void 0) { semicolon = ''; }
@@ -1884,19 +1863,19 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeFrom = wsBeforeFrom;
 	        this.semicolon = semicolon;
 	    }
-	    ExportNamedDeclaration.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            'export' +
-	            (this.declaration ?
-	                exports.unparseChild(this)(this.declaration) : '') +
-	            (this.specifiers.length || this.hasBrackets ?
-	                this.wsBeforeOpening + '{' + exports.unparseChildren(this, this.separators, ',')(this.specifiers) + this.wsBeforeClosing + '}'
-	                : '') +
-	            (this.source ? this.wsBeforeFrom + 'from' + exports.unparseChild(this)(this.source) : '') + this.semicolon + this.wsAfter;
-	    };
 	    return ExportNamedDeclaration;
 	}());
 	exports.ExportNamedDeclaration = ExportNamedDeclaration;
+	var unparseExportNamedDeclaration = function (e, parent) {
+	    return e.wsBefore +
+	        'export' +
+	        (e.declaration ?
+	            exports.unparseChild(e)(e.declaration) : '') +
+	        (e.specifiers.length || e.hasBrackets ?
+	            e.wsBeforeOpening + '{' + exports.unparseChildren(e, e.separators, ',')(e.specifiers) + e.wsBeforeClosing + '}'
+	            : '') +
+	        (e.source ? e.wsBeforeFrom + 'from' + exports.unparseChild(e)(e.source) : '') + e.semicolon + e.wsAfter;
+	};
 	var ExportSpecifier = /** @class */ (function () {
 	    function ExportSpecifier(local, noAs, wsBeforeAs, exported) {
 	        this.wsBefore = '';
@@ -1907,19 +1886,19 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.noAs = noAs;
 	        this.wsBeforeAs = wsBeforeAs;
 	    }
-	    ExportSpecifier.prototype.unparse = function (parent) {
-	        var localStr = exports.unparseChild(this)(this.local);
-	        var exportedStr = exports.unparseChild(this)(this.exported);
-	        return this.wsBefore +
-	            localStr +
-	            (this.noAs && localStr === exportedStr ?
-	                ''
-	                : this.wsBeforeAs + 'as' + exports.unparseChild(this)(this.exported)) +
-	            this.wsAfter;
-	    };
 	    return ExportSpecifier;
 	}());
 	exports.ExportSpecifier = ExportSpecifier;
+	var unparseExportSpecifier = function (e, parent) {
+	    var localStr = exports.unparseChild(e)(e.local);
+	    var exportedStr = exports.unparseChild(e)(e.exported);
+	    return e.wsBefore +
+	        localStr +
+	        (e.noAs && localStr === exportedStr ?
+	            ''
+	            : e.wsBeforeAs + 'as' + exports.unparseChild(e)(e.exported)) +
+	        e.wsAfter;
+	};
 	var ExpressionStatement = /** @class */ (function () {
 	    function ExpressionStatement(expression, semicolon) {
 	        this.wsBefore = '';
@@ -1928,24 +1907,24 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.expression = expression;
 	        this.semicolon = semicolon;
 	    }
-	    ExpressionStatement.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            exports.unparseChild(this)(this.expression) + this.semicolon +
-	            this.wsAfter;
-	    };
 	    return ExpressionStatement;
 	}());
 	exports.ExpressionStatement = ExpressionStatement;
-	var forCollectionUnparser = function (parent, keyword) {
-	    return this.wsBefore +
-	        this.wsBeforeFor + 'for' + this.wsBeforeOpening + '(' +
-	        exports.unparseChild(this)(this.left) +
-	        this.wsBeforeKeyword + keyword +
-	        exports.unparseChild(this)(this.right) +
-	        this.wsBeforeClosing + this.closingParens +
-	        exports.unparseChild(this)(this.body) +
-	        this.wsAfter;
+	var unparseExpressionStatement = function (e, parent) {
+	    return e.wsBefore +
+	        exports.unparseChild(e)(e.expression) + e.semicolon +
+	        e.wsAfter;
 	};
+	var forCollectionUnparser = function (keyword) { return function (e, parent) {
+	    return e.wsBefore +
+	        e.wsBeforeFor + 'for' + e.wsBeforeOpening + '(' +
+	        exports.unparseChild(e)(e.left) +
+	        e.wsBeforeKeyword + keyword +
+	        exports.unparseChild(e)(e.right) +
+	        e.wsBeforeClosing + e.closingParens +
+	        exports.unparseChild(e)(e.body) +
+	        e.wsAfter;
+	}; };
 	var ForInStatement = /** @class */ (function () {
 	    function ForInStatement(wsBeforeFor, wsBeforeOpening, left, wsBeforeKeyword, right, wsBeforeClosing, body, closingParens) {
 	        if (closingParens === void 0) { closingParens = ')'; }
@@ -1962,12 +1941,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeClosing = wsBeforeClosing;
 	        this.closingParens = closingParens;
 	    }
-	    ForInStatement.prototype.unparse = function (parent) {
-	        return forCollectionUnparser.bind(this)(parent, 'in');
-	    };
 	    return ForInStatement;
 	}());
 	exports.ForInStatement = ForInStatement;
+	var unparseForInStatement = forCollectionUnparser("in");
 	var ForOfStatement = /** @class */ (function () {
 	    function ForOfStatement(wsBeforeFor, wsBeforeOpening, left, wsBeforeKeyword, right, wsBeforeClosing, body, closingParens) {
 	        if (closingParens === void 0) { closingParens = ')'; }
@@ -1983,12 +1960,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeClosing = wsBeforeClosing;
 	        this.closingParens = closingParens;
 	    }
-	    ForOfStatement.prototype.unparse = function (parent) {
-	        return forCollectionUnparser.bind(this)(parent, 'of');
-	    };
 	    return ForOfStatement;
 	}());
 	exports.ForOfStatement = ForOfStatement;
+	var unparseForOfStatement = forCollectionUnparser("of");
 	var ForStatement = /** @class */ (function () {
 	    function ForStatement(wsBeforeFor, wsBeforeOpening, init, wsBeforeSemicolon1, test, wsBeforeSemicolon2, update, wsBeforeClosing, body, closingParens) {
 	        if (closingParens === void 0) { closingParens = ')'; }
@@ -2006,21 +1981,21 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeClosing = wsBeforeClosing;
 	        this.closingParens = closingParens;
 	    }
-	    ForStatement.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            this.wsBeforeFor + 'for' + this.wsBeforeOpening + '(' +
-	            exports.unparseChild(this)(this.init) +
-	            this.wsBeforeSemicolon1 + ';' +
-	            exports.unparseChild(this)(this.test) +
-	            this.wsBeforeSemicolon2 + ';' +
-	            exports.unparseChild(this)(this.update) +
-	            this.wsBeforeClosing + this.closingParens +
-	            exports.unparseChild(this)(this.body) +
-	            this.wsAfter;
-	    };
 	    return ForStatement;
 	}());
 	exports.ForStatement = ForStatement;
+	var unparseForStatement = function (e, parent) {
+	    return e.wsBefore +
+	        e.wsBeforeFor + 'for' + e.wsBeforeOpening + '(' +
+	        exports.unparseChild(e)(e.init) +
+	        e.wsBeforeSemicolon1 + ';' +
+	        exports.unparseChild(e)(e.test) +
+	        e.wsBeforeSemicolon2 + ';' +
+	        exports.unparseChild(e)(e.update) +
+	        e.wsBeforeClosing + e.closingParens +
+	        exports.unparseChild(e)(e.body) +
+	        e.wsAfter;
+	};
 	var FunctionDeclaration = /** @class */ (function () {
 	    function FunctionDeclaration(wsBeforeFunction, wsBeforeStar, id, wsBeforeParams, params, separators, wsBeforeEndParams, body, generator) {
 	        this.wsBefore = '';
@@ -2039,12 +2014,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.separators = separators;
 	        this.wsBeforeEndParams = wsBeforeEndParams;
 	    }
-	    FunctionDeclaration.prototype.unparse = function (parent) {
-	        return functionDeclarationUnparser.bind(this)(parent);
-	    };
 	    return FunctionDeclaration;
 	}());
 	exports.FunctionDeclaration = FunctionDeclaration;
+	var unparseFunctionDeclaration = functionDeclarationUnparser;
 	var FunctionExpression = /** @class */ (function () {
 	    function FunctionExpression(wsBeforeFunction, wsBeforeStar, id, wsBeforeParams, params, separators, wsBeforeEndParams, body, generator) {
 	        this.wsBefore = '';
@@ -2063,27 +2036,25 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.separators = separators;
 	        this.wsBeforeEndParams = wsBeforeEndParams;
 	    }
-	    FunctionExpression.prototype.unparse = function (parent) {
-	        return functionDeclarationUnparser.bind(this)(parent);
-	    };
 	    return FunctionExpression;
 	}());
 	exports.FunctionExpression = FunctionExpression;
+	var unparseFunctionExpression = functionDeclarationUnparser;
 	var Identifier = /** @class */ (function () {
 	    function Identifier(wsBefore, name, nameRaw) {
 	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.Identifier;
 	        this.name = name;
 	        this.original = name;
-	        this.nameRaw = nameRaw;
+	        this.nameRaw = typeof nameRaw == "undefined" ? name : nameRaw;
 	        this.wsBefore = wsBefore;
 	    }
-	    Identifier.prototype.unparse = function (parent) {
-	        return this.wsBefore + (this.name === this.original ? this.nameRaw : this.name) + this.wsAfter;
-	    };
 	    return Identifier;
 	}());
 	exports.Identifier = Identifier;
+	var unparseIdentifier = function (e, parent) {
+	    return e.wsBefore + (e.name === e.original ? e.nameRaw : e.name) + e.wsAfter;
+	};
 	var IfStatement = /** @class */ (function () {
 	    function IfStatement(wsBefore, ifKeyword, wsBeforeOpening, test, wsBeforeClosing, consequent, wsBeforeElse, alternate, closingParens) {
 	        if (closingParens === void 0) { closingParens = ')'; }
@@ -2099,31 +2070,31 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeElse = wsBeforeElse;
 	        this.closingParens = closingParens;
 	    }
-	    IfStatement.prototype.unparse = function (parent) {
-	        return this.wsBefore + this.ifKeyword +
-	            this.wsBeforeOpening + '(' +
-	            exports.unparseChild(this)(this.test) +
-	            this.wsBeforeClosing + this.closingParens +
-	            exports.unparseChild(this)(this.consequent) +
-	            (this.alternate ?
-	                this.wsBeforeElse + 'else' + exports.unparseChild(this)(this.alternate) : '') +
-	            this.wsAfter;
-	    };
 	    return IfStatement;
 	}());
 	exports.IfStatement = IfStatement;
+	var unparseIfStatement = function (e, parent) {
+	    return e.wsBefore + e.ifKeyword +
+	        e.wsBeforeOpening + '(' +
+	        exports.unparseChild(e)(e.test) +
+	        e.wsBeforeClosing + e.closingParens +
+	        exports.unparseChild(e)(e.consequent) +
+	        (e.alternate ?
+	            e.wsBeforeElse + 'else' + exports.unparseChild(e)(e.alternate) : '') +
+	        e.wsAfter;
+	};
 	var Import = /** @class */ (function () {
 	    function Import(wsBefore) {
 	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.Import;
 	        this.wsBefore = wsBefore;
 	    }
-	    Import.prototype.unparse = function (parent) {
-	        return this.wsBefore + 'import' + this.wsAfter;
-	    };
 	    return Import;
 	}());
 	exports.Import = Import;
+	var unparseImport = function (e, parent) {
+	    return e.wsBefore + 'import' + e.wsAfter;
+	};
 	var ImportDeclaration = /** @class */ (function () {
 	    function ImportDeclaration(wsBefore, wsBeforeOpening, hasBrackets, specifiers, separators, wsBeforeClosing, wsBeforeFrom, source, semicolon) {
 	        if (semicolon === void 0) { semicolon = ''; }
@@ -2139,41 +2110,41 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeFrom = wsBeforeFrom;
 	        this.semicolon = semicolon;
 	    }
-	    ImportDeclaration.prototype.unparse = function (parent) {
-	        var result = this.wsBefore + 'import';
-	        if (this.specifiers.length === 0 && !this.hasBrackets) {
-	            return result + exports.unparseChild(this)(this.source) + this.semicolon + this.wsAfter;
-	        }
-	        var insideImportSpecifiers = false;
-	        for (var i = 0; i < this.specifiers.length; i++) {
-	            var specifier = this.specifiers[i];
-	            if (specifier.type === syntax_1.Syntax.ImportSpecifier) {
-	                if (!insideImportSpecifiers) {
-	                    result += this.wsBeforeOpening + '{';
-	                    insideImportSpecifiers = true;
-	                }
-	            }
-	            result += exports.unparseChild(this)(specifier);
-	            if (i < this.separators.length) {
-	                result += this.separators[i];
-	            }
-	            else if (i < this.specifiers.length - 1) {
-	                result += ', ';
-	            }
-	        }
-	        if (!insideImportSpecifiers && this.hasBrackets) {
-	            result += this.wsBeforeOpening + '{';
-	            insideImportSpecifiers = true;
-	        }
-	        if (insideImportSpecifiers) {
-	            result += this.wsBeforeClosing + '}';
-	        }
-	        return result + this.wsBeforeFrom + 'from' +
-	            exports.unparseChild(this)(this.source) + this.semicolon + this.wsAfter;
-	    };
 	    return ImportDeclaration;
 	}());
 	exports.ImportDeclaration = ImportDeclaration;
+	var unparseImportDeclaration = function (e, parent) {
+	    var result = e.wsBefore + 'import';
+	    if (e.specifiers.length === 0 && !e.hasBrackets) {
+	        return result + exports.unparseChild(e)(e.source) + e.semicolon + e.wsAfter;
+	    }
+	    var insideImportSpecifiers = false;
+	    for (var i = 0; i < e.specifiers.length; i++) {
+	        var specifier = e.specifiers[i];
+	        if (specifier.type === syntax_1.Syntax.ImportSpecifier) {
+	            if (!insideImportSpecifiers) {
+	                result += e.wsBeforeOpening + '{';
+	                insideImportSpecifiers = true;
+	            }
+	        }
+	        result += exports.unparseChild(e)(specifier);
+	        if (i < e.separators.length) {
+	            result += e.separators[i];
+	        }
+	        else if (i < e.specifiers.length - 1) {
+	            result += ', ';
+	        }
+	    }
+	    if (!insideImportSpecifiers && e.hasBrackets) {
+	        result += e.wsBeforeOpening + '{';
+	        insideImportSpecifiers = true;
+	    }
+	    if (insideImportSpecifiers) {
+	        result += e.wsBeforeClosing + '}';
+	    }
+	    return result + e.wsBeforeFrom + 'from' +
+	        exports.unparseChild(e)(e.source) + e.semicolon + e.wsAfter;
+	};
 	var ImportDefaultSpecifier = /** @class */ (function () {
 	    function ImportDefaultSpecifier(local) {
 	        this.wsBefore = '';
@@ -2181,12 +2152,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.type = syntax_1.Syntax.ImportDefaultSpecifier;
 	        this.local = local;
 	    }
-	    ImportDefaultSpecifier.prototype.unparse = function (parent) {
-	        return this.wsBefore + exports.unparseChild(this)(this.local) + this.wsAfter;
-	    };
 	    return ImportDefaultSpecifier;
 	}());
 	exports.ImportDefaultSpecifier = ImportDefaultSpecifier;
+	var unparseImportDefaultSpecifier = function (e, parent) {
+	    return e.wsBefore + exports.unparseChild(e)(e.local) + e.wsAfter;
+	};
 	var ImportNamespaceSpecifier = /** @class */ (function () {
 	    function ImportNamespaceSpecifier(wsBefore, wsBeforeAs, local) {
 	        this.wsAfter = '';
@@ -2195,13 +2166,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeAs = wsBeforeAs;
 	        this.local = local;
 	    }
-	    ImportNamespaceSpecifier.prototype.unparse = function (parent) {
-	        return this.wsBefore + '*' + this.wsBeforeAs + 'as' +
-	            exports.unparseChild(this)(this.local) + this.wsAfter;
-	    };
 	    return ImportNamespaceSpecifier;
 	}());
 	exports.ImportNamespaceSpecifier = ImportNamespaceSpecifier;
+	var unparseImportNamespaceSpecifier = function (e, parent) {
+	    return e.wsBefore + '*' + e.wsBeforeAs + 'as' +
+	        exports.unparseChild(e)(e.local) + e.wsAfter;
+	};
 	var ImportSpecifier = /** @class */ (function () {
 	    function ImportSpecifier(local, asPresent, wsBeforeAs, imported) {
 	        this.wsBefore = '';
@@ -2212,15 +2183,15 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.asPresent = asPresent;
 	        this.wsBeforeAs = wsBeforeAs;
 	    }
-	    ImportSpecifier.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            exports.unparseChild(this)(this.imported) +
-	            (this.asPresent ? this.wsBeforeAs + 'as' +
-	                exports.unparseChild(this)(this.local) : '') + this.wsAfter;
-	    };
 	    return ImportSpecifier;
 	}());
 	exports.ImportSpecifier = ImportSpecifier;
+	var unparseImportSpecifier = function (e, parent) {
+	    return e.wsBefore +
+	        exports.unparseChild(e)(e.imported) +
+	        (e.asPresent ? e.wsBeforeAs + 'as' +
+	            exports.unparseChild(e)(e.local) : '') + e.wsAfter;
+	};
 	var LabeledStatement = /** @class */ (function () {
 	    function LabeledStatement(label, wsBeforeColon, body) {
 	        this.wsBefore = '';
@@ -2230,16 +2201,16 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.body = body;
 	        this.wsBeforeColon = wsBeforeColon;
 	    }
-	    LabeledStatement.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            exports.unparseChild(this)(this.label) +
-	            this.wsBeforeColon + ':' +
-	            exports.unparseChild(this)(this.body) +
-	            this.wsAfter;
-	    };
 	    return LabeledStatement;
 	}());
 	exports.LabeledStatement = LabeledStatement;
+	var unparseLabeledStatement = function (e, parent) {
+	    return e.wsBefore +
+	        exports.unparseChild(e)(e.label) +
+	        e.wsBeforeColon + ':' +
+	        exports.unparseChild(e)(e.body) +
+	        e.wsAfter;
+	};
 	function unescapeChar(m) {
 	    switch (m) {
 	        case '\\': return '\\\\';
@@ -2297,20 +2268,29 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.original = value;
 	        this.wsBefore = wsBefore;
 	    }
-	    Literal.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            (this.original === this.value ? this.raw :
-	                typeof this.value === 'string' && typeof this.original === 'string' ?
-	                    toExpString(this.value, this.raw) :
-	                    typeof this.value === 'object' ?
-	                        this.value === null ?
-	                            'null' :
-	                            uneval(this.value) :
-	                        uneval(this.value)) + this.wsAfter;
-	    };
 	    return Literal;
 	}());
 	exports.Literal = Literal;
+	var unparseLiteral = function (e, parent) {
+	    if ("regex" in e) {
+	        return e.wsBefore +
+	            (e.original.pattern === e.regex.pattern &&
+	                e.original.flags === e.regex.flags ? e.raw :
+	                '/' +
+	                    e.regex.pattern +
+	                    '/' +
+	                    e.regex.flags) + e.wsAfter;
+	    }
+	    return e.wsBefore +
+	        (e.original === e.value ? e.raw :
+	            typeof e.value === 'string' && typeof e.original === 'string' ?
+	                toExpString(e.value, e.raw) :
+	                typeof e.value === 'object' ?
+	                    e.value === null ?
+	                        'null' :
+	                        uneval(e.value) :
+	                    uneval(e.value)) + e.wsAfter;
+	};
 	var MetaProperty = /** @class */ (function () {
 	    function MetaProperty(meta, wsBeforeDot, property) {
 	        this.wsBefore = '';
@@ -2320,16 +2300,16 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.property = property;
 	        this.wsBeforeDot = wsBeforeDot;
 	    }
-	    MetaProperty.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            exports.unparseChild(this)(this.meta) +
-	            this.wsBeforeDot + '.' +
-	            exports.unparseChild(this)(this.property) +
-	            this.wsAfter;
-	    };
 	    return MetaProperty;
 	}());
 	exports.MetaProperty = MetaProperty;
+	var unparseMetaProperty = function (e, parent) {
+	    return e.wsBefore +
+	        exports.unparseChild(e)(e.meta) +
+	        e.wsBeforeDot + '.' +
+	        exports.unparseChild(e)(e.property) +
+	        e.wsAfter;
+	};
 	var MethodDefinition = /** @class */ (function () {
 	    function MethodDefinition(wsBeforeStatic, wsBeforeGetSet, key, computed, wsBeforeOpening, wsBeforeClosing, value, kind, isStatic) {
 	        this.wsBefore = '';
@@ -2345,23 +2325,23 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeOpening = wsBeforeOpening;
 	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
-	    MethodDefinition.prototype.unparse = function (parent) {
-	        var keyStr = exports.unparseChild(this)(this.key);
-	        return this.wsBefore +
-	            (this.static ? this.wsBeforeStatic + 'static' : '') +
-	            (this.value && isFunctionExpression(this.value) ?
-	                (this.value.async ? this.value.wsBeforeAsync + 'async' : '') +
-	                    (this.value.generator ? this.value.wsBeforeStar + '*' : '') : '') +
-	            (this.kind === 'set' || this.kind === 'get' ? this.wsBeforeGetSet + this.kind : '') +
-	            (this.computed ? this.wsBeforeOpening + '[' : '') +
-	            keyStr +
-	            (this.computed ? this.wsBeforeClosing + ']' : '') +
-	            exports.unparseChild(this)(this.value) +
-	            this.wsAfter;
-	    };
 	    return MethodDefinition;
 	}());
 	exports.MethodDefinition = MethodDefinition;
+	var unparseMethodDefinition = function (e, parent) {
+	    var keyStr = exports.unparseChild(e)(e.key);
+	    return e.wsBefore +
+	        (e.static ? e.wsBeforeStatic + 'static' : '') +
+	        (e.value && isFunctionExpression(e.value) ?
+	            (e.value.async ? e.value.wsBeforeAsync + 'async' : '') +
+	                (e.value.generator ? e.value.wsBeforeStar + '*' : '') : '') +
+	        (e.kind === 'set' || e.kind === 'get' ? e.wsBeforeGetSet + e.kind : '') +
+	        (e.computed ? e.wsBeforeOpening + '[' : '') +
+	        keyStr +
+	        (e.computed ? e.wsBeforeClosing + ']' : '') +
+	        exports.unparseChild(e)(e.value) +
+	        e.wsAfter;
+	};
 	var Module = /** @class */ (function () {
 	    function Module(body, wsAfter) {
 	        this.wsBefore = '';
@@ -2370,12 +2350,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.sourceType = 'module';
 	        this.wsAfter = wsAfter;
 	    }
-	    Module.prototype.unparse = function (parent) {
-	        return this.wsBefore + exports.unparseChildren(this)(this.body) + this.wsAfter;
-	    };
 	    return Module;
 	}());
 	exports.Module = Module;
+	var unparseProgram = function (e, parent) {
+	    return e.wsBefore + exports.unparseChildren(e)(e.body) + e.wsAfter;
+	};
 	var NewExpression = /** @class */ (function () {
 	    function NewExpression(wsBeforeNew, callee, parentheses, wsBeforeOpening, args, separators, wsBeforeClosing) {
 	        this.wsBefore = '';
@@ -2389,20 +2369,20 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.separators = separators;
 	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
-	    NewExpression.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            this.wsBeforeNew + 'new' +
-	            exports.unparseChild(this)(this.callee) +
-	            (this.parentheses || this.arguments.length > 0 ?
-	                this.wsBeforeOpening + '(' +
-	                    exports.unparseChildren(this, this.separators, ', ')(this.arguments) +
-	                    this.wsBeforeClosing + ')'
-	                : '') +
-	            this.wsAfter;
-	    };
 	    return NewExpression;
 	}());
 	exports.NewExpression = NewExpression;
+	var unparseNewExpression = function (e, parent) {
+	    return e.wsBefore +
+	        e.wsBeforeNew + 'new' +
+	        exports.unparseChild(e)(e.callee) +
+	        (e.parentheses || e.arguments.length > 0 ?
+	            e.wsBeforeOpening + '(' +
+	                exports.unparseChildren(e, e.separators, ', ')(e.arguments) +
+	                e.wsBeforeClosing + ')'
+	            : '') +
+	        e.wsAfter;
+	};
 	var objectExpressionPatternUnparse = function () {
 	    return this.wsBefore + '{' +
 	        exports.unparseChildren(this, this.separators, ', ')(this.properties) +
@@ -2417,12 +2397,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.separators = separators;
 	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
-	    ObjectExpression.prototype.unparse = function (parent) {
-	        return objectExpressionPatternUnparse.bind(this)();
-	    };
 	    return ObjectExpression;
 	}());
 	exports.ObjectExpression = ObjectExpression;
+	var unparseObjectExpression = function (e, parent) {
+	    return objectExpressionPatternUnparse.bind(e)();
+	};
 	var ObjectPattern = /** @class */ (function () {
 	    function ObjectPattern(wsBefore, properties, separators, wsBeforeClosing) {
 	        this.wsAfter = '';
@@ -2432,12 +2412,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.separators = separators;
 	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
-	    ObjectPattern.prototype.unparse = function (parent) {
-	        return objectExpressionPatternUnparse.bind(this)();
-	    };
 	    return ObjectPattern;
 	}());
 	exports.ObjectPattern = ObjectPattern;
+	var unparseObjectPattern = function (e, parent) {
+	    return objectExpressionPatternUnparse.bind(e)();
+	};
 	function isFunctionExpression(e) {
 	    return e.type === syntax_1.Syntax.FunctionExpression;
 	}
@@ -2460,21 +2440,21 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeGetSet = wsBeforeGetSet;
 	        this.wsBeforeColon = wsBeforeColon;
 	    }
-	    Property.prototype.unparse = function (parent) {
-	        var ap = this.value && isAssignmentPattern(this.value);
-	        return this.wsBefore + (this.method && this.value ?
-	            isFunctionExpression(this.value) ?
-	                (this.value.async ? this.value.wsBeforeAsync + 'async' : '') +
-	                    (this.value.generator ? this.value.wsBeforeStar + '*' : '') : ''
-	            : '') +
-	            (this.kind === 'get' || this.kind === 'set' ? this.wsBeforeGetSet + this.kind : '') +
-	            (!this.shorthand || (this.value && !ap) ? (this.computed ? this.wsBeforeOpening + '[' : '') + exports.unparseChild(this)(this.key) + (this.computed ? this.wsBeforeClosing + ']' : '') : '') +
-	            (this.method || this.shorthand || this.kind === 'get' || this.kind === 'set' ? '' : this.wsBeforeColon + ':') +
-	            (this.shorthand && !ap ? '' : exports.unparseChild(this)(this.value)) + this.wsAfter;
-	    };
 	    return Property;
 	}());
 	exports.Property = Property;
+	var unparseProperty = function (e, parent) {
+	    var ap = e.value && isAssignmentPattern(e.value);
+	    return e.wsBefore + (e.method && e.value ?
+	        isFunctionExpression(e.value) ?
+	            (e.value.async ? e.value.wsBeforeAsync + 'async' : '') +
+	                (e.value.generator ? e.value.wsBeforeStar + '*' : '') : ''
+	        : '') +
+	        (e.kind === 'get' || e.kind === 'set' ? e.wsBeforeGetSet + e.kind : '') +
+	        (!e.shorthand || (e.value && !ap) ? (e.computed ? e.wsBeforeOpening + '[' : '') + exports.unparseChild(e)(e.key) + (e.computed ? e.wsBeforeClosing + ']' : '') : '') +
+	        (e.method || e.shorthand || e.kind === 'get' || e.kind === 'set' ? '' : e.wsBeforeColon + ':') +
+	        (e.shorthand && !ap ? '' : exports.unparseChild(e)(e.value)) + e.wsAfter;
+	};
 	var RegexLiteral = /** @class */ (function () {
 	    function RegexLiteral(wsBefore, value, raw, pattern, flags) {
 	        this.wsAfter = '';
@@ -2485,15 +2465,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.original = { pattern: pattern, flags: flags };
 	        this.wsBefore = wsBefore;
 	    }
-	    RegexLiteral.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            (this.original.pattern === this.regex.pattern &&
-	                this.original.flags === this.regex.flags ? this.raw :
-	                '/' +
-	                    this.regex.pattern +
-	                    '/' +
-	                    this.regex.flags) + this.wsAfter;
-	    };
 	    return RegexLiteral;
 	}());
 	exports.RegexLiteral = RegexLiteral;
@@ -2504,14 +2475,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.argument = argument;
 	        this.wsBefore = wsBefore;
 	    }
-	    RestElement.prototype.unparse = function (parent) {
-	        return this.wsBefore + '...' +
-	            exports.unparseChild(this)(this.argument) +
-	            this.wsAfter;
-	    };
 	    return RestElement;
 	}());
 	exports.RestElement = RestElement;
+	var unparseRestElement = function (e, parent) {
+	    return e.wsBefore + '...' +
+	        exports.unparseChild(e)(e.argument) +
+	        e.wsAfter;
+	};
 	var ReturnStatement = /** @class */ (function () {
 	    function ReturnStatement(wsBefore, argument, semicolon) {
 	        this.wsAfter = '';
@@ -2520,14 +2491,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBefore = wsBefore;
 	        this.semicolon = semicolon;
 	    }
-	    ReturnStatement.prototype.unparse = function (parent) {
-	        return this.wsBefore + 'return' +
-	            exports.unparseChild(this)(this.argument) +
-	            this.semicolon + this.wsAfter;
-	    };
 	    return ReturnStatement;
 	}());
 	exports.ReturnStatement = ReturnStatement;
+	var unparseReturnStatement = function (e, parent) {
+	    return e.wsBefore + 'return' +
+	        exports.unparseChild(e)(e.argument) +
+	        e.semicolon + e.wsAfter;
+	};
 	var Script = /** @class */ (function () {
 	    function Script(body, wsAfter) {
 	        this.wsBefore = '';
@@ -2536,10 +2507,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.sourceType = 'script';
 	        this.wsAfter = wsAfter;
 	    }
-	    Script.prototype.unparse = function (parent) {
-	        return this.wsBefore + exports.unparseChildren(this)(this.body) +
-	            this.wsAfter;
-	    };
 	    return Script;
 	}());
 	exports.Script = Script;
@@ -2554,16 +2521,16 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.separators = separators;
 	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
-	    SequenceExpression.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            (this.parentheses ? this.wsBeforeOpening + '(' : '') +
-	            exports.unparseChildren(this, this.separators, ', ')(this.expressions) +
-	            (this.parentheses ? this.wsBeforeClosing + ')' : '') +
-	            this.wsAfter;
-	    };
 	    return SequenceExpression;
 	}());
 	exports.SequenceExpression = SequenceExpression;
+	var unparseSequenceExpression = function (e, parent) {
+	    return e.wsBefore +
+	        (e.parentheses ? e.wsBeforeOpening + '(' : '') +
+	        exports.unparseChildren(e, e.separators, ', ')(e.expressions) +
+	        (e.parentheses ? e.wsBeforeClosing + ')' : '') +
+	        e.wsAfter;
+	};
 	var SpreadElement = /** @class */ (function () {
 	    function SpreadElement(wsBefore, argument) {
 	        this.wsAfter = '';
@@ -2571,14 +2538,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.argument = argument;
 	        this.wsBefore = wsBefore;
 	    }
-	    SpreadElement.prototype.unparse = function (parent) {
-	        return this.wsBefore + '...' +
-	            exports.unparseChild(this)(this.argument) +
-	            this.wsAfter;
-	    };
 	    return SpreadElement;
 	}());
 	exports.SpreadElement = SpreadElement;
+	var unparseSpreadElement = function (e, parent) {
+	    return e.wsBefore + '...' +
+	        exports.unparseChild(e)(e.argument) +
+	        e.wsAfter;
+	};
 	var StaticMemberExpression = /** @class */ (function () {
 	    function StaticMemberExpression(object, wsBeforeOpening, property) {
 	        this.wsBefore = '';
@@ -2590,16 +2557,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeOpening = wsBeforeOpening;
 	        this.wsBeforeClosing = '';
 	    }
-	    StaticMemberExpression.prototype.unparse = function () {
-	        return this.wsBefore +
-	            exports.unparseChild(this)(this.object) +
-	            this.wsBeforeOpening +
-	            (this.computed ? '[' : '.') +
-	            exports.unparseChild(this)(this.property) +
-	            this.wsBeforeClosing +
-	            (this.computed ? ']' : '') +
-	            this.wsAfter;
-	    };
 	    return StaticMemberExpression;
 	}());
 	exports.StaticMemberExpression = StaticMemberExpression;
@@ -2609,12 +2566,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.type = syntax_1.Syntax.Super;
 	        this.wsBefore = wsBefore;
 	    }
-	    Super.prototype.unparse = function (parent) {
-	        return this.wsBefore + 'super' + this.wsAfter;
-	    };
 	    return Super;
 	}());
 	exports.Super = Super;
+	var unparseSuper = function (e, parent) {
+	    return e.wsBefore + 'super' + e.wsAfter;
+	};
 	var SwitchCase = /** @class */ (function () {
 	    function SwitchCase(wsBefore, test, wsBeforeColon, consequent) {
 	        this.wsAfter = '';
@@ -2624,14 +2581,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBefore = wsBefore;
 	        this.wsBeforeColon = wsBeforeColon;
 	    }
-	    SwitchCase.prototype.unparse = function (parent) {
-	        return this.wsBefore + (this.test ? 'case' + exports.unparseChild(this)(this.test) : 'default') +
-	            this.wsBeforeColon + ':' +
-	            exports.unparseChildren(this)(this.consequent) + this.wsAfter;
-	    };
 	    return SwitchCase;
 	}());
 	exports.SwitchCase = SwitchCase;
+	var unparseSwitchCase = function (e, parent) {
+	    return e.wsBefore + (e.test ? 'case' + exports.unparseChild(e)(e.test) : 'default') +
+	        e.wsBeforeColon + ':' +
+	        exports.unparseChildren(e)(e.consequent) + e.wsAfter;
+	};
 	var SwitchStatement = /** @class */ (function () {
 	    function SwitchStatement(wsBefore, wsBeforeOpening, discriminant, wsBeforeClosing, wsBeforeBlockOpening, cases, wsBeforeBlockClosing) {
 	        this.wsAfter = '';
@@ -2644,16 +2601,16 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeBlockOpening = wsBeforeBlockOpening;
 	        this.wsBeforeBlockClosing = wsBeforeBlockClosing;
 	    }
-	    SwitchStatement.prototype.unparse = function (parent) {
-	        return this.wsBefore + 'switch' + this.wsBeforeOpening +
-	            '(' + exports.unparseChild(this)(this.discriminant) + this.wsBeforeClosing +
-	            ')' + this.wsBeforeBlockOpening + '{' +
-	            exports.unparseChildren(this)(this.cases) +
-	            this.wsBeforeBlockClosing + '}' + this.wsAfter;
-	    };
 	    return SwitchStatement;
 	}());
 	exports.SwitchStatement = SwitchStatement;
+	var unparseSwitchStatement = function (e, parent) {
+	    return e.wsBefore + 'switch' + e.wsBeforeOpening +
+	        '(' + exports.unparseChild(e)(e.discriminant) + e.wsBeforeClosing +
+	        ')' + e.wsBeforeBlockOpening + '{' +
+	        exports.unparseChildren(e)(e.cases) +
+	        e.wsBeforeBlockClosing + '}' + e.wsAfter;
+	};
 	var TaggedTemplateExpression = /** @class */ (function () {
 	    function TaggedTemplateExpression(tag, quasi) {
 	        this.wsBefore = '';
@@ -2662,14 +2619,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.tag = tag;
 	        this.quasi = quasi;
 	    }
-	    TaggedTemplateExpression.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            exports.unparseChild(this)(this.tag) + exports.unparseChild(this)(this.quasi) +
-	            this.wsAfter;
-	    };
 	    return TaggedTemplateExpression;
 	}());
 	exports.TaggedTemplateExpression = TaggedTemplateExpression;
+	var unparseTaggedTemplateExpression = function (e, parent) {
+	    return e.wsBefore +
+	        exports.unparseChild(e)(e.tag) + exports.unparseChild(e)(e.quasi) +
+	        e.wsAfter;
+	};
 	var TemplateElement = /** @class */ (function () {
 	    function TemplateElement(value, tail) {
 	        this.wsBefore = ''; // Not much sense here, there is yet no kind of whitespace for template elements
@@ -2679,15 +2636,15 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.originalCooked = value.cooked;
 	        this.tail = tail;
 	    }
-	    TemplateElement.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            (this.value.cooked === this.originalCooked ? this.value.raw :
-	                this.value.cooked.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${')) +
-	            this.wsAfter;
-	    };
 	    return TemplateElement;
 	}());
 	exports.TemplateElement = TemplateElement;
+	var unparseTemplateElement = function (e, parent) {
+	    return e.wsBefore +
+	        (e.value.cooked === e.originalCooked ? e.value.raw :
+	            e.value.cooked.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${')) +
+	        e.wsAfter;
+	};
 	var TemplateLiteral = /** @class */ (function () {
 	    function TemplateLiteral(wsBefore, quasis, expressions) {
 	        this.wsAfter = '';
@@ -2696,28 +2653,28 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.expressions = expressions;
 	        this.wsBefore = wsBefore;
 	    }
-	    TemplateLiteral.prototype.unparse = function (parent) {
-	        var result = '';
-	        for (var i = 0; i < this.quasis.length; i++) {
-	            result += exports.unparseChild(this)(this.quasis[i]) + (i < this.expressions.length ? '${' + exports.unparseChild(this)(this.expressions[i]) + '}' : '');
-	        }
-	        return this.wsBefore + '`' + result + '`' + this.wsAfter;
-	    };
 	    return TemplateLiteral;
 	}());
 	exports.TemplateLiteral = TemplateLiteral;
+	var unparseTemplateLiteral = function (e, parent) {
+	    var result = '';
+	    for (var i = 0; i < e.quasis.length; i++) {
+	        result += exports.unparseChild(e)(e.quasis[i]) + (i < e.expressions.length ? '${' + exports.unparseChild(e)(e.expressions[i]) + '}' : '');
+	    }
+	    return e.wsBefore + '`' + result + '`' + e.wsAfter;
+	};
 	var ThisExpression = /** @class */ (function () {
 	    function ThisExpression(wsBefore) {
 	        this.wsAfter = '';
 	        this.type = syntax_1.Syntax.ThisExpression;
 	        this.wsBefore = wsBefore;
 	    }
-	    ThisExpression.prototype.unparse = function (parent) {
-	        return this.wsBefore + 'this' + this.wsAfter;
-	    };
 	    return ThisExpression;
 	}());
 	exports.ThisExpression = ThisExpression;
+	var unparseThisExpression = function (e, parent) {
+	    return e.wsBefore + 'this' + e.wsAfter;
+	};
 	var ThrowStatement = /** @class */ (function () {
 	    function ThrowStatement(wsBefore, argument, semicolon) {
 	        this.wsAfter = '';
@@ -2726,14 +2683,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBefore = wsBefore;
 	        this.semicolon = semicolon;
 	    }
-	    ThrowStatement.prototype.unparse = function (parent) {
-	        return this.wsBefore + 'throw' +
-	            exports.unparseChild(this)(this.argument) + this.semicolon +
-	            this.wsAfter;
-	    };
 	    return ThrowStatement;
 	}());
 	exports.ThrowStatement = ThrowStatement;
+	var unparseThrowStatement = function (e, parent) {
+	    return e.wsBefore + 'throw' +
+	        exports.unparseChild(e)(e.argument) + e.semicolon +
+	        e.wsAfter;
+	};
 	var TryStatement = /** @class */ (function () {
 	    function TryStatement(wsBefore, block, handler, wsBeforeFinally, finalizer) {
 	        this.wsAfter = '';
@@ -2744,16 +2701,16 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBefore = wsBefore;
 	        this.wsBeforeFinally = wsBeforeFinally;
 	    }
-	    TryStatement.prototype.unparse = function (parent) {
-	        return this.wsBefore + 'try' +
-	            exports.unparseChild(this)(this.block) +
-	            exports.unparseChild(this)(this.handler) +
-	            (this.finalizer ? this.wsBeforeFinally + 'finally' + exports.unparseChild(this)(this.finalizer) : '') +
-	            this.wsAfter;
-	    };
 	    return TryStatement;
 	}());
 	exports.TryStatement = TryStatement;
+	var unparseTryStatement = function (e, parent) {
+	    return e.wsBefore + 'try' +
+	        exports.unparseChild(e)(e.block) +
+	        exports.unparseChild(e)(e.handler) +
+	        (e.finalizer ? e.wsBeforeFinally + 'finally' + exports.unparseChild(e)(e.finalizer) : '') +
+	        e.wsAfter;
+	};
 	var UnaryExpression = /** @class */ (function () {
 	    function UnaryExpression(wsBefore, operator, argument) {
 	        this.wsAfter = '';
@@ -2763,13 +2720,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.prefix = true;
 	        this.wsBefore = wsBefore;
 	    }
-	    UnaryExpression.prototype.unparse = function (parent) {
-	        return this.wsBefore + this.operator +
-	            exports.unparseChild(this)(this.argument) + this.wsAfter;
-	    };
 	    return UnaryExpression;
 	}());
 	exports.UnaryExpression = UnaryExpression;
+	var unparseUnaryExpression = function (e, parent) {
+	    return e.wsBefore + e.operator +
+	        exports.unparseChild(e)(e.argument) + e.wsAfter;
+	};
 	var UpdateExpression = /** @class */ (function () {
 	    function UpdateExpression(wsBefore, operator, argument, prefix) {
 	        this.wsAfter = '';
@@ -2779,15 +2736,15 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.prefix = prefix;
 	        this.wsBefore = wsBefore;
 	    }
-	    UpdateExpression.prototype.unparse = function (parent) {
-	        return (this.prefix ? this.wsBefore + this.operator : '') +
-	            exports.unparseChild(this)(this.argument) +
-	            (this.prefix ? '' : this.wsBefore + this.operator) +
-	            this.wsAfter;
-	    };
 	    return UpdateExpression;
 	}());
 	exports.UpdateExpression = UpdateExpression;
+	var unparseUpdateExpression = function (e, parent) {
+	    return (e.prefix ? e.wsBefore + e.operator : '') +
+	        exports.unparseChild(e)(e.argument) +
+	        (e.prefix ? '' : e.wsBefore + e.operator) +
+	        e.wsAfter;
+	};
 	var VariableDeclaration = /** @class */ (function () {
 	    function VariableDeclaration(wsBefore, declarations, separators, kind, semicolon) {
 	        this.wsAfter = '';
@@ -2798,13 +2755,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.separators = separators;
 	        this.semicolon = semicolon;
 	    }
-	    VariableDeclaration.prototype.unparse = function (parent) {
-	        return this.wsBefore + this.kind + exports.unparseChildren(this, this.separators, ', ')(this.declarations) +
-	            this.semicolon + this.wsAfter;
-	    };
 	    return VariableDeclaration;
 	}());
 	exports.VariableDeclaration = VariableDeclaration;
+	var unparseVariableDeclaration = function (e, parent) {
+	    return e.wsBefore + e.kind + exports.unparseChildren(e, e.separators, ', ')(e.declarations) +
+	        e.semicolon + e.wsAfter;
+	};
 	var VariableDeclarator = /** @class */ (function () {
 	    function VariableDeclarator(id, wsBeforeEq, init) {
 	        this.wsBefore = '';
@@ -2814,15 +2771,15 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeEq = wsBeforeEq;
 	        this.init = init;
 	    }
-	    VariableDeclarator.prototype.unparse = function (parent) {
-	        return this.wsBefore +
-	            exports.unparseChild(this)(this.id) +
-	            (this.init ? this.wsBeforeEq + '=' + exports.unparseChild(this)(this.init) : '') +
-	            this.wsAfter;
-	    };
 	    return VariableDeclarator;
 	}());
 	exports.VariableDeclarator = VariableDeclarator;
+	var unparseVariableDeclarator = function (e, parent) {
+	    return e.wsBefore +
+	        exports.unparseChild(e)(e.id) +
+	        (e.init ? e.wsBeforeEq + '=' + exports.unparseChild(e)(e.init) : '') +
+	        e.wsAfter;
+	};
 	var WhileStatement = /** @class */ (function () {
 	    function WhileStatement(wsBefore, wsBeforeOpening, test, wsBeforeClosing, body, closingParens) {
 	        if (closingParens === void 0) { closingParens = ')'; }
@@ -2835,15 +2792,15 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeClosing = wsBeforeClosing;
 	        this.closingParens = closingParens;
 	    }
-	    WhileStatement.prototype.unparse = function (parent) {
-	        return this.wsBefore + 'while' + this.wsBeforeOpening +
-	            '(' + exports.unparseChild(this)(this.test) + this.wsBeforeClosing + this.closingParens +
-	            exports.unparseChild(this)(this.body) +
-	            this.wsAfter;
-	    };
 	    return WhileStatement;
 	}());
 	exports.WhileStatement = WhileStatement;
+	var unparseWhileStatement = function (e, parent) {
+	    return e.wsBefore + 'while' + e.wsBeforeOpening +
+	        '(' + exports.unparseChild(e)(e.test) + e.wsBeforeClosing + e.closingParens +
+	        exports.unparseChild(e)(e.body) +
+	        e.wsAfter;
+	};
 	var WithStatement = /** @class */ (function () {
 	    function WithStatement(wsBefore, wsBeforeOpening, object, wsBeforeClosing, body, closingParens) {
 	        if (closingParens === void 0) { closingParens = ')'; }
@@ -2856,15 +2813,15 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.closingParens = closingParens;
 	        this.wsBeforeClosing = wsBeforeClosing;
 	    }
-	    WithStatement.prototype.unparse = function (parent) {
-	        return this.wsBefore + 'with' + this.wsBeforeOpening + '(' +
-	            exports.unparseChild(this)(this.object) + this.wsBeforeClosing + this.closingParens +
-	            exports.unparseChild(this)(this.body) +
-	            this.wsAfter;
-	    };
 	    return WithStatement;
 	}());
 	exports.WithStatement = WithStatement;
+	var unparseWithStatement = function (e, parent) {
+	    return e.wsBefore + 'with' + e.wsBeforeOpening + '(' +
+	        exports.unparseChild(e)(e.object) + e.wsBeforeClosing + e.closingParens +
+	        exports.unparseChild(e)(e.body) +
+	        e.wsAfter;
+	};
 	var YieldExpression = /** @class */ (function () {
 	    function YieldExpression(wsBefore, wsBeforeStar, argument, delegate, semicolon) {
 	        this.wsAfter = '';
@@ -2875,13 +2832,94 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.wsBeforeStar = wsBeforeStar;
 	        this.semicolon = semicolon;
 	    }
-	    YieldExpression.prototype.unparse = function (parent) {
-	        return this.wsBefore + 'yield' + (this.delegate ? this.wsBeforeStar + '*' : '') +
-	            (this.argument ? exports.unparseChild(this)(this.argument) : '') + this.semicolon + this.wsAfter;
-	    };
 	    return YieldExpression;
 	}());
 	exports.YieldExpression = YieldExpression;
+	var unparseYieldExpression = function (e, parent) {
+	    return e.wsBefore + 'yield' + (e.delegate ? e.wsBeforeStar + '*' : '') +
+	        (e.argument ? exports.unparseChild(e)(e.argument) : '') + e.semicolon + e.wsAfter;
+	};
+	exports.unparsers = (_a = {},
+	    _a[syntax_1.Syntax.ArrayExpression] = unparseArrayExpression,
+	    _a[syntax_1.Syntax.ArrayPattern] = unparseArrayPattern,
+	    _a[syntax_1.Syntax.ArrowFunctionExpression] = unparseArrowFunctionExpression,
+	    _a[syntax_1.Syntax.AssignmentExpression] = unparseAssignmentExpression,
+	    _a[syntax_1.Syntax.AssignmentPattern] = unparseAssignmentPattern,
+	    _a[syntax_1.Syntax.AwaitExpression] = unparseAwaitExpression,
+	    _a[syntax_1.Syntax.BinaryExpression] = unparseBinaryExpression,
+	    _a[syntax_1.Syntax.BlockStatement] = unparseBlockStatement,
+	    _a[syntax_1.Syntax.BreakStatement] = unparseBreakStatement,
+	    _a[syntax_1.Syntax.ContinueStatement] = unparseContinueStatement,
+	    _a[syntax_1.Syntax.CallExpression] = unparseCallExpression,
+	    _a[syntax_1.Syntax.CatchClause] = unparseCatchClause,
+	    _a[syntax_1.Syntax.ClassBody] = unparseClassBody,
+	    _a[syntax_1.Syntax.ClassDeclaration] = unparseClassDeclaration,
+	    _a[syntax_1.Syntax.ClassExpression] = unparseClassExpression,
+	    _a[syntax_1.Syntax.ConditionalExpression] = unparseConditionalExpression,
+	    _a[syntax_1.Syntax.DebuggerStatement] = unparseDebuggerStatement,
+	    _a[syntax_1.Syntax.DoWhileStatement] = unparseDoWhileStatement,
+	    _a[syntax_1.Syntax.EmptyStatement] = unparseEmptyStatement,
+	    _a[syntax_1.Syntax.ExportAllDeclaration] = unparseExportAllDeclaration,
+	    _a[syntax_1.Syntax.ExportDefaultDeclaration] = unparseExportDefaultDeclaration,
+	    _a[syntax_1.Syntax.ExportNamedDeclaration] = unparseExportNamedDeclaration,
+	    _a[syntax_1.Syntax.ExportSpecifier] = unparseExportSpecifier,
+	    _a[syntax_1.Syntax.ExpressionStatement] = unparseExpressionStatement,
+	    _a[syntax_1.Syntax.ForInStatement] = unparseForInStatement,
+	    _a[syntax_1.Syntax.ForOfStatement] = unparseForOfStatement,
+	    _a[syntax_1.Syntax.ForStatement] = unparseForStatement,
+	    _a[syntax_1.Syntax.FunctionDeclaration] = unparseFunctionDeclaration,
+	    _a[syntax_1.Syntax.FunctionExpression] = unparseFunctionExpression,
+	    _a[syntax_1.Syntax.Identifier] = unparseIdentifier,
+	    _a[syntax_1.Syntax.MemberExpression] = unparseMemberExpression,
+	    _a[syntax_1.Syntax.IfStatement] = unparseIfStatement,
+	    _a[syntax_1.Syntax.Import] = unparseImport,
+	    _a[syntax_1.Syntax.ImportDeclaration] = unparseImportDeclaration,
+	    _a[syntax_1.Syntax.ImportDefaultSpecifier] = unparseImportDefaultSpecifier,
+	    _a[syntax_1.Syntax.ImportNamespaceSpecifier] = unparseImportNamespaceSpecifier,
+	    _a[syntax_1.Syntax.ImportSpecifier] = unparseImportSpecifier,
+	    _a[syntax_1.Syntax.LabeledStatement] = unparseLabeledStatement,
+	    _a[syntax_1.Syntax.Literal] = unparseLiteral,
+	    _a[syntax_1.Syntax.LogicalExpression] = unparseLogicalExpression,
+	    _a[syntax_1.Syntax.MetaProperty] = unparseMetaProperty,
+	    _a[syntax_1.Syntax.MethodDefinition] = unparseMethodDefinition,
+	    _a[syntax_1.Syntax.Program] = unparseProgram,
+	    _a[syntax_1.Syntax.NewExpression] = unparseNewExpression,
+	    _a[syntax_1.Syntax.ObjectExpression] = unparseObjectExpression,
+	    _a[syntax_1.Syntax.ObjectPattern] = unparseObjectPattern,
+	    _a[syntax_1.Syntax.Property] = unparseProperty,
+	    _a[syntax_1.Syntax.RestElement] = unparseRestElement,
+	    _a[syntax_1.Syntax.ReturnStatement] = unparseReturnStatement,
+	    _a[syntax_1.Syntax.SequenceExpression] = unparseSequenceExpression,
+	    _a[syntax_1.Syntax.SpreadElement] = unparseSpreadElement,
+	    _a[syntax_1.Syntax.Super] = unparseSuper,
+	    _a[syntax_1.Syntax.SwitchCase] = unparseSwitchCase,
+	    _a[syntax_1.Syntax.SwitchStatement] = unparseSwitchStatement,
+	    _a[syntax_1.Syntax.TaggedTemplateExpression] = unparseTaggedTemplateExpression,
+	    _a[syntax_1.Syntax.TemplateElement] = unparseTemplateElement,
+	    _a[syntax_1.Syntax.TemplateLiteral] = unparseTemplateLiteral,
+	    _a[syntax_1.Syntax.ThisExpression] = unparseThisExpression,
+	    _a[syntax_1.Syntax.ThrowStatement] = unparseThrowStatement,
+	    _a[syntax_1.Syntax.TryStatement] = unparseTryStatement,
+	    _a[syntax_1.Syntax.UnaryExpression] = unparseUnaryExpression,
+	    _a[syntax_1.Syntax.UpdateExpression] = unparseUpdateExpression,
+	    _a[syntax_1.Syntax.VariableDeclaration] = unparseVariableDeclaration,
+	    _a[syntax_1.Syntax.VariableDeclarator] = unparseVariableDeclarator,
+	    _a[syntax_1.Syntax.WhileStatement] = unparseWhileStatement,
+	    _a[syntax_1.Syntax.WithStatement] = unparseWithStatement,
+	    _a[syntax_1.Syntax.YieldExpression] = unparseYieldExpression,
+	    _a);
+	// Slightly less efficient than virtual dispatch but more flexible as we can now copy the nodes without definining clone methods.
+	function unparse(e, parent) {
+	    if (e === null || typeof e === "undefined")
+	        return "";
+	    var unparser = exports.unparsers[e.type];
+	    if (typeof unparser !== "function") {
+	        console.log(e);
+	        console.log("Unparser not found");
+	    }
+	    return unparser(e, parent);
+	}
+	exports.unparse = unparse;
 
 
 /***/ },
