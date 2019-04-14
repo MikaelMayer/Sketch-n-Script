@@ -68,14 +68,17 @@ function uniqueRef(name) {
 // Possibility to provide overrides and reuses
 //   as nested objects where leaves are
 //   For overrides:
-//     {__with__: X} for overrides
+//     {__with__: X} for overrides of the previous value with X
+//     {__clone__: Path} for of the previous value with the given path
 //     name: X if the name was not present already in the object
 //   For reuses:
 //     true to just return the entire object
 //     {__reuse__: true} to reuse all children not touched by overrides fields
 function copy(object, overrides, reuses) {
-    if (typeof overrides == "object" && ("__with__" in overrides)) {
-        return overrides.__with__;
+    if (typeof overrides == "object") {
+        if ("__with__" in overrides) {
+            return overrides.__with__;
+        }
     }
     if (typeof reuses == "boolean" && reuses === true) {
         return object;
@@ -108,6 +111,39 @@ function copy(object, overrides, reuses) {
         return model;
     }
     return object;
+}
+// Returns true if obj1 and obj2 are deeply equal. Careful: Do not provide cyclic inputs !
+function areEqual(obj1, obj2) {
+    if (typeof obj1 !== typeof obj2)
+        return false;
+    if (obj1 === null || obj2 === null)
+        return obj1 === obj2;
+    switch (typeof obj1) {
+        case "object":
+            var isArray1 = Array.isArray(obj1);
+            if (isArray1 != Array.isArray(obj2))
+                return false;
+            if (isArray1) {
+                if (obj1.length != obj2.length)
+                    return false;
+                for (var k = 0; k < obj1.length; k++) {
+                    if (!areEqual(obj1[k], obj2[k]))
+                        return false;
+                }
+                return true;
+            }
+            else {
+                if (!areEqual(Object.keys(obj1), Object.keys(obj2)))
+                    return false;
+                for (var k in obj1) {
+                    if (!areEqual(obj1[k], obj2[k]))
+                        return false;
+                }
+                return true;
+            }
+        default:
+            return obj1 === obj2;
+    }
 }
 var DType;
 (function (DType) {
@@ -220,6 +256,9 @@ function DDNewNode(model, children) {
     return [{ ctor: DType.Update, kind: { ctor: DUType.NewValue, model: model }, children: children }];
 }
 function DDClone(path, diffs) {
+    if (diffs === void 0) { diffs = DDSame(); }
+    if (Array.isArray(path))
+        path = { up: 0, down: path };
     return [{ ctor: DType.Clone, path: path, diffs: diffs }];
 }
 function DDSame() {
@@ -285,23 +324,94 @@ function DDMerge(diffs1, diffs2) {
                     if (arrayAll(diff1.kind.model, function (x, i) { return typeof x === "undefined" && insertionCompatible(diff1.children[i]); }) &&
                         arrayAll(diff2.kind.model, function (x, i) { return typeof x === "undefined" && insertionCompatible(diff2.children[i]); })) {
                         // All keys are described by Clone or New Children.
-                        // We just need to concatenate them.
-                        var l1 = diff1.kind.model.length;
-                        var l2 = diff2.kind.model.length;
-                        var newModel = Array(l1 + l2);
-                        for (var i = 0; i < l1 + l2; i++)
-                            newModel[i] = undefined;
-                        var newChildren1 = copy(diff1.children);
-                        for (var i = 0; i < l2; i++) {
-                            newChildren1[i + l1] = diff2.children[i];
-                        }
-                        var newChildren2 = copy(diff2.children);
-                        for (var i = 0; i < l1; i++) {
-                            newChildren2[i + l2] = diff1.children[i];
-                        }
-                        return { value: [{ ctor: DType.Update, kind: { ctor: DUType.NewValue, model: newModel }, children: newChildren1 },
-                                { ctor: DType.Update, kind: { ctor: DUType.NewValue, model: newModel }, children: newChildren2 },
-                            ] };
+                        var groundTruthOf = function (diff) {
+                            var result = [];
+                            for (var k in diff.children) {
+                                result.push(diff.children[k]);
+                            }
+                            return result;
+                        };
+                        var cloneIndexOf_1 = function (ds) {
+                            if (ds.length == 1) {
+                                var d = ds[0];
+                                if (d.ctor == DType.Clone && d.path.up == 0 && d.path.down.length == 1) {
+                                    return Number(d.path.down[0]);
+                                }
+                            }
+                            return undefined;
+                        };
+                        var insertionsDeletionsOf = function (groundTruth) {
+                            // Find the elements in sequence, record elements that were deleted.
+                            var deleted = {};
+                            var insertedAfter = {};
+                            var lastIncludedIndex = -1;
+                            for (var k = 0; k < groundTruth.length; k++) {
+                                var ds = groundTruth[k];
+                                var dPath = cloneIndexOf_1(ds);
+                                if (typeof dPath == "number" && lastIncludedIndex < dPath) {
+                                    while (lastIncludedIndex < dPath) {
+                                        lastIncludedIndex++;
+                                        if (lastIncludedIndex < dPath) {
+                                            deleted[lastIncludedIndex] = true;
+                                        }
+                                    }
+                                    continue;
+                                }
+                                insertedAfter[lastIncludedIndex] = insertedAfter[lastIncludedIndex] || [];
+                                insertedAfter[lastIncludedIndex].push(ds);
+                            }
+                            return { deleted: deleted, insertedAfter: insertedAfter };
+                        };
+                        var doInsert = function (solutionFiltered, insertedAfter) {
+                            // Now we insert
+                            toInsert: for (var indexAfterWhichToInsert in insertedAfter) {
+                                var ip = +indexAfterWhichToInsert;
+                                var diffssToInsert = insertedAfter[indexAfterWhichToInsert];
+                                for (var k = 0; k < solutionFiltered.length; k++) {
+                                    var ci = cloneIndexOf_1(solutionFiltered[k]);
+                                    if (typeof ci == "number" && ci >= ip) { // TODO: We could list every possible insertion as well.
+                                        solutionFiltered.splice.apply(// TODO: We could list every possible insertion as well.
+                                        solutionFiltered, [k + 1, 0].concat(diffssToInsert));
+                                        continue toInsert;
+                                    }
+                                }
+                                solutionFiltered.push.apply(solutionFiltered, diffssToInsert);
+                            }
+                        };
+                        var arrayDiffOf = function (dss) {
+                            var model = Array(dss.length);
+                            var children = {};
+                            for (var i = 0; i < model.length; i++) {
+                                model[i] = undefined;
+                                children[i] = dss[i];
+                            }
+                            return { ctor: DType.Update, kind: { ctor: DUType.NewValue, model: model }, children: children };
+                        };
+                        var filterFromDeletion = function (solution, deleted) {
+                            // Filter out only the first element of each kind.
+                            var prevDeleted = -1;
+                            return solution.filter(function (ds, k) {
+                                var c = cloneIndexOf_1(ds);
+                                if (typeof c === "number" && c > prevDeleted) {
+                                    prevDeleted = c;
+                                    return deleted[c + ""] !== true;
+                                }
+                                return true;
+                            });
+                        };
+                        var solution1 = groundTruthOf(diff1);
+                        var _a = insertionsDeletionsOf(solution1), insertedAfter1 = _a.insertedAfter, deleted1 = _a.deleted;
+                        var solution2 = groundTruthOf(diff2);
+                        var _b = insertionsDeletionsOf(solution2), insertedAfter2 = _b.insertedAfter, deleted2 = _b.deleted;
+                        var solution1Filtered = filterFromDeletion(solution1, deleted2);
+                        var solution2Filtered = filterFromDeletion(solution2, deleted1);
+                        doInsert(solution1Filtered, insertedAfter2);
+                        doInsert(solution2Filtered, insertedAfter1);
+                        var d1 = arrayDiffOf(solution1Filtered);
+                        var d2 = arrayDiffOf(solution2Filtered);
+                        if (areEqual(d1, d2))
+                            return { value: [d1] };
+                        return { value: [d1, d2] };
                     }
                 }
                 if (diff2.kind.ctor == DUType.NewValue) {
@@ -682,7 +792,7 @@ function objectGather(prog, keys, newNode, newDiffs) {
 function walkNodes(nodes, preCall, postCall, level) {
     for (var _i = 0, nodes_1 = nodes; _i < nodes_1.length; _i++) {
         var x = nodes_1[_i];
-        walkNode(x, preCall, postCall, level);
+        walkNode(x, preCall, postCall, cons_(x, level));
     }
 }
 var walkers = undefined;
@@ -696,7 +806,7 @@ function walkNode(node, preCall, postCall, level) {
                 return;
             for (var _i = 0, _a = node[sub]; _i < _a.length; _i++) {
                 var x_1 = _a[_i];
-                var r = walkNode(x_1, preCall, postCall, level + 1);
+                var r = walkNode(x_1, preCall, postCall, cons_(x_1, level));
                 if (typeof r !== "undefined")
                     return r;
             }
@@ -704,7 +814,7 @@ function walkNode(node, preCall, postCall, level) {
         var rChild = function (sub) { return function (node, preCall, postCall, level) {
             var child = node[sub];
             if (typeof child !== "undefined")
-                return walkNode(child, preCall, postCall, level + 1);
+                return walkNode(child, preCall, postCall, cons_(sub, level));
         }; };
         var rElements = rMany("elements");
         var combine = function () {
@@ -717,7 +827,7 @@ function walkNode(node, preCall, postCall, level) {
                     var rFun = rFuns_1[_i];
                     if (typeof rFun === "string")
                         rFun = rChild(rFun);
-                    var x = rFun(node, preCall, postCall, level + 1);
+                    var x = rFun(node, preCall, postCall, level);
                     if (typeof x !== "undefined")
                         return x;
                 }
@@ -815,7 +925,8 @@ function walkNode(node, preCall, postCall, level) {
     if (typeof x !== "undefined")
         return x;
 }
-// Returns [a list of declarations that will allocate a heap reference -- initially filled with "undefined" (no declarations if declarations = false),
+// Returns a rewriting model for a given body after moving declarations.
+// [a list of declarations that will allocate a heap reference -- initially filled with "undefined" (no declarations if declarations = false),
 // a list of definitions that have to be hoisted (e.g. function definitions)]
 function hoistedDeclarationsDefinitions(body, declarations) {
     if (declarations === void 0) { declarations = true; }
@@ -830,7 +941,7 @@ function hoistedDeclarationsDefinitions(body, declarations) {
                 var declaration = _a[_i];
                 if (declaration.id.type === Syntax.Identifier) {
                     localVars[declaration.id.name] =
-                        new Node.VariableDeclaration("\n", [new Node.VariableDeclarator(declaration.id, " ", new Node.Identifier(" ", "undefined", "undefined"))
+                        new Node.VariableDeclaration("\n", [new Node.VariableDeclarator(declaration.id, " ", null)
                         ], [], "let", ";");
                 }
             }
@@ -841,29 +952,29 @@ function hoistedDeclarationsDefinitions(body, declarations) {
             var fd = node;
             if (declarations) {
                 localVars[fd.id.name] =
-                    new Node.VariableDeclaration("\n", [new Node.VariableDeclarator(fd.id, " ", new Node.Identifier(" ", "undefined", "undefined"))
+                    new Node.VariableDeclaration("\n", [new Node.VariableDeclarator(fd.id, " ", null)
                     ], [], "let", ";");
             }
-            if (level == 0) {
-                var fe = new Node.FunctionExpression(fd.wsBeforeFunction, fd.wsBeforeStar, fd.id, fd.wsBeforeParams, fd.params, fd.separators, fd.wsBeforeEndParams, fd.body, fd.generator);
-                fe.wsAfter = fd.wsAfter;
+            if (typeof level.tail == "undefined") { // Top-level definitions.
                 localDefinitions[fd.id.name] =
-                    new Node.AssignmentExpression(" ", "=", fd.id, fe);
+                    new Node.AssignmentExpression(" ", "=", fd.id, { __clone__: List.toArray(level), diffs: { type: Syntax.FunctionExpression } });
             }
         }
-        // We ignore declarations inside functions of course.
+        // We ignore declarations inside functions.
         if (node.type === Syntax.FunctionDeclaration || node.type === Syntax.FunctionExpression)
             return true;
     });
-    var varDeclarations = [];
-    for (var decl in localVars) {
-        varDeclarations.push(localVars[decl]);
+    var newModel = [];
+    for (var k = 0; k < body.length; k++) {
+        newModel[k] = { __with__: [k + ""] };
     }
-    var definitions = [];
     for (var defi in localDefinitions) {
-        definitions.push(localDefinitions[defi]);
+        newModel.unshift(localDefinitions[defi]);
     }
-    return [varDeclarations, definitions];
+    for (var decl in localVars) {
+        newModel.unshift(localVars[decl]);
+    }
+    return newModel;
 }
 function reverseArray(arr) {
     var newArray = [];

@@ -13,7 +13,7 @@ declare var List: {
     drop: <a>(list: List<a>, k: number) => List<a>,
     reverseInsert: <a>(toInsert: List<a>, list: List<a>) => List<a>,
     length: <a>(list: List<a>) => number,
-    toArray: (<a>(list: List<a>) => a[]) | (<a, b>(list: List<a>, map: (v: a) => b) => b[])
+    toArray: (<a>(list: List<a>) => a[]) /* | (<a, b>(list: List<a>, map: (v: a) => b) => b[])*/
   }
 declare function cons_<a>(arg: a, tail: List<a>): List<a>
 declare function array_flatten<a>(arg: (a | undefined)[][]): a[]
@@ -107,14 +107,17 @@ function uniqueRef(name) {
 // Possibility to provide overrides and reuses
 //   as nested objects where leaves are
 //   For overrides:
-//     {__with__: X} for overrides
+//     {__with__: X} for overrides of the previous value with X
+//     {__clone__: Path} for of the previous value with the given path
 //     name: X if the name was not present already in the object
 //   For reuses:
 //     true to just return the entire object
 //     {__reuse__: true} to reuse all children not touched by overrides fields
 function copy<a>(object: a, overrides?, reuses?): a {
-  if(typeof overrides == "object" && ("__with__" in overrides)) {
-    return overrides.__with__;
+  if(typeof overrides == "object") {
+    if("__with__" in overrides) {
+      return overrides.__with__;
+    }
   }
   if(typeof reuses == "boolean" && reuses === true) {
     return object;
@@ -148,6 +151,31 @@ function copy<a>(object: a, overrides?, reuses?): a {
     return model;
   }
   return object;
+}
+// Returns true if obj1 and obj2 are deeply equal. Careful: Do not provide cyclic inputs !
+function areEqual(obj1, obj2): boolean {
+  if(typeof obj1 !== typeof obj2) return false;
+  if(obj1 === null || obj2 === null) return obj1 === obj2;
+  switch(typeof obj1) {
+    case "object":
+      let isArray1 = Array.isArray(obj1)
+      if(isArray1 != Array.isArray(obj2)) return false;
+      if(isArray1) {
+        if(obj1.length != obj2.length) return false;
+        for(let k = 0; k < obj1.length; k++) {
+          if(!areEqual(obj1[k], obj2[k])) return false;
+        }
+        return true;
+      } else {
+        if(!areEqual(Object.keys(obj1), Object.keys(obj2))) return false;
+        for(let k in obj1) {
+          if(!areEqual(obj1[k], obj2[k])) return false;
+        }
+        return true;
+      }
+    default:
+      return obj1 === obj2;
+  }
 }
 
 type AnyNode = Node.ExportableDefaultDeclaration// & { update?: (prog: Prog, newVal: UpdateData) => UpdateAction }
@@ -270,7 +298,8 @@ function DDNewArray(length: number, children: ChildDiffs): DUpdate[] {
 function DDNewNode(model: any, children = {}): DUpdate[] {
   return [{ctor: DType.Update, kind: {ctor: DUType.NewValue, model: model}, children: children}]
 }
-function DDClone(path: Path, diffs: Diffs): DClone[] {
+function DDClone(path: Path, diffs: Diffs = DDSame()): DClone[] {
+  if(Array.isArray(path)) path = { up: 0, down: path };
   return [{ctor: DType.Clone, path: path, diffs: diffs}];
 }
 function DDSame(): Diffs {
@@ -329,22 +358,94 @@ function DDMerge(diffs1: Diffs, diffs2: Diffs): Diffs {
           if(arrayAll(diff1.kind.model, (x, i) => typeof x === "undefined" && insertionCompatible((diff1 as DUpdate).children[i])) &&
              arrayAll(diff2.kind.model, (x, i) => typeof x === "undefined" && insertionCompatible((diff2 as DUpdate).children[i]))) {
             // All keys are described by Clone or New Children.
-            // We just need to concatenate them.
-            let l1 = diff1.kind.model.length;
-            let l2 = diff2.kind.model.length;
-            let newModel = Array(l1 + l2);
-            for(var i = 0; i < l1 + l2; i++) newModel[i] = undefined;
-            let newChildren1 = copy(diff1.children);
-            for(var i = 0; i < l2; i++) {
-              newChildren1[i + l1] = diff2.children[i];
+            let groundTruthOf = function(diff: DUpdate): Diffs[] {
+              let result: Diffs[] = [];
+              for(let k in diff.children) {
+                result.push(diff.children[k]);
+              }
+              return result;
             }
-            let newChildren2 = copy(diff2.children);
-            for(var i = 0; i < l1; i++) {
-              newChildren2[i + l2] = diff1.children[i];
+            let cloneIndexOf = function(ds: Diffs): Number | undefined {
+              if(ds.length == 1) {
+                let d = ds[0];
+                if(d.ctor == DType.Clone && d.path.up == 0 && d.path.down.length == 1) {
+                  return Number(d.path.down[0]);
+                }
+              }
+              return undefined;
             }
-            return [{ctor: DType.Update, kind: { ctor: DUType.NewValue, model: newModel }, children: newChildren1},
-              {ctor: DType.Update, kind: { ctor: DUType.NewValue, model: newModel }, children: newChildren2},
-            ];
+            let insertionsDeletionsOf = function(groundTruth: Diffs[]): {insertedAfter: any, deleted: any} {
+              // Find the elements in sequence, record elements that were deleted.
+              let deleted = {};
+              let insertedAfter = {};
+              let lastIncludedIndex = -1;
+              for(let k = 0; k < groundTruth.length; k++) {
+                let ds: Diffs = groundTruth[k];
+                let dPath = cloneIndexOf(ds);
+                if(typeof dPath == "number" && lastIncludedIndex < dPath) {
+                  while(lastIncludedIndex < dPath) {
+                    lastIncludedIndex++;
+                    if(lastIncludedIndex < dPath) {
+                      deleted[lastIncludedIndex] = true;
+                    }
+                  }
+                  continue;
+                }
+                insertedAfter[lastIncludedIndex] = insertedAfter[lastIncludedIndex] || [];
+                insertedAfter[lastIncludedIndex].push(ds);
+              }
+              return { deleted: deleted, insertedAfter: insertedAfter};
+            }
+            let doInsert = function(solutionFiltered, insertedAfter) {
+              // Now we insert
+              toInsert: for(let indexAfterWhichToInsert in insertedAfter) {
+                let ip = +indexAfterWhichToInsert;
+                let diffssToInsert = insertedAfter[indexAfterWhichToInsert];
+                for(let k = 0; k < solutionFiltered.length; k++) {
+                  let ci = cloneIndexOf(solutionFiltered[k]);
+                  if(typeof ci == "number" && ci >= ip) { // TODO: We could list every possible insertion as well.
+                    solutionFiltered.splice(k + 1, 0, ...diffssToInsert);
+                    continue toInsert;
+                  }
+                }
+                solutionFiltered.push(...diffssToInsert);
+              }
+            }
+            let arrayDiffOf = function(dss: Diffs[]): DUpdate {
+              let model = Array(dss.length);
+              let children = {};
+              for(let i = 0; i < model.length; i++) {
+                model[i] = undefined;
+                children[i] = dss[i];
+              }
+              return { ctor: DType.Update, kind: { ctor: DUType.NewValue, model: model}, children: children };
+            }
+            let filterFromDeletion = function(solution, deleted) {
+              // Filter out only the first element of each kind.
+              let prevDeleted = -1;
+              return solution.filter((ds, k) => {
+                 let c = cloneIndexOf(ds);
+                 if(typeof c === "number" && c > prevDeleted) {
+                   prevDeleted = c;
+                   return deleted[c + ""] !== true;
+                 }
+                 return true;
+              });
+            }
+            let solution1 = groundTruthOf(diff1);
+            let {insertedAfter: insertedAfter1, deleted: deleted1} = insertionsDeletionsOf(solution1);
+            let solution2 = groundTruthOf(diff2);
+            let {insertedAfter: insertedAfter2, deleted: deleted2} = insertionsDeletionsOf(solution2);
+            let solution1Filtered = filterFromDeletion(solution1, deleted2);
+            let solution2Filtered = filterFromDeletion(solution2, deleted1);
+            doInsert(solution1Filtered, insertedAfter2);
+            doInsert(solution2Filtered, insertedAfter1);
+            
+            let d1 = arrayDiffOf(solution1Filtered);
+            let d2 = arrayDiffOf(solution2Filtered);
+            if(areEqual(d1, d2))
+              return [d1];
+            return [d1, d2];
           }
         }
         if(diff2.kind.ctor == DUType.NewValue) {
@@ -726,30 +827,34 @@ function objectGather(prog: Prog, keys: string[], newNode: Node.ObjectExpression
       prog);
   }
 }
-function walkNodes(nodes, preCall?, postCall?, level?) {
-  for(let x of nodes) walkNode(x, preCall, postCall, level);
+function walkNodes(nodes, preCall?, postCall?, level?: List<string>) {
+  for(let x of nodes) walkNode(x, preCall, postCall, cons_(x, level));
 }
 var walkers = undefined;
-function walkNode(node, preCall?, postCall?, level?) {
+function walkNode(
+    node: any,
+    preCall?: (node: any, path: List<string>) => any,
+    postCall?: (node: any, path: List<string>) => any,
+    level?: List<string>) {
   if(typeof walkers == "undefined") {
     var Syntax = syntax.Syntax || esprima.Syntax;
-    var rMany = (sub) => (node, preCall, postCall, level) => {
+    var rMany = (sub) => (node, preCall, postCall, level?: List<string>) => {
       var children = node[sub];
       if(children == null) return;
       for(let x of node[sub]) {
-        let r = walkNode(x, preCall, postCall, level + 1);
+        let r = walkNode(x, preCall, postCall, cons_(x, level));
         if(typeof r !== "undefined") return r;
     } };
     var rChild = (sub) => (node, preCall, postCall, level) => {
       var child = node[sub];
       if(typeof child !== "undefined")
-        return walkNode(child, preCall, postCall, level + 1);
+        return walkNode(child, preCall, postCall, cons_(sub, level));
     };
     var rElements = rMany("elements");
     var combine = (...rFuns) => (node, preCall, postCall, level) => {
       for(let rFun of rFuns) {
         if(typeof rFun === "string") rFun = rChild(rFun);
-        var x = rFun(node, preCall, postCall, level + 1);
+        var x = rFun(node, preCall, postCall, level)
         if(typeof x !== "undefined") return x;
       }
     }
@@ -843,14 +948,15 @@ function walkNode(node, preCall?, postCall?, level?) {
   if(typeof x !== "undefined") return x;
 }
 
-// Returns [a list of declarations that will allocate a heap reference -- initially filled with "undefined" (no declarations if declarations = false),
+// Returns a rewriting model for a given body after moving declarations.
+// [a list of declarations that will allocate a heap reference -- initially filled with "undefined" (no declarations if declarations = false),
 // a list of definitions that have to be hoisted (e.g. function definitions)]
-function hoistedDeclarationsDefinitions(body: AnyNode[], declarations = true): [AnyNode[], AnyNode[]] {
+function hoistedDeclarationsDefinitions(body: AnyNode[], declarations = true): Model {
   var Syntax = syntax.Syntax || esprima.Syntax;
   var localVars: { [name: string]: Node.VariableDeclaration } = {};
   var localDefinitions: {[name: string]: Node.AssignmentExpression } = {}; 
   var Node = typeof Node == "undefined" ? esprima.Node : Node;
-  walkNodes(body, (node, level) => {
+  walkNodes(body, (node: any, level: List<string>) => {
     // We hoist variable declarations
     if(declarations && node.type === Syntax.VariableDeclaration) {
       for(let declaration of (node as Node.VariableDeclaration).declarations) {
@@ -858,7 +964,7 @@ function hoistedDeclarationsDefinitions(body: AnyNode[], declarations = true): [
           localVars[(declaration.id as Node.Identifier).name] =
             new Node.VariableDeclaration("\n",
               [new Node.VariableDeclarator(
-                  declaration.id, " ", new Node.Identifier(" ", "undefined", "undefined"))
+                  declaration.id, " ", null)
               ], [], "let", ";");
         }
       }
@@ -871,30 +977,29 @@ function hoistedDeclarationsDefinitions(body: AnyNode[], declarations = true): [
         localVars[(fd.id as Node.Identifier).name] =
           new Node.VariableDeclaration("\n",
             [new Node.VariableDeclarator(
-              fd.id as Node.Identifier, " ", new Node.Identifier(" ", "undefined", "undefined"))
+              fd.id as Node.Identifier, " ", null)
             ], [], "let", ";");
       }
-      if(level == 0) {
-        let fe = new Node.FunctionExpression(
-              fd.wsBeforeFunction, fd.wsBeforeStar, fd.id, fd.wsBeforeParams,
-              fd.params, fd.separators, fd.wsBeforeEndParams, fd.body, fd.generator);
-        fe.wsAfter = fd.wsAfter;
+      if(typeof level.tail == "undefined") { // Top-level definitions.
         localDefinitions[(fd.id as Node.Identifier).name] =
-          new Node.AssignmentExpression(" ","=", fd.id as Node.Identifier, fe);
+          new Node.AssignmentExpression(" ","=", fd.id as Node.Identifier,
+            { __clone__: List.toArray<string>(level as List<string>), diffs: { type: Syntax.FunctionExpression } } as unknown as Node.Expression);
       }
     }
-    // We ignore declarations inside functions of course.
+    // We ignore declarations inside functions.
     if(node.type === Syntax.FunctionDeclaration || node.type === Syntax.FunctionExpression) return true;
   });
-  var varDeclarations: Node.VariableDeclaration[] = []
-  for(let decl in localVars) {
-    varDeclarations.push(localVars[decl]);
+  let newModel = [];
+  for(let k = 0; k < body.length; k++) {
+    newModel[k] = {__with__: [k + ""]};
   }
-  var definitions: Node.AssignmentExpression[] = []
   for(let defi in localDefinitions) {
-    definitions.push(localDefinitions[defi]);
+    newModel.unshift(localDefinitions[defi]);
   }
-  return [varDeclarations, definitions];
+  for(let decl in localVars) {
+    newModel.unshift(localVars[decl]);
+  }
+  return newModel;
 }
 
 function reverseArray(arr) {

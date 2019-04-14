@@ -11,7 +11,7 @@ function assertEqual(x1, x2, name) {
     console.log((name ? name + ": " : "") + "Expected\n" + s2 + "\n, got \n" + s1);
   }
 }
-
+/*
 assertEqual(
   DDMerge(DDReuse({0: DDNewValue(3)}), DDReuse({1: DDNewValue(4)})),
   DDReuse({0: DDNewValue(3), 1: DDNewValue(4)}), "Multiple elements updated independently in array or object");
@@ -33,16 +33,26 @@ assertEqual(
   ),
   "Two insertions in empty array/object"
 );
-/*assertEqual(
-  DDMerge(DDNewObject({0: DDClone([1]), 1: DDClone([0])}, [undefined, undefined]),
+assertEqual(
+  DDMerge(DDReuse({0: DDClone({up: 1, down: [1]}), 1: DDClone({up: 1, down: [0]})}, [undefined, undefined]),
     DDNewObject({0: DDClone([0]), 1: DDClone([1]), 2: DDClone([1])}, [undefined, undefined, undefined])
   ),
   DDNewObject({0: DDClone([1]), 1: DDClone([0]), 2: DDClone([1])}, [undefined, undefined, undefined])
   ,
   "One swap and a clone of last element on a 2-element array"
-);*/
+);
+//*/
 
+assertEqual(
+  DDMerge(DDNewObject({0: DDClone([1]), 1: DDClone([0])}, [undefined, undefined]),
+    DDNewObject({0: DDClone([0]), 1: DDClone([1]), 2: DDClone([0])}, [undefined, undefined, undefined])
+  ),
+  DDNewObject({0: DDClone([1]), 1: DDClone([0]), 2: DDClone([0])}, [undefined, undefined, undefined])
+  ,
+  "One swap and a clone of first element on a 2-element array"
+);
 
+/*
 (function () {
   let prog = {a: { b: 1}, c: [2, 2], d: 3}
   let model = {a: {__clone__: "c"}, c: {__clone__: ["a", "b"]}, d: {__clone__: "c"}};
@@ -53,6 +63,7 @@ assertEqual(
   assertEqual(apply_model(prog, model, [], reverseModel), subProg);
   assertEqual(reverseModel, reverseModelExpected);
 })()
+//*/
 
 console.log(testsPassed + "/" + tests + " passed");
 if(testsPassed !== tests) {
