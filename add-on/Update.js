@@ -436,15 +436,31 @@ function DDMerge(diffs1, diffs2) {
                 }
             }
             else { // One of them is a clone, so an entire replacement. Clones discard other changes.
-                if (diff1.ctor == DType.Clone) {
-                    result.push(diff1);
-                }
+                var doDiffs = function (diff1, diff2) {
+                    if (diff1.ctor == DType.Clone) {
+                        if (diff2.ctor == DType.Update && diff2.kind.ctor == DUType.Reuse &&
+                            diff1.path.up === 0 && diff1.path.down.length == 1) { // Particular case when the part we are cloning was moved somewhere else.
+                            var down = diff1.path.down;
+                            var sub = diff2.children[down[0]];
+                            if (sub.length === 1 && sub[0].ctor == DType.Clone && sub[0].path.up === 1) {
+                                result.push({ ctor: DType.Clone, path: { up: 0, down: sub[0].path.down }, diffs: DDMerge(diff1.diffs, sub[0].diffs) });
+                            }
+                            else {
+                                result.push(diff1);
+                            }
+                        }
+                        else {
+                            result.push(diff1);
+                        }
+                    }
+                };
+                doDiffs(diff1, diff2);
                 if (diff2.ctor == DType.Clone) {
                     // If same clone, we discard
                     if (diff1.ctor == DType.Clone && diff1.path.up === diff2.path.up && diff1.path.down.join(" ") === diff2.path.down.join(" ")) {
                         return "continue";
                     }
-                    result.push(diff2);
+                    doDiffs(diff2, diff1);
                 }
             }
         };
