@@ -9,5 +9,5 @@ eval([
   "add-on/Utils.js",
   "add-on/RegexUtils.js",
   "add-on/Update.js"].map(o).join("\n\n"));
-eval(o("test_diffs.js"));
-//eval(o("test_update.js"));
+//eval(o("test_diffs.js"));
+eval(o("test_update.js"));

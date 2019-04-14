@@ -37,14 +37,14 @@ var ComputationType;
     ComputationType["Node"] = "Node"; // When processed, before adding to stack, adds the env to the next NodeWithoutEnv in the stack.
 })(ComputationType || (ComputationType = {}));
 function initStack(env, initNode) {
-    return { values: undefined, computations: { head: { tag: ComputationType.Node, env: env, node: initNode }, tail: undefined } };
+    return { values: undefined, computations: { head: { ctor: ComputationType.Node, env: env, node: initNode }, tail: undefined } };
 }
 var __globalThisName__ = "global";
 function initEnv() {
     var Node = typeof Node == "undefined" ? esprima.Node : Node;
     return { head: // Global 'this' object available
         { name: __globalThisName__,
-            value: { tag: ValueType.Ref, name: __globalThisName__ } },
+            value: { ctor: ValueType.Ref, name: __globalThisName__ } },
         tail: undefined };
 }
 // Equivalent of:
@@ -53,7 +53,7 @@ function initEnv() {
 // Perhaps we should consider just rewriting the initial program?
 function initHeap() {
     var _a;
-    return _a = {}, _a[__globalThisName__] = { tag: ValueType.Obj, value: {} }, _a;
+    return _a = {}, _a[__globalThisName__] = { ctor: ValueType.Obj, value: {} }, _a;
 }
 // Converts a node/environment to an initial program
 function initProg(node, env) {
@@ -102,7 +102,7 @@ function copy(object, overrides, reuses) {
             for (var k in overrides) {
                 if (k !== "__with__" && !(k in object)) {
                     var newEntry = overrides[k];
-                    if ("__with__" in newEntry) // Just in case it was described as an override
+                    if (typeof newEntry === "object" && newEntry !== null && "__with__" in newEntry) // Just in case it was described as an override
                         newEntry = newEntry.__with__;
                     model[k] = newEntry;
                 }
@@ -927,24 +927,24 @@ function walkNode(node, preCall, postCall, level) {
             _a);
     }
     var x = preCall ? preCall(node, level) : undefined;
-    if (typeof x !== "undefined")
-        return x;
-    if (node !== null) {
+    if (typeof x === "object" && x.type === "return")
+        return x.value;
+    if (node !== null && x !== "avoid-children") {
         var walker = walkers[node.type];
         if (typeof walker === "function") {
-            var x = walker(node, preCall, postCall, level);
-            if (typeof x !== "undefined")
-                return x;
+            var x_2 = walker(node, preCall, postCall, level);
+            if (typeof x_2 !== "undefined")
+                return x_2;
         }
     }
-    var x = postCall ? postCall(node, level) : undefined;
-    if (typeof x !== "undefined")
-        return x;
+    var y = postCall ? postCall(node, level) : undefined;
+    if (typeof y !== "undefined")
+        return y;
 }
 // Returns a rewriting model for a given body after moving declarations.
 // [a list of declarations that will allocate a heap reference -- initially filled with "undefined" (no declarations if declarations = false),
 // a list of definitions that have to be hoisted (e.g. function definitions)]
-function hoistedDeclarationsDefinitions(body, declarations) {
+function hoistedDeclarationsDefinitions(body, resolve, declarations) {
     if (declarations === void 0) { declarations = true; }
     var Syntax = syntax.Syntax || esprima.Syntax;
     var localVars = {};
@@ -952,7 +952,7 @@ function hoistedDeclarationsDefinitions(body, declarations) {
     var Node = typeof Node == "undefined" ? esprima.Node : Node;
     walkNodes(body, function (node, level) {
         // We hoist variable declarations
-        if (declarations && node.type === Syntax.VariableDeclaration) {
+        if (declarations && node.type === Syntax.VariableDeclaration && node.kind === "var") {
             for (var _i = 0, _a = node.declarations; _i < _a.length; _i++) {
                 var declaration = _a[_i];
                 if (declaration.id.type === Syntax.Identifier) {
@@ -972,17 +972,23 @@ function hoistedDeclarationsDefinitions(body, declarations) {
                     ], [], "let", ";");
             }
             if (typeof level.tail == "undefined") { // Top-level definitions.
+                var assignment = {};
+                for (var k in fd) {
+                    assignment[k] = k === "type" ?
+                        Syntax.FunctionExpression :
+                        { __clone__: resolve(List.toArray(level).concat(k)) };
+                }
                 localDefinitions[fd.id.name] =
-                    new Node.AssignmentExpression(" ", "=", fd.id, { __clone__: List.toArray(level), diffs: { type: Syntax.FunctionExpression } });
+                    new Node.AssignmentExpression(" ", "=", fd.id, assignment);
             }
         }
         // We ignore declarations inside functions.
         if (node.type === Syntax.FunctionDeclaration || node.type === Syntax.FunctionExpression)
-            return true;
+            return "avoid-children";
     });
     var newModel = [];
     for (var k = 0; k < body.length; k++) {
-        newModel[k] = { __with__: [k + ""] };
+        newModel[k] = { __clone__: resolve([k + ""]) };
     }
     for (var defi in localDefinitions) {
         newModel.unshift(localDefinitions[defi]);
@@ -1006,7 +1012,7 @@ function reverseArray(arr) {
 // In the backward direction, a model prevents modifications made to non-cloned nodes, and merges modifications made to nodes that were cloned several times.
 // Modify the reverseModel on place
 function apply_model(obj, model, modelPath, reverseModel) {
-    if (typeof model == "object") {
+    if (typeof model == "object" && model !== null) {
         if ("__clone__" in model) {
             var c = model.__clone__;
             if (typeof c === "string") {
@@ -1065,9 +1071,12 @@ function update_model(model, reverseModel, uSubProg, uSubDiffs, callback) {
 }
 function UpdateRewrite(prog, model_subProg, updateData) {
     var rewriteModel_subprog = copy(prog);
+    /*console.log("rewrite model")
+    console.log(uneval_(model_subProg, ""))*/
     var subProg = apply_model(prog, model_subProg, [], rewriteModel_subprog);
-    return;
-    UpdateContinue(subProg, updateData, function (uSubProg, subDiffs, subProg) {
+    /*console.log("Rewritten program");
+    console.log(uneval_(subProg, ""));*/
+    return UpdateContinue(subProg, updateData, function (uSubProg, subDiffs, subProg) {
         return update_model(model_subProg, rewriteModel_subprog, uSubProg, subDiffs, function (uProg, uDiffs) { return UpdateResult(uProg, uDiffs, prog); });
     });
 }
@@ -1087,7 +1096,7 @@ function getUpdateAction(prog, updateData) {
     var currentComputation = computations.head;
     console.log("currentComputation");
     console.log(currentComputation);
-    if (currentComputation.tag === ComputationType.Node) {
+    if (currentComputation.ctor === ComputationType.Node) {
         var oldNode_1 = currentComputation.node;
         if (!("env" in currentComputation)) {
             console.log(prog);
@@ -1098,49 +1107,23 @@ function getUpdateAction(prog, updateData) {
         switch (oldNode_1.type) {
             case Syntax.Program:
                 var script = oldNode_1;
-                var _b = hoistedDeclarationsDefinitions(script.body, /*declarations*/ true), declarations = _b[0], definitions = _b[1];
-                /*
-                let model_subBody = hoistDeclarations(script.body, true);
-                let model_subRemainingComputations = ...model_subBody__;
-                let model_subProg = ...model_subRemainingComputations...;
-                
-                return UpdateRewrite(prog, model_subProg, updateData);
-                
-                
-                let isFirst = true;
-                // The last computation will be to
-                remainingComputations = cons_(
-                  { tag: ComputationType.FunctionEnd }, remainingComputations);
-                for(let statement of reverseArray(declarations.concat(definitions.concat(script.body)))) {
-                  remainingComputations =
-                    cons_({tag: ComputationType.Node, node: statement}, remainingComputations);
-                  if(isFirst) {
-                    remainingComputations.head.returnedExpressionStatement = true;
-                    isFirst = false;
-                  }
-                }
-                remainingComputations = { head: {...remainingComputations.head, env: env}, tail: remainingComputations };
-                let subProg = {...prog, stack: {values: stack.values, computations: remainingComputations};
-                return UpdateContinue(subProg, updateData,
-                  function(updatedSubProg: Prog, subDiffs: diffs, subProg: Prog):UpdateAction {
-                    if(definitions.length > 0) {
-                      console.log(updatedSubProg.stack.computations.head);
-                      return UpdateFail("TODO: Implement me (Program with hoisted definitions)");
-                      // We cannot skip definitions, we need to merge them at the correct place.
-                    }
-                    let uStack = updatedSubProg.stack;
-                    let m1 = model_list_toArray(
-                      model_list_drop(declarations.length + definitions.length).__clone__, script.body.length, "node")
-                    );
-                    let [recoveredBody, recoveredBodyDiffs] =
-                      DDRewrite(m1, updatedSubProg, subDiffs);
-                    DDRewrite
-                    return UpdateResult({...updatedSubProg,
-                      stack: updatedStackFinal},
-                      updatedDiffsWithoutDeclarations, prog);
-                    // TODO: Reconstruct the original modified program here and its diff
-                  });*/
-                throw "Finish me (Script update)";
+                var bodyToList = function (path) {
+                    path.unshift("body");
+                    path.unshift("node");
+                    path.unshift("head");
+                    path.unshift("computations");
+                    path.unshift("stack");
+                    return path;
+                };
+                var bodyModel = hoistedDeclarationsDefinitions(script.body, bodyToList, /*declarations*/ true);
+                bodyModel = bodyModel.map(function (node, i) {
+                    return i === 0 ? { ctor: ComputationType.Node, node: node, env: { __clone__: ["stack", "computations", "head", "env"] } } :
+                        { ctor: ComputationType.Node, node: node };
+                });
+                var bodyModelList = { stack: { computations: { __with__: arrayToList_(bodyModel, { __clone__: ["stack", "computations", "tail"] }) } }, heap: { __with__: { __clone__: ["heap"] } } };
+                // Now we insert each node of bodyModel as a new computation
+                var progModel = copy(prog, bodyModelList, { __reuse__: true });
+                return UpdateRewrite(prog, progModel, updateData);
             case Syntax.AssignmentExpression:
                 return UpdateFail("TODO - Implement me (AssignmentExpression)");
             case Syntax.VariableDeclaration:
@@ -1156,27 +1139,27 @@ function getUpdateAction(prog, updateData) {
                     var newHeap = prog.heap;
                     var isFirst = true;
                     // First allocate a reference in the environemnt pointing to nothing.
-                    for (var _i = 0, _c = reverseArray(varDecls.declarations); _i < _c.length; _i++) {
-                        var decl = _c[_i];
+                    for (var _i = 0, _b = reverseArray(varDecls.declarations); _i < _b.length; _i++) {
+                        var decl = _b[_i];
                         if (typeof decl.id.name !== "string")
                             return UpdateFail("TODO - Implement me (complex patterns)");
                         var newRef = uniqueRef(decl.id.name); // TODO: 
                         newHeap = copy(newHeap, (_a = {}, _a[newRef] = { __with__: {
-                                tag: HeapValueType.Raw,
+                                ctor: HeapValueType.Raw,
                                 value: undefined
                             }
                         }, _a), { __reuse__: true });
                         newEnv = cons_({ name: decl.id.name,
-                            value: { tag: ValueType.Ref, name: newRef }
+                            value: { ctor: ValueType.Ref, name: newRef }
                         }, newEnv);
                     }
                     // Now rewrite all initializations as assignments.
-                    for (var _d = 0, _e = reverseArray(varDecls.declarations); _d < _e.length; _d++) {
-                        var decl = _e[_d];
+                    for (var _c = 0, _d = reverseArray(varDecls.declarations); _c < _d.length; _c++) {
+                        var decl = _d[_c];
                         var rewrittenNode = new Node.AssignmentExpression(decl.wsBeforeEq, "=", decl.id, decl.init === null ? decl.id : decl.init);
                         rewrittenNode.wsBefore = decl.wsBefore;
                         rewrittenNode.wsAfter = decl.wsAfter;
-                        remainingComputations_1 = { head: { tag: ComputationType.Node, env: env, node: rewrittenNode }, tail: remainingComputations_1 };
+                        remainingComputations_1 = { head: { ctor: ComputationType.Node, env: env, node: rewrittenNode }, tail: remainingComputations_1 };
                     }
                     if (typeof remainingComputations_1 !== "undefined") {
                         // We propagate the environment to the next stack element
@@ -1190,12 +1173,12 @@ function getUpdateAction(prog, updateData) {
                 }
                 else if (varDecls.kind === "var") {
                     //var = just unroll as variable assignments
-                    for (var _f = 0, _g = reverseArray(varDecls.declarations); _f < _g.length; _f++) {
-                        var decl = _g[_f];
+                    for (var _e = 0, _f = reverseArray(varDecls.declarations); _e < _f.length; _e++) {
+                        var decl = _f[_e];
                         var rewrittenNode = new Node.AssignmentExpression(decl.wsBeforeEq, "=", decl.id, decl.init === null ? decl.id : decl.init);
                         rewrittenNode.wsBefore = decl.wsBefore;
                         rewrittenNode.wsAfter = decl.wsAfter;
-                        remainingComputations_1 = { head: { tag: ComputationType.Node, env: env, node: rewrittenNode }, tail: remainingComputations_1 };
+                        remainingComputations_1 = { head: { ctor: ComputationType.Node, env: env, node: rewrittenNode }, tail: remainingComputations_1 };
                     }
                     var subProg = copy(prog, { stack: { computations: remainingComputations_1 } }, { __reuse__: true });
                     return UpdateContinue(subProg, updateData, function (uSubProg, subDiffs, prog) {
@@ -1214,7 +1197,7 @@ function getUpdateAction(prog, updateData) {
                 var expStatement = oldNode_1;
                 if (currentComputation.returnedExpressionStatement) {
                     // Add the expression to the stack.
-                    remainingComputations_1 = { head: { tag: ComputationType.Node, env: env, node: expStatement.expression }, tail: remainingComputations_1 };
+                    remainingComputations_1 = { head: { ctor: ComputationType.Node, env: env, node: expStatement.expression }, tail: remainingComputations_1 };
                     var subProg = copy(prog, { stack: { __with__: remainingComputations_1 } }, { __reuse__: true });
                     return UpdateContinue(subProg, updateData, function (uSubProg, subDiffs, prog) {
                         var updatedNode = new Node.ExpressionStatement(uSubProg.stack.computations.head.node, oldNode_1.semicolon);
@@ -1280,7 +1263,7 @@ function getUpdateAction(prog, updateData) {
                 values:
                 computations: {
                   head: {
-                    tag: ComputationType.Node,
+                    ctor: ComputationType.Node,
                     env: binding.env,
                     node: binding.expr
                   },
@@ -1308,7 +1291,7 @@ function getUpdateAction(prog, updateData) {
                            tail: DDExtract(["stack", "tail"], updatedVarProg.diffs)});
                 return UpdateResult({
                   context: prog.context,
-                  stack: { head: {tag: ComputationType.Node, env: updatedEnv, node: oldNode}
+                  stack: { head: {ctor: ComputationType.Node, env: updatedEnv, node: oldNode}
                          , tail: updatedVarProg.stack.tail},
                   heap: prog.heap,
                   diffs: updatedDiffs
@@ -1368,7 +1351,7 @@ function getUpdateAction(prog, updateData) {
                 return UpdateFail("Reversion does not currently support nodes of type " + oldNode_1.type);
         }
     }
-    return UpdateFail("Reversion does not support this current stack element: " + currentComputation.tag);
+    return UpdateFail("Reversion does not support this current stack element: " + currentComputation.ctor);
 }
 // Find all paths from complexVal to simpleVal if complexVal contains simpleVal
 function allClonePaths_(complexVal, simpleVal) {

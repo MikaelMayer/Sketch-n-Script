@@ -53,8 +53,8 @@ function cons_(head, tail) {
 function nil_()  {
   return undefined;
 }
-function arrayToList_(array)  {
-  var list = nil_();
+function arrayToList_(array, tail)  {
+  var list = tail;
   for(var i = array.length - 1; i >= 0; i--) {
     list = cons_(array[i], list);
   }

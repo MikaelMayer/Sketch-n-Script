@@ -3,7 +3,7 @@
 //console.log(uneval_(computeDiffs_(12, [12, 13])));
 //console.log(uneval_(computeDiffs_([12, '14'], 12)));
 //console.log(uneval_(computeDiffs_(12, 12)));
-
+/*
 let envX12 = {head: {name: "x", value: {
     env: undefined,
     expr: new Node.Literal("", 12, "12"),
@@ -36,7 +36,7 @@ let envS = {head: {name: "s", value: {
     heapSource: {tag: HeapSourceType.Direct, heap: {}},
     v_: [1,"2"]
   }},
-  tail: undefined};
+  tail: undefined};*/
   
 let tests = 0;
 let testsPassed = 0;
