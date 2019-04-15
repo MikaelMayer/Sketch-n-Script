@@ -53,13 +53,6 @@ function cons_(head, tail) {
 function nil_()  {
   return undefined;
 }
-function arrayToList_(array, tail)  {
-  var list = tail;
-  for(var i = array.length - 1; i >= 0; i--) {
-    list = cons_(array[i], list);
-  }
-  return list;
-}
 
 var List = {
   // A foreach which stops if the callback returns true
@@ -99,6 +92,41 @@ var List = {
       result.push(map ? map(list.head, index) : list.head);
       list = list.tail;
       index++;
+    }
+  },
+  fromArray: function(array, list)  {
+    for(var i = array.length - 1; i >= 0; i--) {
+      list = cons_(array[i], list);
+    }
+    return list;
+  },
+  mkString: function(list, callback) {
+    let i = 0;
+    let result = "";
+    while(typeof list !== "undefined") {
+      result += typeof callback !== "undefined" ? callback(list.head, i) : list.head;
+      list = list.tail;
+      i++;
+    }
+    return result;
+  },
+  builder: function() {
+    var initList = undefined;
+    var insertList = undefined;
+    return {
+      append: function(elem) {
+        if(typeof insertList === "undefined") {
+          initList = {head: elem, tail: undefined};
+          insertList = initList;
+        } else {
+          insertList.tail = {head: elem, tail: undefined};
+          insertList = insertList.tail;
+        }
+        return this;
+      },
+      build: function() {
+        return initList;
+      }
     }
   }
 }

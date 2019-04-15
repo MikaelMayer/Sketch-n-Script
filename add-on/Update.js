@@ -147,8 +147,8 @@ function areEqual(obj1, obj2) {
 }
 var DType;
 (function (DType) {
-    DType["Clone"] = "Clone";
     DType["Update"] = "Update";
+    DType["Merge"] = "Merge"; // Only for reverse diffs
 })(DType || (DType = {}));
 ;
 var DUType;
@@ -157,6 +157,10 @@ var DUType;
     DUType["NewValue"] = "NewValue";
 })(DUType || (DUType = {}));
 ;
+var idPath = { up: 0, down: undefined };
+function isIdPath(p) {
+    return p.up === 0 && typeof p.down === "undefined";
+}
 function DDReuse(childDiffs) {
     var existSame = false;
     for (var cd in childDiffs) {
@@ -180,6 +184,7 @@ function DDReuse(childDiffs) {
     // Do some filtering on childDiffs, remove DDSame
     return [{
             ctor: DType.Update,
+            path: idPath,
             kind: { ctor: DUType.Reuse },
             children: filteredChildDiffs
         }];
@@ -198,7 +203,7 @@ function DDChild(name, childDiffs) {
 function DDExtract(name, diffs) {
     if (typeof name === "string") {
         return array_flatten(diffs.map(function (diff) {
-            return diff.ctor === DType.Update ?
+            return diff.ctor === DType.Update && isIdPath(diff.path) ?
                 diff.kind.ctor === DUType.Reuse ?
                     diff.children[name] || DDSame()
                     : undefined
@@ -215,7 +220,7 @@ function DDMap(name, diffs, diffUpdater) {
     if (typeof name === "string") {
         return diffs.map(function (diff) {
             var _a;
-            return diff.ctor === DType.Update ?
+            return diff.ctor === DType.Update && isIdPath(diff.path) ?
                 copy(diff, {
                     children: (_a = {},
                         _a[name] = diffUpdater(diff.children[name]),
@@ -224,7 +229,7 @@ function DDMap(name, diffs, diffUpdater) {
         });
     }
     else {
-        if (name.length == 0)
+        if (name.length === 0)
             return diffUpdater(diffs);
         return DDMap(name[0], diffs, function (d) { return DDMap(name.slice(1), d, diffUpdater); });
     }
@@ -233,7 +238,7 @@ function DDrop(diffs, length) {
     if (length <= 0)
         return diffs;
     var candidates = diffs.map(function (diff) {
-        return diff.ctor == DType.Update ?
+        return diff.ctor === DType.Update && isIdPath(diff.path) ?
             typeof diff.children.tail != "undefined" ?
                 DDrop(diff.children.tail, length - 1) :
                 DDSame()
@@ -242,33 +247,37 @@ function DDrop(diffs, length) {
     return array_flatten(candidates);
 }
 function DDNewValue(newVal) {
-    return [{ ctor: DType.Update, kind: { ctor: DUType.NewValue, model: newVal }, children: {} }];
+    return [{ ctor: DType.Update, path: idPath, kind: { ctor: DUType.NewValue, model: newVal }, children: {} }];
 }
 function DDNewObject(children, model) {
     if (model === void 0) { model = {}; }
-    return [{ ctor: DType.Update, kind: { ctor: DUType.NewValue, model: model }, children: children }];
+    return [{ ctor: DType.Update, path: idPath, kind: { ctor: DUType.NewValue, model: model }, children: children }];
 }
 function DDNewArray(length, children) {
-    return [{ ctor: DType.Update, kind: { ctor: DUType.NewValue, model: Array(length) }, children: children }];
+    return [{ ctor: DType.Update, path: idPath, kind: { ctor: DUType.NewValue, model: Array(length) }, children: children }];
 }
 function DDNewNode(model, children) {
     if (children === void 0) { children = {}; }
-    return [{ ctor: DType.Update, kind: { ctor: DUType.NewValue, model: model }, children: children }];
+    return [{ ctor: DType.Update, path: idPath, kind: { ctor: DUType.NewValue, model: model }, children: children }];
 }
-function DDClone(path, diffs) {
-    if (diffs === void 0) { diffs = DDSame(); }
-    if (Array.isArray(path))
-        path = { up: 0, down: path };
-    return [{ ctor: DType.Clone, path: path, diffs: diffs }];
+function DDClone(path, children) {
+    if (children === void 0) { children = {}; }
+    return [{
+            ctor: DType.Update,
+            path: (typeof path == "string" ? { up: 0, down: { head: path, tail: undefined } } :
+                Array.isArray(path) ? { up: 0, down: List.fromArray(path) } :
+                    Array.isArray(path.down) ? { up: path.up, down: List.fromArray(path.down) } : path),
+            kind: { ctor: DUType.Reuse }, children: children
+        }];
 }
 function DDSame() {
-    return [{ ctor: DType.Update, kind: { ctor: DUType.Reuse }, children: {} }];
+    return [{ ctor: DType.Update, path: idPath, kind: { ctor: DUType.Reuse }, children: {} }];
 }
 function isDDSame(diffs) {
     if (diffs.length != 1)
         return false;
     var diff = diffs[0];
-    if (diff.ctor != DType.Update)
+    if (diff.ctor !== DType.Update || !isIdPath(diff.path))
         return false;
     if (diff.kind.ctor != DUType.Reuse)
         return false;
@@ -278,9 +287,8 @@ function insertionCompatible(diffs) {
     if (typeof diffs == "undefined")
         return false; // Means the "undefined" is the final value in the array.
     return arrayAll(diffs, function (diff) {
-        return diff.ctor == DType.Clone ||
-            diff.ctor == DType.Update && diff.kind.ctor == DUType.NewValue &&
-                arrayAll(Object.keys(diff.children), function (key) { return insertionCompatible(diff.children[key]); });
+        return diff.ctor === DType.Update && diff.kind.ctor == DUType.NewValue &&
+            arrayAll(Object.keys(diff.children), function (key) { return insertionCompatible(diff.children[key]); });
     });
 }
 // Merges two diffs made on the same object.
@@ -293,9 +301,13 @@ function DDMerge(diffs1, diffs2) {
     var result = [];
     var _loop_1 = function (id1) {
         var diff1 = diffs1[id1];
+        if (diff1.ctor !== DType.Update)
+            return "continue";
         var _loop_2 = function (id2) {
             var diff2 = diffs2[id2];
-            if (diff1.ctor == DType.Update && diff2.ctor == DType.Update) {
+            if (diff2.ctor !== DType.Update)
+                return "continue";
+            if (isIdPath(diff1.path) && isIdPath(diff2.path)) {
                 if (diff1.kind.ctor == DUType.Reuse && diff2.kind.ctor == DUType.Reuse) {
                     var c1 = diff1.children;
                     var c2 = diff2.children;
@@ -315,7 +327,7 @@ function DDMerge(diffs1, diffs2) {
                             resultingChildren[k] = c2[k];
                         }
                     }
-                    result.push({ ctor: DType.Update, kind: { ctor: DUType.Reuse }, children: resultingChildren });
+                    result.push({ ctor: DType.Update, path: idPath, kind: { ctor: DUType.Reuse }, children: resultingChildren });
                     return "continue";
                 }
                 if (diff1.kind.ctor == DUType.NewValue && diff2.kind.ctor == DUType.NewValue &&
@@ -334,8 +346,8 @@ function DDMerge(diffs1, diffs2) {
                         var cloneIndexOf_1 = function (ds) {
                             if (ds.length == 1) {
                                 var d = ds[0];
-                                if (d.ctor == DType.Clone && d.path.up == 0 && d.path.down.length == 1) {
-                                    return Number(d.path.down[0]);
+                                if (d.ctor == DType.Update && d.path.up == 0 && List.length(d.path.down) == 1) {
+                                    return Number(d.path.down.head);
                                 }
                             }
                             return undefined;
@@ -385,7 +397,7 @@ function DDMerge(diffs1, diffs2) {
                                 model[i] = undefined;
                                 children[i] = dss[i];
                             }
-                            return { ctor: DType.Update, kind: { ctor: DUType.NewValue, model: model }, children: children };
+                            return { ctor: DType.Update, path: idPath, kind: { ctor: DUType.NewValue, model: model }, children: children };
                         };
                         var filterFromDeletion = function (solution, deleted) {
                             // Filter out only the first element of each kind.
@@ -422,7 +434,7 @@ function DDMerge(diffs1, diffs2) {
                         var merged = DDMerge([diff1], c2[k]);
                         resultingChildren[k] = merged;
                     }
-                    result.push({ ctor: DType.Update, kind: { ctor: DUType.NewValue, model: diff2.kind.model }, children: resultingChildren });
+                    result.push({ ctor: DType.Update, path: idPath, kind: { ctor: DUType.NewValue, model: diff2.kind.model }, children: resultingChildren });
                 }
                 if (diff1.kind.ctor == DUType.NewValue) {
                     // If there is a {ctor: DType.Clone, path: [], diffs: DSame()} below, we can merge it with the current diffs.
@@ -432,32 +444,41 @@ function DDMerge(diffs1, diffs2) {
                         var merged = DDMerge(c1[k], [diff2]);
                         resultingChildren[k] = merged;
                     }
-                    result.push({ ctor: DType.Update, kind: { ctor: DUType.NewValue, model: diff1.kind.model }, children: resultingChildren });
+                    result.push({ ctor: DType.Update, path: idPath, kind: { ctor: DUType.NewValue, model: diff1.kind.model }, children: resultingChildren });
                 }
             }
             else { // One of them is a clone, so an entire replacement. Clones discard other changes.
                 var doDiffs = function (diff1, diff2) {
-                    if (diff1.ctor == DType.Clone) {
-                        if (diff2.ctor == DType.Update && diff2.kind.ctor == DUType.Reuse &&
-                            diff1.path.up === 0 && diff1.path.down.length == 1) { // Particular case when the part we are cloning was moved somewhere else.
+                    if (!isIdPath(diff1.path)) {
+                        if (List.length(diff1.path.down) === 1 &&
+                            diff1.path.up === 0 &&
+                            isIdPath(diff2.path) && diff2.kind.ctor == DUType.Reuse) { // Particular case when the part we are cloning was moved somewhere else.
                             var down = diff1.path.down;
-                            var sub = diff2.children[down[0]];
-                            if (sub.length === 1 && sub[0].ctor == DType.Clone && sub[0].path.up === 1) {
-                                result.push({ ctor: DType.Clone, path: { up: 0, down: sub[0].path.down }, diffs: DDMerge(diff1.diffs, sub[0].diffs) });
-                            }
-                            else {
-                                result.push(diff1);
+                            var subDiffs2 = diff2.children[down.head]; // What happened in diff2 to the element we are cloning from in diff1?
+                            if (subDiffs2.length === 1) {
+                                var subDiff2 = subDiffs2[0];
+                                if (subDiff2.ctor === DType.Update && !isIdPath(subDiff2.path) && subDiff2.path.up === 1) {
+                                    var children = copy(subDiff2.children, {}, { __reuse__: true });
+                                    for (var k in diff1.children) {
+                                        if (k in children) {
+                                            children[k] = DDMerge(children[k], diff1.children[k]);
+                                        }
+                                        else {
+                                            children[k] = diff1.children[k];
+                                        }
+                                    }
+                                    result.push({ ctor: DType.Update, path: { up: 0, down: subDiff2.path.down }, kind: { ctor: DUType.Reuse }, children: children });
+                                    return;
+                                }
                             }
                         }
-                        else {
-                            result.push(diff1);
-                        }
+                        result.push(diff1);
                     }
                 };
                 doDiffs(diff1, diff2);
-                if (diff2.ctor == DType.Clone) {
+                if (!isIdPath(diff2.path)) {
                     // If same clone, we discard
-                    if (diff1.ctor == DType.Clone && diff1.path.up === diff2.path.up && diff1.path.down.join(" ") === diff2.path.down.join(" ")) {
+                    if (!isIdPath(diff1.path) && areEqual(diff1.path, diff2.path)) {
                         return "continue";
                     }
                     doDiffs(diff2, diff1);
@@ -474,6 +495,65 @@ function DDMerge(diffs1, diffs2) {
         var state_1 = _loop_1(id1);
         if (typeof state_1 === "object")
             return state_1.value;
+    }
+    return result;
+}
+// Given an object and a VSA of diffs on in, returns a VSA of the updated object (i.e. each property is wrapped with an array)
+function applyDiffs(obj, diffs) {
+    var result = [];
+    for (var _i = 0, diffs_1 = diffs; _i < diffs_1.length; _i++) {
+        var diff = diffs_1[_i];
+        if (diff.ctor === DType.Update) {
+            var children = diff.children;
+            var oneResult = void 0;
+            if (diff.kind.ctor === DUType.Reuse) {
+                oneResult = {};
+                for (var k in obj) {
+                    if (!(k in children)) {
+                        oneResult[k] = [obj[k]];
+                    }
+                }
+            }
+            else {
+                oneResult = copy(diff.kind.model);
+            }
+            for (var k in children) {
+                var ds = children[k];
+                oneResult[k] = applyDiffs(obj[k], ds);
+            }
+            result.push(oneResult);
+        } // Merge cannot be applied at this point.
+    }
+    return result;
+}
+// Given a VSA, returns all its elements in linear order. Should be fine for most purposes
+function enumerateDirect(vsa, result) {
+    if (result === void 0) { result = []; }
+    for (var _i = 0, vsa_1 = vsa; _i < vsa_1.length; _i++) {
+        var vsaEntry = vsa_1[_i];
+        if (typeof vsaEntry === "object") {
+            var keys = Object.keys(vsaEntry);
+            if (keys.length == 0) {
+                result.push(Array.isArray(vsaEntry) ? [] : {});
+                continue;
+            }
+            var hKey = keys[0];
+            var vsaWithoutHeadKey = copy(vsaEntry, {}, { __reuse__: true }); // Copy the object, keeps children refs.
+            delete vsaWithoutHeadKey[hKey];
+            var hValues = enumerateDirect(vsaEntry[hKey]);
+            for (var _a = 0, _b = enumerateDirect([vsaWithoutHeadKey]); _a < _b.length; _a++) {
+                var tValue = _b[_a];
+                for (var _c = 0, hValues_1 = hValues; _c < hValues_1.length; _c++) {
+                    var hValue = hValues_1[_c];
+                    var tmpResult = copy(tValue, {}, { __reuse__: true });
+                    tmpResult[hKey] = hValue;
+                    result.push(tmpResult);
+                }
+            }
+        }
+        else {
+            result.push(vsaEntry);
+        }
     }
     return result;
 }
@@ -608,9 +688,6 @@ function processUpdateAction(action, callbacks, forks) {
     }
     return Ok({ prog: action.newProg, diffs: action.diffs, alternatives: forks });
 }
-function isDSame(diffs) {
-    return diffs.length === 1 && diffs[0].ctor === DType.Update && diffs[0].kind === DUType.Reuse && diffs[0].children.length === 0;
-}
 // TODO: Incorporate custom path map.
 function processClone(prog, newVal, oldVal, diff, callback) {
     var Syntax = syntax.Syntax || esprima.Syntax;
@@ -618,22 +695,24 @@ function processClone(prog, newVal, oldVal, diff, callback) {
     if (diff.path.up <= prog.context.length) {
         var oldNode = prog.stack.computations.head.node;
         var toClone = diff.path.up == 0 ? oldNode : prog.context[diff.path.up - 1];
-        var nodePathDown = [];
-        for (var _i = 0, _a = diff.path.down; _i < _a.length; _i++) { // We map down path elems to AST
-            var downpathelem = _a[_i];
+        var nodePathDown = List.builder();
+        var downPath = diff.path.down;
+        while (typeof downPath !== "undefined") { // We map down path elems to AST
+            var downpathelem = downPath.head;
             if (toClone && toClone.type == Syntax.ArrayExpression && typeof toClone.elements[downpathelem] != "undefined") {
-                nodePathDown.push("elements");
-                nodePathDown.push(downpathelem);
+                nodePathDown.append("elements");
+                nodePathDown.append(downpathelem);
                 toClone = toClone.elements[downpathelem];
             }
             else
                 return UpdateFail("Cloning path not supported for " + downpathelem + " on " + (toClone ? toClone.type : " empty path"));
+            downPath = downPath.tail;
         }
-        if (isDSame(diff.diffs)) {
-            return UpdateResult(copy(prog, { stack: { computations: { head: { node: { __with__: copy(toClone) } } } } }, { __reuse__: true }), DDChild(["stack", "head", "node"], DDClone({ up: diff.path.up, down: nodePathDown }, DDSame())), prog, callback);
+        if (Object.keys(diff.children).length == 0 && diff.kind.ctor == DUType.Reuse) {
+            return UpdateResult(copy(prog, { stack: { computations: { head: { node: { __with__: copy(toClone) } } } } }, { __reuse__: true }), DDChild(["stack", "computations", "head", "node"], DDClone({ up: diff.path.up, down: nodePathDown.build() })), prog, callback);
         }
         else {
-            return UpdateContinue(copy(prog, { stack: { computations: { head: { node: { __with__: copy(toClone) } } } } }, { __reuse__: true }), { newVal: newVal, oldVal: oldVal, diffs: diff.diffs }, callback || UpdateResult);
+            return UpdateContinue(copy(prog, { stack: { computations: { head: { node: { __with__: copy(toClone) } } } } }, { __reuse__: true }), { newVal: newVal, oldVal: oldVal, diffs: [{ ctor: DType.Update, path: idPath, kind: diff.kind, children: diff.children }] }, callback || UpdateResult);
         }
     }
     else {
@@ -672,9 +751,13 @@ function valToNode_(value) {
 function filterDiffsNoClonesDown(diffs) {
     var willBeEmpty = false;
     var newDiffs = [];
-    for (var _i = 0, diffs_1 = diffs; _i < diffs_1.length; _i++) {
-        var diff = diffs_1[_i];
-        if (diff.ctor === DType.Clone) {
+    for (var _i = 0, diffs_2 = diffs; _i < diffs_2.length; _i++) {
+        var diff = diffs_2[_i];
+        if (diff.ctor == DType.Merge) {
+            newDiffs.push(diff);
+            continue;
+        }
+        if (!isIdPath(diff.path)) {
             if (diff.path.up != 0)
                 newDiffs.push(diff);
             continue;
@@ -686,7 +769,7 @@ function filterDiffsNoClonesDown(diffs) {
                 willBeEmpty = true;
             newChildDiffs[key] = newChildDiffs;
         }
-        newDiffs.push(__assign({}, diff, { children: newChildrenDiffs }));
+        newDiffs.push(copy(diff, { children: { __with__: newChildrenDiffs } }, { __reuse__: true }));
     }
     if (willBeEmpty)
         return [];
@@ -697,7 +780,10 @@ function processClones(prog, updateData, otherwise) {
     var Node = typeof Node == "undefined" ? esprima.Node : Node;
     return UpdateAlternative.apply(void 0, updateData.diffs.map(function (diff) {
         var oldNode = prog.stack.computations.head.node;
-        if (diff.ctor === DType.Clone) {
+        if (diff.ctor === DType.Merge) {
+            return UpdateFail("Cannot process clones if diff is DMerge");
+        }
+        if (!isIdPath(diff.path)) {
             return processClone(prog, updateData.newVal, updateData.oldVal, diff);
         }
         else if (diff.kind.ctor === DUType.NewValue) {
@@ -1120,7 +1206,7 @@ function getUpdateAction(prog, updateData) {
                     return i === 0 ? { ctor: ComputationType.Node, node: node, env: { __clone__: ["stack", "computations", "head", "env"] } } :
                         { ctor: ComputationType.Node, node: node };
                 });
-                var bodyModelList = { stack: { computations: { __with__: arrayToList_(bodyModel, { __clone__: ["stack", "computations", "tail"] }) } }, heap: { __with__: { __clone__: ["heap"] } } };
+                var bodyModelList = { stack: { computations: { __with__: List.fromArray(bodyModel, { __clone__: ["stack", "computations", "tail"] }) } }, heap: { __with__: { __clone__: ["heap"] } } };
                 // Now we insert each node of bodyModel as a new computation
                 var progModel = copy(prog, bodyModelList, { __reuse__: true });
                 return UpdateRewrite(prog, progModel, updateData);
@@ -1316,7 +1402,7 @@ function getUpdateAction(prog, updateData) {
                 if (typeof updateData.newVal == "string" || typeof updateData.newVal == "number") {
                     // Check the diff: Maybe it's a cloned value, e.g. unwrapped?
                     return UpdateAlternative.apply(void 0, updateData.diffs.map(function (diff) {
-                        if (diff.ctor === DType.Clone) {
+                        if (diff.ctor === DType.Update && !isIdPath(diff.path)) {
                             return processClone(prog, updateData.newVal, updateData.oldVal, diff);
                         }
                         else {
@@ -1356,12 +1442,12 @@ function getUpdateAction(prog, updateData) {
 // Find all paths from complexVal to simpleVal if complexVal contains simpleVal
 function allClonePaths_(complexVal, simpleVal) {
     if (uneval_(simpleVal) === uneval_(complexVal))
-        return [{ up: 0, down: [] }];
+        return [{ up: 0, down: undefined }];
     if (typeof complexVal == "object") {
         var diffs = [];
         var _loop_3 = function (k) {
             diffs.push.apply(diffs, allClonePaths_(complexVal[k], simpleVal).map(function (p) {
-                p.down.unshift(k);
+                p.down = cons_(k, p.down);
                 return p;
             }));
         };
@@ -1391,7 +1477,7 @@ function isElement_(value) {
         Array.isArray(value[2]);
 }
 function isSimpleChildClone(d) {
-    return d.ctor == DType.Clone && d.path.up === 0 && d.path.down.length == 1;
+    return d.ctor == DType.Update && d.path.up === 0 && List.length(d.path.down) == 1;
 }
 // Later, we could include the context while computing diffs to recover up clones.
 function computeDiffs_(oldVal, newVal) {
@@ -1408,7 +1494,7 @@ function computeDiffs_(oldVal, newVal) {
             if (typeof oldVal == "object" && lastClosestOffset == 0 &&
                 uneval_(oldVal[key]) == uneval_(newVal[key])) {
                 // Same key, we try not to find fancy diffs with it.
-                childDiffs[key] = DDClone({ up: 0, down: [key] }, DDSame());
+                childDiffs[key] = DDClone(key);
             }
             else {
                 cd = computeDiffs_(oldVal, newVal[key]);
@@ -1461,7 +1547,7 @@ function computeDiffs_(oldVal, newVal) {
             var clonePaths = allClonePaths_(oldVal, newVal);
             var diffs = [];
             for (var c in clonePaths) {
-                diffs.push({ ctor: DType.Clone, path: clonePaths[c], diffs: DDSame() });
+                diffs.push.apply(diffs, DDClone(clonePaths[c]));
             }
             diffs.push.apply(diffs, DDNewValue(newVal));
             // WISH: Sort diffs according to relevance
@@ -1492,7 +1578,7 @@ function computeDiffs_(oldVal, newVal) {
             // Now check if the new value was unwrapped
             var unwrappingPaths = allClonePaths_(oldVal, newVal);
             for (var c in unwrappingPaths) {
-                diffs.push({ ctor: DType.Clone, path: unwrappingPaths[c], diffs: DDSame() });
+                diffs.push.apply(diffs, DDClone(unwrappingPaths[c]));
             }
             // Now let's create a new object or array and obtain the children from the original.
             // Values might be wrapped that way.
