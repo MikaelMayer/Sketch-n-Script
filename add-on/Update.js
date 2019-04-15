@@ -161,7 +161,8 @@ var idPath = { up: 0, down: undefined };
 function isIdPath(p) {
     return p.up === 0 && typeof p.down === "undefined";
 }
-function DDReuse(childDiffs) {
+function DDReuse(childDiffs, path) {
+    if (path === void 0) { path = idPath; }
     var existSame = false;
     for (var cd in childDiffs) {
         if (isDDSame(childDiffs[cd])) {
@@ -184,7 +185,7 @@ function DDReuse(childDiffs) {
     // Do some filtering on childDiffs, remove DDSame
     return [{
             ctor: DType.Update,
-            path: idPath,
+            path: path,
             kind: { ctor: DUType.Reuse },
             children: filteredChildDiffs
         }];
@@ -249,9 +250,10 @@ function DDrop(diffs, length) {
 function DDNewValue(newVal) {
     return [{ ctor: DType.Update, path: idPath, kind: { ctor: DUType.NewValue, model: newVal }, children: {} }];
 }
-function DDNewObject(children, model) {
+function DDNewObject(children, model, path) {
     if (model === void 0) { model = {}; }
-    return [{ ctor: DType.Update, path: idPath, kind: { ctor: DUType.NewValue, model: model }, children: children }];
+    if (path === void 0) { path = idPath; }
+    return [{ ctor: DType.Update, path: path, kind: { ctor: DUType.NewValue, model: model }, children: children }];
 }
 function DDNewArray(length, children) {
     return [{ ctor: DType.Update, path: idPath, kind: { ctor: DUType.NewValue, model: Array(length) }, children: children }];
@@ -499,13 +501,35 @@ function DDMerge(diffs1, diffs2) {
     return result;
 }
 // Given an object and a VSA of diffs on in, returns a VSA of the updated object (i.e. each property is wrapped with an array)
-function applyDiffs(obj, diffs) {
+function applyDiffs(obj, diffs, context) {
+    if (context === void 0) { context = undefined; }
     var result = [];
     for (var _i = 0, diffs_1 = diffs; _i < diffs_1.length; _i++) {
         var diff = diffs_1[_i];
         if (diff.ctor === DType.Update) {
             var children = diff.children;
             var oneResult = void 0;
+            var up = diff.path.up;
+            var c = context;
+            while (up) {
+                if (typeof c == undefined) {
+                    console.log(diff);
+                    throw "Clone outside of context in applyDiffs";
+                }
+                obj = c.head;
+                c = c.tail;
+                up--;
+            }
+            var down = diff.path.down;
+            while (typeof down !== "undefined") {
+                if (typeof obj !== "object") {
+                    console.log(diff);
+                    throw "Clone outside of range in applyDiffs";
+                }
+                c = cons_(obj, c);
+                obj = obj[down.head];
+                down = down.tail;
+            }
             if (diff.kind.ctor === DUType.Reuse) {
                 oneResult = {};
                 for (var k in obj) {
@@ -519,7 +543,7 @@ function applyDiffs(obj, diffs) {
             }
             for (var k in children) {
                 var ds = children[k];
-                oneResult[k] = applyDiffs(obj[k], ds);
+                oneResult[k] = applyDiffs(obj[k], ds, cons_(obj, c));
             }
             result.push(oneResult);
         } // Merge cannot be applied at this point.
@@ -1027,10 +1051,10 @@ function walkNode(node, preCall, postCall, level) {
     if (typeof y !== "undefined")
         return y;
 }
-// Returns a rewriting model for a given body after moving declarations.
+// Returns a rewriting Diffs (single-value) for a given body after moving declarations.
 // [a list of declarations that will allocate a heap reference -- initially filled with "undefined" (no declarations if declarations = false),
 // a list of definitions that have to be hoisted (e.g. function definitions)]
-function hoistedDeclarationsDefinitions(body, resolve, declarations) {
+function hoistedDeclarationsDefinitions(body, declarations) {
     if (declarations === void 0) { declarations = true; }
     var Syntax = syntax.Syntax || esprima.Syntax;
     var localVars = {};
@@ -1054,18 +1078,12 @@ function hoistedDeclarationsDefinitions(body, resolve, declarations) {
             var fd = node;
             if (declarations) {
                 localVars[fd.id.name] =
-                    new Node.VariableDeclaration("\n", [new Node.VariableDeclarator(fd.id, " ", null)
-                    ], [], "let", ";");
+                    DDNewObject({}, new Node.VariableDeclaration("\n", [new Node.VariableDeclarator(fd.id, " ", null)
+                    ], [], "let", ";"));
             }
             if (typeof level.tail == "undefined") { // Top-level definitions.
-                var assignment = {};
-                for (var k in fd) {
-                    assignment[k] = k === "type" ?
-                        Syntax.FunctionExpression :
-                        { __clone__: resolve(List.toArray(level).concat(k)) };
-                }
                 localDefinitions[fd.id.name] =
-                    new Node.AssignmentExpression(" ", "=", fd.id, assignment);
+                    DDNewObject({ right: DDReuse({ type: DDNewValue(Syntax.FunctionExpression) }, { up: 0, down: level }) }, new Node.AssignmentExpression(" ", "=", fd.id, new Node.Import("")));
             }
         }
         // We ignore declarations inside functions.
@@ -1074,7 +1092,7 @@ function hoistedDeclarationsDefinitions(body, resolve, declarations) {
     });
     var newModel = [];
     for (var k = 0; k < body.length; k++) {
-        newModel[k] = { __clone__: resolve([k + ""]) };
+        newModel[k] = DDClone({ up: 0, down: cons_(k + "", undefined) });
     }
     for (var defi in localDefinitions) {
         newModel.unshift(localDefinitions[defi]);
@@ -1157,11 +1175,12 @@ function update_model(model, reverseModel, uSubProg, uSubDiffs, callback) {
 }
 function UpdateRewrite(prog, model_subProg, updateData) {
     var rewriteModel_subprog = copy(prog);
-    /*console.log("rewrite model")
-    console.log(uneval_(model_subProg, ""))*/
-    var subProg = apply_model(prog, model_subProg, [], rewriteModel_subprog);
-    /*console.log("Rewritten program");
-    console.log(uneval_(subProg, ""));*/
+    console.log("rewrite model");
+    console.log(uneval_(model_subProg, "")); /**/
+    var subProg = enumerateDirect(applyDiffs(prog, model_subProg))[0];
+    /**/
+    console.log("Rewritten program");
+    console.log(uneval_(subProg, "")); /**/
     return UpdateContinue(subProg, updateData, function (uSubProg, subDiffs, subProg) {
         return update_model(model_subProg, rewriteModel_subprog, uSubProg, subDiffs, function (uProg, uDiffs) { return UpdateResult(uProg, uDiffs, prog); });
     });
@@ -1193,22 +1212,17 @@ function getUpdateAction(prog, updateData) {
         switch (oldNode_1.type) {
             case Syntax.Program:
                 var script = oldNode_1;
-                var bodyToList = function (path) {
-                    path.unshift("body");
-                    path.unshift("node");
-                    path.unshift("head");
-                    path.unshift("computations");
-                    path.unshift("stack");
-                    return path;
-                };
-                var bodyModel = hoistedDeclarationsDefinitions(script.body, bodyToList, /*declarations*/ true);
-                bodyModel = bodyModel.map(function (node, i) {
-                    return i === 0 ? { ctor: ComputationType.Node, node: node, env: { __clone__: ["stack", "computations", "head", "env"] } } :
-                        { ctor: ComputationType.Node, node: node };
+                var bodyModelDiff = hoistedDeclarationsDefinitions(script.body, /*declarations*/ true);
+                bodyModelDiff = bodyModelDiff.map(function (nodeModel, i) {
+                    return i === 0 ? DDNewObject({ node: nodeModel, env: DDClone(["head", "env"]) }, { ctor: ComputationType.Node, node: undefined, env: undefined }) :
+                        DDNewObject({ node: nodeModel }, { ctor: ComputationType.Node, node: undefined });
                 });
-                var bodyModelList = { stack: { computations: { __with__: List.fromArray(bodyModel, { __clone__: ["stack", "computations", "tail"] }) } }, heap: { __with__: { __clone__: ["heap"] } } };
+                var bodyModelListDiffs = DDClone(["tail"]);
+                for (var i = bodyModelDiff.length - 1; i >= 0; i--) {
+                    bodyModelListDiffs = DDNewObject({ head: bodyModelDiff[i], tail: bodyModelListDiffs });
+                }
                 // Now we insert each node of bodyModel as a new computation
-                var progModel = copy(prog, bodyModelList, { __reuse__: true });
+                var progModel = DDReuse({ stack: DDReuse({ computations: bodyModelListDiffs }) });
                 return UpdateRewrite(prog, progModel, updateData);
             case Syntax.AssignmentExpression:
                 return UpdateFail("TODO - Implement me (AssignmentExpression)");

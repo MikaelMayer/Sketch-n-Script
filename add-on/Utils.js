@@ -124,10 +124,31 @@ var List = {
         }
         return this;
       },
+      appendList: function(tail) {
+        if(typeof insertList === "undefined") {
+          initList = tail;
+          insertList = tail;
+        } else {
+          insertList.tail = tail;
+        }
+        while(typeof insertList.tail !== undefined) {
+          insertList = insertList.tail;
+        }
+        return this;
+      },
       build: function() {
         return initList;
       }
     }
+  },
+  concat: function(list1, list2) {
+    var b = this.builder();
+    while(typeof list1 !== "undefined") {
+      b.append(list1.head);
+      list1 = list1.tail;
+    }
+    b.appendList(list2);
+    return b.build();
   }
 }
 

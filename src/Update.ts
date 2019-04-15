@@ -16,7 +16,8 @@ declare var List: {
     toArray: (<a>(list: List<a>) => a[]), /* | (<a, b>(list: List<a>, map: (v: a) => b) => b[])*/
     fromArray: (<a>(arr: a[], tail?: List<a>) => List<a>),
     mkString: <a>(list: List<a>, callback: (elem: a, index?: number) => string) => string,
-    builder: <a>() => { append: (a) => undefined, build: () => List<a> }
+    builder: <a>() => { append: (a) => undefined, build: () => List<a> },
+    concat: <a>(list1: List<a>, list2: List<a>) => List<a>
   }
 declare function cons_<a>(arg: a, tail: List<a>): List<a>
 declare function array_flatten<a>(arg: (a | undefined)[][]): a[]
@@ -223,7 +224,7 @@ var idPath: Path = { up: 0, down: undefined};
 function isIdPath(p: Path): Boolean {
   return p.up === 0 && typeof p.down === "undefined";
 }
-function DDReuse(childDiffs: ChildDiffs): DUpdate[] {
+function DDReuse(childDiffs: ChildDiffs, path: Path = idPath): DUpdate[] {
   let existSame = false;
   for(let cd in childDiffs) {
     if(isDDSame(childDiffs[cd])) {
@@ -245,7 +246,7 @@ function DDReuse(childDiffs: ChildDiffs): DUpdate[] {
   // Do some filtering on childDiffs, remove DDSame
   return [{
     ctor: DType.Update,
-    path: idPath,
+    path: path,
     kind: {ctor: DUType.Reuse },
     children: filteredChildDiffs
   }];
@@ -300,8 +301,8 @@ function DDrop(diffs: Diffs, length: number): Diffs {
 function DDNewValue(newVal: any): DUpdate[] {
   return [{ctor: DType.Update, path: idPath, kind: {ctor: DUType.NewValue, model: newVal}, children: {}}];
 }
-function DDNewObject(children: ChildDiffs, model = {}): DUpdate[] {
-  return [{ctor: DType.Update, path: idPath, kind: {ctor: DUType.NewValue, model: model}, children: children}];
+function DDNewObject(children: ChildDiffs, model = {}, path: Path = idPath): DUpdate[] {
+  return [{ctor: DType.Update, path: path, kind: {ctor: DUType.NewValue, model: model}, children: children}];
 }
 function DDNewArray(length: number, children: ChildDiffs): DUpdate[] {
   return [{ctor: DType.Update, path: idPath, kind: {ctor: DUType.NewValue, model: Array(length)}, children: children}];
@@ -532,12 +533,33 @@ type VSAEntry = number | string | boolean | {[key: string]: VSA} | {[key: number
 type VSA = VSAEntry[]
 
 // Given an object and a VSA of diffs on in, returns a VSA of the updated object (i.e. each property is wrapped with an array)
-function applyDiffs(obj: any, diffs: Diffs): VSA {
+function applyDiffs(obj: any, diffs: Diffs, context: List<any> = undefined): VSA {
   let result: VSA = [];
   for(let diff of diffs) {
     if(diff.ctor === DType.Update) {
       let children = diff.children;
       let oneResult: {[key: string]: VSA};
+      let up = diff.path.up;
+      let c = context;
+      while(up) {
+        if(typeof c == undefined) {
+          console.log(diff);
+          throw "Clone outside of context in applyDiffs"
+        }
+        obj = c.head;
+        c = c.tail;
+        up--;
+      }
+      let down = diff.path.down;
+      while(typeof down !== "undefined") {
+        if(typeof obj !== "object") {
+          console.log(diff);
+          throw "Clone outside of range in applyDiffs"
+        }
+        c = cons_(obj, c);
+        obj = obj[down.head];
+        down = down.tail;
+      }
       if(diff.kind.ctor === DUType.Reuse) {
         oneResult = {};
         for(let k in obj) {
@@ -550,7 +572,7 @@ function applyDiffs(obj: any, diffs: Diffs): VSA {
       }
       for(let k in children) {
         let ds = children[k];
-        oneResult[k] = applyDiffs(obj[k], ds);
+        oneResult[k] = applyDiffs(obj[k], ds, cons_(obj, c));
       }
       result.push(oneResult);
     } // Merge cannot be applied at this point.
@@ -1055,13 +1077,13 @@ function walkNode(
   if(typeof y !== "undefined") return y;
 }
 
-// Returns a rewriting model for a given body after moving declarations.
+// Returns a rewriting Diffs (single-value) for a given body after moving declarations.
 // [a list of declarations that will allocate a heap reference -- initially filled with "undefined" (no declarations if declarations = false),
 // a list of definitions that have to be hoisted (e.g. function definitions)]
-function hoistedDeclarationsDefinitions(body: AnyNode[], resolve: (level: string[]) => string[], declarations = true): Model {
+function hoistedDeclarationsDefinitions(body: AnyNode[], declarations = true): Diffs[] {
   var Syntax = syntax.Syntax || esprima.Syntax;
-  var localVars: { [name: string]: Node.VariableDeclaration } = {};
-  var localDefinitions: {[name: string]: Node.AssignmentExpression } = {}; 
+  var localVars: { [name: string]: Diffs} = {};
+  var localDefinitions: {[name: string]: Diffs } = {}; 
   var Node = typeof Node == "undefined" ? esprima.Node : Node;
   walkNodes(body, (node: any, level: List<string>) => {
     // We hoist variable declarations
@@ -1082,29 +1104,26 @@ function hoistedDeclarationsDefinitions(body: AnyNode[], resolve: (level: string
       let fd = node as Node.FunctionDeclaration;
       if(declarations) {
         localVars[(fd.id as Node.Identifier).name] =
-          new Node.VariableDeclaration("\n",
+          DDNewObject({}, new Node.VariableDeclaration("\n",
             [new Node.VariableDeclarator(
               fd.id as Node.Identifier, " ", null)
-            ], [], "let", ";");
+            ], [], "let", ";"));
       }
       if(typeof level.tail == "undefined") { // Top-level definitions.
-        let assignment = {};
-        for(let k in fd) {
-          assignment[k] = k === "type" ?
-            Syntax.FunctionExpression :
-            {__clone__: resolve(List.toArray<string>(level as List<string>).concat(k)) };
-        }
         localDefinitions[(fd.id as Node.Identifier).name] =
-          new Node.AssignmentExpression(" ","=", fd.id as Node.Identifier,
-            assignment as unknown as Node.Expression);
+          DDNewObject(
+          { right: DDReuse(
+            { type: DDNewValue(Syntax.FunctionExpression)},
+            {up: 0, down: level}) },
+          new Node.AssignmentExpression(" ","=", fd.id as Node.Identifier, new Node.Import("")))
       }
     }
     // We ignore declarations inside functions.
     if(node.type === Syntax.FunctionDeclaration || node.type === Syntax.FunctionExpression) return "avoid-children";
   });
-  let newModel = [];
+  let newModel: Diffs[] = [];
   for(let k = 0; k < body.length; k++) {
-    newModel[k] = {__clone__: resolve([k + ""])};
+    newModel[k] = DDClone({up: 0, down: cons_(k + "", undefined)});
   }
   for(let defi in localDefinitions) {
     newModel.unshift(localDefinitions[defi]);
@@ -1187,13 +1206,14 @@ function update_model(model: any, reverseModel: any, uSubProg: Prog, uSubDiffs: 
   throw "Implement me: update_model"
 }
 
-function UpdateRewrite(prog, model_subProg, updateData): UpdateAction {
+function UpdateRewrite(prog: Prog, model_subProg: Diffs, updateData: UpdateData): UpdateAction {
   let rewriteModel_subprog = copy(prog);
-  /*console.log("rewrite model")
-  console.log(uneval_(model_subProg, ""))*/
-  let subProg = apply_model(prog, model_subProg, [], rewriteModel_subprog);
-  /*console.log("Rewritten program");
-  console.log(uneval_(subProg, ""));*/
+  console.log("rewrite model")
+  console.log(uneval_(model_subProg, ""))/**/
+  let subProg = enumerateDirect(applyDiffs(prog, model_subProg))[0];
+  /**/
+  console.log("Rewritten program");
+  console.log(uneval_(subProg, ""));/**/
   return UpdateContinue(subProg, updateData,
     function(uSubProg, subDiffs, subProg): UpdateAction {
       return update_model(model_subProg, rewriteModel_subprog, uSubProg, subDiffs, (uProg, uDiffs) => UpdateResult(uProg, uDiffs, prog));
@@ -1226,21 +1246,19 @@ function getUpdateAction(prog: Prog, updateData: UpdateData): UpdateAction {
     switch(oldNode.type) {
     case Syntax.Program:
       let script: Node.Script = oldNode as Node.Script;
-      let bodyToList = function(path) {
-        path.unshift("body");
-        path.unshift("node");
-        path.unshift("head");
-        path.unshift("computations");
-        path.unshift("stack");
-        return path;
+      let bodyModelDiff: Diffs[] = hoistedDeclarationsDefinitions(script.body, /*declarations*/true);
+      bodyModelDiff = bodyModelDiff.map((nodeModel, i) => 
+          i === 0 ? DDNewObject({ node: nodeModel,  env: DDClone(["head", "env"])},
+                                {ctor: ComputationType.Node, node: undefined, env: undefined}) :
+                    DDNewObject({ node: nodeModel},
+                                {ctor: ComputationType.Node, node: undefined})
+        );
+      let bodyModelListDiffs: Diffs = DDClone(["tail"]);
+      for(let i = bodyModelDiff.length - 1; i >= 0; i--) {
+        bodyModelListDiffs = DDNewObject({head: bodyModelDiff[i], tail: bodyModelListDiffs});
       }
-      let bodyModel = hoistedDeclarationsDefinitions(script.body, bodyToList, /*declarations*/true);
-      bodyModel = bodyModel.map((node, i) => 
-        i === 0 ? {ctor: ComputationType.Node, node: node, env: {__clone__: ["stack", "computations", "head", "env"] }} :
-        { ctor: ComputationType.Node, node: node });
-      let bodyModelList = { stack: { computations: {__with__: List.fromArray(bodyModel, {__clone__: ["stack", "computations", "tail"]} as unknown as List<any>) } }, heap: {__with__: {__clone__: ["heap"]}}};
       // Now we insert each node of bodyModel as a new computation
-      let progModel = copy(prog, bodyModelList , { __reuse__: true});
+      let progModel = DDReuse({stack: DDReuse({computations: bodyModelListDiffs})})
       return UpdateRewrite(prog, progModel, updateData);
     case Syntax.AssignmentExpression:
       return UpdateFail("TODO - Implement me (AssignmentExpression)");
