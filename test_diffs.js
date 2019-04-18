@@ -36,34 +36,46 @@ assertEqual(
 
 
 assertEqual(
-  DDMerge(DDReuse({0: DDClone({up: 1, down: [1]}), 1: DDClone({up: 1, down: [0]})}, [undefined, undefined]),
-    DDNewObject({0: DDClone([0]), 1: DDClone([1]), 2: DDClone([1])}, [undefined, undefined, undefined])
+  DDMerge(DDReuse({0: DDClone({up: 1, down: ["1"]}), 1: DDClone({up: 1, down: ["0"]})}),
+    DDNewObject({0: DDClone(["0"]), 1: DDClone(["1"]), 2: DDClone(["1"])}, [undefined, undefined, undefined])
   ),
-  DDNewObject({0: DDClone([1]), 1: DDClone([0]), 2: DDClone([0])}, [undefined, undefined, undefined])
+  DDNewObject({0: DDClone(["1"]), 1: DDClone(["0"]), 2: DDClone(["0"])}, [undefined, undefined, undefined])
   ,
   "One swap and a clone of last element on a 2-element array"
 );
 
+
 assertEqual(
-  DDMerge(DDNewObject({0: DDClone([1]), 1: DDClone([0])}, [undefined, undefined]),
-    DDNewObject({0: DDClone([0]), 1: DDClone([1]), 2: DDClone([0])}, [undefined, undefined, undefined])
+  DDMerge(DDNewObject({0: DDClone(["1"]), 1: DDClone(["0"])}, [undefined, undefined]),
+    DDNewObject({0: DDClone(["0"]), 1: DDClone(["1"]), 2: DDClone(["0"])}, [undefined, undefined, undefined])
   ),
-  DDNewObject({0: DDClone([1]), 1: DDClone([0]), 2: DDClone([0])}, [undefined, undefined, undefined])
+  DDNewObject({0: DDClone(["1"]), 1: DDClone(["0"]), 2: DDClone(["0"])}, [undefined, undefined, undefined])
   ,
   "One swap and a clone of first element on a 2-element array"
 );
 
 
+/*
 
 (function () {
   let prog = {a: { b: 1}, c: [2, 2], d: 3}
-  let model = {a: {__clone__: "c"}, c: {__clone__: ["a", "b"]}, d: {__clone__: "c"}};
-  let reverseModelExpected = {a: {b: {__reverseClone__: [["c"]]}}, c: {__reverseClone__: [["a"], ["d"]]}, d: 3}
-  let subProg = {a: [2, 2], c: 1, d: [2, 2]}
-  //let uSubProg: {a: [3, 2], c: 4, d: [2, 5]}
-  let reverseModel = copy(prog);
-  assertEqual(apply_model(prog, model, [], reverseModel), subProg);
-  assertEqual(reverseModel, reverseModelExpected);
+  let model = DDReuse(
+    {a: DDClone({up: 1, down: ["c"]}), c: DDClone({up: 1, down: ["a", "b"]}), d: DDClone({up: 1, down: ["c"]})});
+  let reverseModelExpected =
+        DDNewObject({
+          a: DDNewObject({b: DDMerge([DDClone({up: 0, down: ["c"]})])}),
+          c: DDMerge([DDClone({down: ["a"]}), DDClone({up: 0, down: ["d"]})]),
+          }, {a: undefined, c: undefined, d: 3})
+  let subProg = {a: [2, 2], c: 1, d: [2, 2]};
+  assertEqual(applyDiffs1(prog, model), subProg);
+  assertEqual(reverseDiffs(prog, model), reverseModelExpected);
+  let uSubProg = {a: [3, 2], c: 4, d: [2, 5]};
+  let uSubDiffs = DDReuse({a: DDReuse({0: DDNewVal(3)}), c: DDNewVal(4), d: DDReuse({1: DDNewVal(5)})});
+  let expectedProg = {a: { b: 4}, c: [3, 5], d: 3}
+  let expectedDiffs = DDReuse({a: DDReuse({b: DDNewVal(4)}), c: DDReuse({0: DDNewVal(3), 1: DDNewVal(5)})})
+  assertEqual(applyHorizontalDiffs(uSubProg, uSubDiffs, reverseModelExpected),
+    [expectedProg, expectedDiffs]);
+  // TODO: With the reverseModelExpected, there is no such thing as DDSame(), it will think that d should be overriden
 })()
 //*/
 

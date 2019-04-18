@@ -275,6 +275,13 @@ function DDClone(path, children) {
 function DDSame() {
     return [{ ctor: DType.Update, path: idPath, kind: { ctor: DUType.Reuse }, children: {} }];
 }
+function DDMapDownPaths(mapper, diffs) {
+    return diffs.map(function (diff) {
+        return diff.ctor == DType.Update && diff.path.up === 0 ?
+            copy(diff, { path: { down: { __with__: mapper(diff.path.down) } } }, { __reuse__: true }) :
+            diff;
+    });
+}
 function isDDSame(diffs) {
     if (diffs.length != 1)
         return false;
@@ -289,8 +296,9 @@ function insertionCompatible(diffs) {
     if (typeof diffs == "undefined")
         return false; // Means the "undefined" is the final value in the array.
     return arrayAll(diffs, function (diff) {
-        return diff.ctor === DType.Update && diff.kind.ctor == DUType.NewValue &&
-            arrayAll(Object.keys(diff.children), function (key) { return insertionCompatible(diff.children[key]); });
+        return diff.ctor === DType.Update && (diff.kind.ctor == DUType.NewValue &&
+            arrayAll(Object.keys(diff.children), function (key) { return insertionCompatible(diff.children[key]); }) ||
+            isSimpleChildClone(diff));
     });
 }
 // Merges two diffs made on the same object.
@@ -500,36 +508,46 @@ function DDMerge(diffs1, diffs2) {
     }
     return result;
 }
+function walkPath(obj, context, path) {
+    var up = path.up;
+    var c = context;
+    while (up) {
+        if (typeof c == undefined) {
+            console.log(path);
+            console.log(context);
+            console.log(obj);
+            throw "walk outside of context in applyDiffs";
+        }
+        obj = c.head;
+        c = c.tail;
+        up--;
+    }
+    var down = path.down;
+    while (typeof down !== "undefined") {
+        if (typeof obj !== "object") {
+            console.log(path);
+            console.log(context);
+            console.log(obj);
+            throw "Clone outside of range in applyDiffs";
+        }
+        c = cons_(obj, c);
+        obj = obj[down.head];
+        down = down.tail;
+    }
+    return [obj, c];
+}
 // Given an object and a VSA of diffs on in, returns a VSA of the updated object (i.e. each property is wrapped with an array)
 function applyDiffs(obj, diffs, context) {
     if (context === void 0) { context = undefined; }
+    var _a;
     var result = [];
     for (var _i = 0, diffs_1 = diffs; _i < diffs_1.length; _i++) {
         var diff = diffs_1[_i];
         if (diff.ctor === DType.Update) {
             var children = diff.children;
             var oneResult = void 0;
-            var up = diff.path.up;
-            var c = context;
-            while (up) {
-                if (typeof c == undefined) {
-                    console.log(diff);
-                    throw "Clone outside of context in applyDiffs";
-                }
-                obj = c.head;
-                c = c.tail;
-                up--;
-            }
-            var down = diff.path.down;
-            while (typeof down !== "undefined") {
-                if (typeof obj !== "object") {
-                    console.log(diff);
-                    throw "Clone outside of range in applyDiffs";
-                }
-                c = cons_(obj, c);
-                obj = obj[down.head];
-                down = down.tail;
-            }
+            var c = void 0;
+            _a = walkPath(obj, context, diff.path), obj = _a[0], c = _a[1];
             if (diff.kind.ctor === DUType.Reuse) {
                 oneResult = {};
                 for (var k in obj) {
@@ -543,7 +561,7 @@ function applyDiffs(obj, diffs, context) {
             }
             for (var k in children) {
                 var ds = children[k];
-                oneResult[k] = applyDiffs(obj[k], ds, cons_(obj, c));
+                oneResult[k] = applyDiffs(diff.kind.ctor == DUType.Reuse ? obj[k] : obj, ds, diff.kind.ctor == DUType.Reuse ? cons_(obj, c) : c);
             }
             result.push(oneResult);
         } // Merge cannot be applied at this point.
@@ -578,6 +596,38 @@ function enumerateDirect(vsa, result) {
         else {
             result.push(vsaEntry);
         }
+    }
+    return result;
+}
+// Same as applyDiffs but returns the first result (composition of enumerateDirect and applyDiffs)
+function applyDiffs1(obj, diffs, context) {
+    if (context === void 0) { context = undefined; }
+    var _a;
+    var result;
+    for (var _i = 0, diffs_2 = diffs; _i < diffs_2.length; _i++) {
+        var diff = diffs_2[_i];
+        if (diff.ctor === DType.Update) {
+            var children = diff.children;
+            var up = diff.path.up;
+            var c = void 0;
+            _a = walkPath(obj, context, diff.path), obj = _a[0], c = _a[1];
+            if (diff.kind.ctor === DUType.Reuse) {
+                result = {};
+                for (var k in obj) {
+                    if (!(k in children)) {
+                        result[k] = [obj[k]];
+                    }
+                }
+            }
+            else {
+                result = copy(diff.kind.model);
+            }
+            for (var k in children) {
+                var ds = children[k];
+                result[k] = applyDiffs1(diff.kind.ctor == DUType.Reuse ? obj[k] : obj, ds, diff.kind.ctor == DUType.Reuse ? cons_(obj, c) : c);
+            }
+        } // Merge cannot be applied at this point.
+        break;
     }
     return result;
 }
@@ -775,8 +825,8 @@ function valToNode_(value) {
 function filterDiffsNoClonesDown(diffs) {
     var willBeEmpty = false;
     var newDiffs = [];
-    for (var _i = 0, diffs_2 = diffs; _i < diffs_2.length; _i++) {
-        var diff = diffs_2[_i];
+    for (var _i = 0, diffs_3 = diffs; _i < diffs_3.length; _i++) {
+        var diff = diffs_3[_i];
         if (diff.ctor == DType.Merge) {
             newDiffs.push(diff);
             continue;
@@ -1109,51 +1159,6 @@ function reverseArray(arr) {
     }
     return newArray;
 }
-// A rewrite model is either {__clone__: clone path} or
-// an object or array whose values are models.
-// In the forward direction, a model demonstrates how to build the new value
-// A reverse rewrite model is either {__reverseClone__: clone path[]} or an object or array whose values are reverse rewrite models.
-// In the backward direction, a model prevents modifications made to non-cloned nodes, and merges modifications made to nodes that were cloned several times.
-// Modify the reverseModel on place
-function apply_model(obj, model, modelPath, reverseModel) {
-    if (typeof model == "object" && model !== null) {
-        if ("__clone__" in model) {
-            var c = model.__clone__;
-            if (typeof c === "string") {
-                return apply_model(obj, { __clone__: [c] }, modelPath, reverseModel);
-            }
-            else if (Array.isArray(c)) {
-                var result = obj;
-                var rTmp = reverseModel;
-                for (var i = 0; i < c.length; i++) {
-                    result = result[c[i]];
-                    if (i < c.length - 1)
-                        rTmp = rTmp[c[i]];
-                }
-                var toReplace = rTmp[c[c.length - 1]];
-                if (typeof toReplace !== "object" || !("__reverseClone__" in toReplace)) {
-                    rTmp[c[c.length - 1]] = ({ __reverseClone__: [modelPath] });
-                }
-                else {
-                    toReplace.__reverseClone__.push(modelPath);
-                }
-                return result;
-            }
-            else {
-                console.log(c);
-                throw "__clone__ should be a string or an array, got something else. See console.";
-            }
-        }
-        // Regular objects
-        var finalValue = Array.isArray(model) ? [] : {};
-        for (var k in model) {
-            var childValue = apply_model(obj, model[k], modelPath.concat([k]), reverseModel);
-            finalValue[k] = childValue;
-        }
-        return finalValue;
-    }
-    return model;
-}
 /*
 prog: {a: { b: 1}, c: [2, 2], d: 3}
 model: {a: {__clone__: "c"}, c: {__clone__: ["a", "b"]}, d: {__clone__: "c"}}
@@ -1174,10 +1179,12 @@ function update_model(model, reverseModel, uSubProg, uSubDiffs, callback) {
     throw "Implement me: update_model";
 }
 function UpdateRewrite(prog, model_subProg, updateData) {
+    console.log("original prog");
+    console.log(uneval_(prog, ""));
     var rewriteModel_subprog = copy(prog);
     console.log("rewrite model");
     console.log(uneval_(model_subProg, "")); /**/
-    var subProg = enumerateDirect(applyDiffs(prog, model_subProg))[0];
+    var subProg = applyDiffs1(prog, model_subProg);
     /**/
     console.log("Rewritten program");
     console.log(uneval_(subProg, "")); /**/
@@ -1214,8 +1221,8 @@ function getUpdateAction(prog, updateData) {
                 var script = oldNode_1;
                 var bodyModelDiff = hoistedDeclarationsDefinitions(script.body, /*declarations*/ true);
                 bodyModelDiff = bodyModelDiff.map(function (nodeModel, i) {
-                    return i === 0 ? DDNewObject({ node: nodeModel, env: DDClone(["head", "env"]) }, { ctor: ComputationType.Node, node: undefined, env: undefined }) :
-                        DDNewObject({ node: nodeModel }, { ctor: ComputationType.Node, node: undefined });
+                    return i === 0 ? DDNewObject({ node: DDMapDownPaths(function (p) { return cons_("head", cons_("node", cons_("body", p))); }, nodeModel), env: DDClone(["head", "env"]) }, { ctor: ComputationType.Node, node: undefined, env: undefined }) :
+                        DDNewObject({ node: DDMapDownPaths(function (p) { return cons_("head", cons_("node", cons_("body", p))); }, nodeModel) }, { ctor: ComputationType.Node, node: undefined });
                 });
                 var bodyModelListDiffs = DDClone(["tail"]);
                 for (var i = bodyModelDiff.length - 1; i >= 0; i--) {
