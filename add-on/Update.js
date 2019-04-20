@@ -161,6 +161,13 @@ var idPath = { up: 0, down: undefined };
 function isIdPath(p) {
     return p.up === 0 && typeof p.down === "undefined";
 }
+function DDMerge() {
+    var args = [];
+    for (var _i = 0; _i < arguments.length; _i++) {
+        args[_i] = arguments[_i];
+    }
+    return [{ ctor: DType.Merge, diffs: args }];
+}
 function DDReuse(childDiffs, path) {
     if (path === void 0) { path = idPath; }
     var existSame = false;
@@ -302,8 +309,8 @@ function insertionCompatible(diffs) {
     });
 }
 // Merges two diffs made on the same object.
-function DDMerge(diffs1, diffs2) {
-    //console.log("DDMerge(\n" + uneval_(diffs1, "") + ",\n " + uneval_(diffs2, "") + ")")
+function mergeDiffs(diffs1, diffs2) {
+    //console.log("mergeDiffs(\n" + uneval_(diffs1, "") + ",\n " + uneval_(diffs2, "") + ")")
     if (isDDSame(diffs1))
         return diffs2;
     if (isDDSame(diffs2))
@@ -325,7 +332,7 @@ function DDMerge(diffs1, diffs2) {
                     for (var k in c1) {
                         var merged = void 0;
                         if (k in c2) {
-                            merged = DDMerge(c1[k], c2[k]);
+                            merged = mergeDiffs(c1[k], c2[k]);
                         }
                         else {
                             merged = c1[k];
@@ -441,7 +448,7 @@ function DDMerge(diffs1, diffs2) {
                     var c2 = diff2.children;
                     var resultingChildren = {};
                     for (var k in c2) {
-                        var merged = DDMerge([diff1], c2[k]);
+                        var merged = mergeDiffs([diff1], c2[k]);
                         resultingChildren[k] = merged;
                     }
                     result.push({ ctor: DType.Update, path: idPath, kind: { ctor: DUType.NewValue, model: diff2.kind.model }, children: resultingChildren });
@@ -451,7 +458,7 @@ function DDMerge(diffs1, diffs2) {
                     var c1 = diff1.children;
                     var resultingChildren = {};
                     for (var k in c1) {
-                        var merged = DDMerge(c1[k], [diff2]);
+                        var merged = mergeDiffs(c1[k], [diff2]);
                         resultingChildren[k] = merged;
                     }
                     result.push({ ctor: DType.Update, path: idPath, kind: { ctor: DUType.NewValue, model: diff1.kind.model }, children: resultingChildren });
@@ -471,7 +478,7 @@ function DDMerge(diffs1, diffs2) {
                                     var children = copy(subDiff2.children, {}, { __reuse__: true });
                                     for (var k in diff1.children) {
                                         if (k in children) {
-                                            children[k] = DDMerge(children[k], diff1.children[k]);
+                                            children[k] = mergeDiffs(children[k], diff1.children[k]);
                                         }
                                         else {
                                             children[k] = diff1.children[k];
@@ -508,9 +515,11 @@ function DDMerge(diffs1, diffs2) {
     }
     return result;
 }
-function walkPath(obj, context, path) {
+function walkPath(obj, context, path, diffs) {
+    if (diffs === void 0) { diffs = false; }
     var up = path.up;
     var c = context;
+    var o = obj;
     while (up) {
         if (typeof c == undefined) {
             console.log(path);
@@ -518,23 +527,23 @@ function walkPath(obj, context, path) {
             console.log(obj);
             throw "walk outside of context in applyDiffs";
         }
-        obj = c.head;
+        o = c.head;
         c = c.tail;
         up--;
     }
     var down = path.down;
     while (typeof down !== "undefined") {
-        if (typeof obj !== "object") {
+        if (typeof o !== "object") {
             console.log(path);
             console.log(context);
-            console.log(obj);
+            console.log(o);
             throw "Clone outside of range in applyDiffs";
         }
-        c = cons_(obj, c);
-        obj = obj[down.head];
+        c = cons_(o, c);
+        o = diffs ? o[0].children[down.head] : o[down.head];
         down = down.tail;
     }
-    return [obj, c];
+    return [o, c];
 }
 // Given an object and a VSA of diffs on in, returns a VSA of the updated object (i.e. each property is wrapped with an array)
 function applyDiffs(obj, diffs, context) {
@@ -549,7 +558,7 @@ function applyDiffs(obj, diffs, context) {
             var c = void 0;
             _a = walkPath(obj, context, diff.path), obj = _a[0], c = _a[1];
             if (diff.kind.ctor === DUType.Reuse) {
-                oneResult = {};
+                oneResult = typeof obj === "object" ? Array.isArray(obj) ? [] : {} : obj;
                 for (var k in obj) {
                     if (!(k in children)) {
                         oneResult[k] = [obj[k]];
@@ -606,16 +615,17 @@ function applyDiffs1(obj, diffs, context) {
     var result;
     for (var _i = 0, diffs_2 = diffs; _i < diffs_2.length; _i++) {
         var diff = diffs_2[_i];
+        //console.log("applyDiffs1(\n" + uneval_(obj, "") + "\n, \n" + uneval_(diff, "") + "\n, \n" + uneval_(context, "") + "\n") 
         if (diff.ctor === DType.Update) {
             var children = diff.children;
             var up = diff.path.up;
             var c = void 0;
             _a = walkPath(obj, context, diff.path), obj = _a[0], c = _a[1];
             if (diff.kind.ctor === DUType.Reuse) {
-                result = {};
+                result = typeof obj == "object" ? Array.isArray(obj) ? [] : {} : obj;
                 for (var k in obj) {
                     if (!(k in children)) {
-                        result[k] = [obj[k]];
+                        result[k] = obj[k];
                     }
                 }
             }
@@ -627,29 +637,76 @@ function applyDiffs1(obj, diffs, context) {
                 result[k] = applyDiffs1(diff.kind.ctor == DUType.Reuse ? obj[k] : obj, ds, diff.kind.ctor == DUType.Reuse ? cons_(obj, c) : c);
             }
         } // Merge cannot be applied at this point.
-        break;
+        //console.log("= \n" + uneval_(result))
+        break; // only the first result matters
     }
     return result;
 }
-function model_list_drop(length) {
-    var tmp = [];
-    while (length > 0) {
-        tmp.push("tail");
+// Takes a default model, and refines it by adding the clone (diff) at the given path (down)
+function addToDefaultModel(down, diff, defaultModels) {
+    var d = defaultModels[0];
+    if (typeof down === "undefined") {
+        if (d.ctor == DType.Update && d.kind.ctor == DUType.NewValue && Object.keys(d.children).length == 0) {
+            // Just overwrite the existing value here.
+            defaultModels.pop();
+            defaultModels.push(diff);
+        }
+        else if (d.ctor == DType.Update && d.kind.ctor == DUType.Reuse && Object.keys(d.children).length == 0) { // Existing clone
+            var existing = defaultModels.pop();
+            defaultModels.push({ ctor: DType.Merge, diffs: [[existing], [diff]] });
+        }
+        else if (d.ctor == DType.Merge) {
+            d.diffs.push([diff]);
+        }
+        else {
+            console.log(uneval_(defaultModels, ""));
+            console.log(uneval_(down, ""));
+            console.log(uneval_(diff, ""));
+            throw "Unexpected diff for addToDefaultModel";
+        }
     }
-    return { __clone__: tmp };
+    else if (d.ctor === DType.Update && d.kind.ctor === DUType.NewValue) {
+        var k = down.head;
+        if (!(k in d.children)) {
+            d.children[k] = DDNewObject({}, d.kind.model[k]);
+            d.kind.model[k] = undefined;
+        }
+        addToDefaultModel(down.tail, diff, d.children[k]);
+    }
+    else {
+        throw "Diff not supported for addToDefaultModel: " + uneval_(diff, "");
+    }
 }
-function model_list_toArray(initPath, length, mapPath) {
-    var model = [];
-    var path = initPath.slice(0);
-    while (length > 0) {
-        var p = path.concat("head");
-        if (typeof mapPath !== "undefined")
-            p = p.concat(mapPath);
-        model.push({ __clone__: p });
-        path.push("tail");
-        length - 1;
+// applyDiffs1(applyDiffs1(obj, diffs), reverseDiffs(obj, diffs)) = obj
+function reverseDiffs(obj, diffs, context) {
+    if (context === void 0) { context = undefined; }
+    var defaultModels = DDNewObject({}, copy(obj)); // The reverse diffs that just output obj. We are going to modify it.
+    var diff = diffs[0];
+    // Let's find all children or sub-children that can be recovered from the diffs.
+    function aux(diff, context, // Context in the original program
+    subContext // context in the sub program
+    ) {
+        if (context === void 0) { context = undefined; }
+        if (subContext === void 0) { subContext = undefined; }
+        if (diff.ctor !== DType.Update)
+            return;
+        if (diff.path.up !== 0 || typeof diff.path.down !== "undefined") {
+            // It's a clone. We'll walk the path to find where to insert the inverse clone in the defaultModels
+            var pathFromTop = List.reverseInsert(List.drop(subContext, diff.path.up), diff.path.down);
+            addToDefaultModel(pathFromTop, { ctor: DType.Update, path: { up: 0, down: List.reverseInsert(undefined, context) }, kind: { ctor: DUType.Reuse }, children: {} }, defaultModels);
+        }
+        else {
+            for (var k in diff.children) {
+                var subDiff = diff.children[k][0];
+                aux(subDiff, diff.kind.ctor == DUType.Reuse ? cons_(k, context) : context, cons_(k, subContext));
+            }
+        }
     }
-    return model;
+    aux(diff);
+    return defaultModels;
+}
+function applyHorizontalDiffs(obj, diffs, horizontalReverseDiffs) {
+    return undefined;
 }
 // Given an object-only model with {__clone__: ...} references to the object,
 // and the diffs of the new object, builds the value and the diffs associated to the model
