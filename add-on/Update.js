@@ -168,7 +168,7 @@ function DDMerge() {
     }
     return [{ ctor: DType.Merge, diffs: args }];
 }
-function DDReuse(childDiffs, path) {
+function DReuse(childDiffs, path) {
     if (path === void 0) { path = idPath; }
     var existSame = false;
     for (var cd in childDiffs) {
@@ -190,12 +190,16 @@ function DDReuse(childDiffs, path) {
         filteredChildDiffs = childDiffs;
     }
     // Do some filtering on childDiffs, remove DDSame
-    return [{
-            ctor: DType.Update,
-            path: path,
-            kind: { ctor: DUType.Reuse },
-            children: filteredChildDiffs
-        }];
+    return {
+        ctor: DType.Update,
+        path: path,
+        kind: { ctor: DUType.Reuse },
+        children: filteredChildDiffs
+    };
+}
+function DDReuse(childDiffs, path) {
+    if (path === void 0) { path = idPath; }
+    return [DReuse(childDiffs, path)];
 }
 function DDChild(name, childDiffs) {
     var _a;
@@ -310,7 +314,7 @@ function insertionCompatible(diffs) {
 }
 // Merges two diffs made on the same object.
 function mergeDiffs(diffs1, diffs2) {
-    console.log("mergeDiffs(\n" + uneval_(diffs1, "") + ",\n " + uneval_(diffs2, "") + ")");
+    //console.log("mergeDiffs(\n" + uneval_(diffs1, "") + ",\n " + uneval_(diffs2, "") + ")")
     if (isDDSame(diffs1))
         return diffs2;
     if (isDDSame(diffs2))
@@ -706,32 +710,36 @@ function reverseDiffs(obj, diffs, context) {
     return defaultModels;
 }
 function applyHorizontalDiffs(diffs, hDiffs) {
-    var hDiffs1 = hDiffs[0];
-    if (hDiffs1.ctor == DType.Update) {
-        if (hDiffs1.kind.ctor == DUType.NewValue) {
-            var children = {};
-            for (var k in hDiffs1.children) {
-                children[k] = applyHorizontalDiffs(diffs, hDiffs1.children[k]);
+    var results = [];
+    for (var i = 0; i < hDiffs.length; i++) {
+        var hDiffs1 = hDiffs[i];
+        if (hDiffs1.ctor == DType.Update) {
+            if (hDiffs1.kind.ctor == DUType.NewValue) {
+                var children = {};
+                for (var k in hDiffs1.children) {
+                    children[k] = applyHorizontalDiffs(diffs, hDiffs1.children[k]);
+                }
+                results.push(DReuse(children));
             }
-            return DDReuse(children);
+            else if (hDiffs1.kind.ctor == DUType.Reuse && (hDiffs1.path.up === 0 || typeof hDiffs1.path.down != "undefined")) {
+                var _a = walkPath(diffs, undefined, hDiffs1.path, /*diffs=*/ true), targetDiffs = _a[0], context = _a[1];
+                results.push.apply(results, targetDiffs);
+            }
+            else {
+                console.log(uneval_(hDiffs1, ""));
+                throw "Unsupported horizontal diffs (only clones and news are supported). See console";
+            }
         }
-        else if (hDiffs1.kind.ctor == DUType.Reuse && (hDiffs1.path.up === 0 || typeof hDiffs1.path.down != "undefined")) {
-            var _a = walkPath(diffs, undefined, hDiffs1.path, /*diffs=*/ true), targetDiffs = _a[0], context = _a[1];
-            return targetDiffs;
-        }
-        else {
-            console.log(uneval_(hDiffs1, ""));
-            throw "Unsupported horizontal diffs (only clones and news are supported). See console";
+        else { // Merge of several diffs
+            var dds = hDiffs1.diffs;
+            var acc = applyHorizontalDiffs(diffs, dds[0]);
+            for (var i_1 = 1; i_1 < dds.length; i_1++) {
+                acc = mergeDiffs(acc, applyHorizontalDiffs(diffs, dds[i_1]));
+            }
+            results.push.apply(results, acc);
         }
     }
-    else { // Merge of several diffs
-        var dds = hDiffs1.diffs;
-        var acc = applyHorizontalDiffs(diffs, dds[0]);
-        for (var i = 1; i < dds.length; i++) {
-            acc = mergeDiffs(acc, applyHorizontalDiffs(diffs, dds[i]));
-        }
-        return acc;
-    }
+    return results;
 }
 // Given an object-only model with {__clone__: ...} references to the object,
 // and the diffs of the new object, builds the value and the diffs associated to the model

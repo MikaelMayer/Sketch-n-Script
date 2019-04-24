@@ -227,7 +227,7 @@ function isIdPath(p: Path): Boolean {
 function DDMerge(...args: Diffs[]): Diffs {
   return [{ctor: DType.Merge, diffs: args}];
 }
-function DDReuse(childDiffs: ChildDiffs, path: Path = idPath): DUpdate[] {
+function DReuse(childDiffs: ChildDiffs, path: Path = idPath): DUpdate {
   let existSame = false;
   for(let cd in childDiffs) {
     if(isDDSame(childDiffs[cd])) {
@@ -247,12 +247,15 @@ function DDReuse(childDiffs: ChildDiffs, path: Path = idPath): DUpdate[] {
     filteredChildDiffs = childDiffs
   }
   // Do some filtering on childDiffs, remove DDSame
-  return [{
+  return {
     ctor: DType.Update,
     path: path,
     kind: {ctor: DUType.Reuse },
     children: filteredChildDiffs
-  }];
+  };
+}
+function DDReuse(childDiffs: ChildDiffs, path: Path = idPath): DUpdate[] {
+  return [DReuse(childDiffs, path)];
 }
 function DDChild(name: string[] | string, childDiffs: Diffs): Diffs {
   if(typeof name === "string") {
@@ -728,29 +731,33 @@ function reverseDiffs(obj: any, diffs: Diffs, context: List<any> = undefined): D
 }
 
 function applyHorizontalDiffs(diffs: Diffs, hDiffs: Diffs): Diffs {
-  let hDiffs1 = hDiffs[0];
-  if(hDiffs1.ctor == DType.Update) {
-    if(hDiffs1.kind.ctor == DUType.NewValue) {
-      let children = {};
-      for(let k in hDiffs1.children) {
-        children[k] = applyHorizontalDiffs(diffs, hDiffs1.children[k]);
+  let results: Diffs = [];
+  for(let i = 0; i < hDiffs.length; i++) {
+    let hDiffs1 = hDiffs[i];
+    if(hDiffs1.ctor == DType.Update) {
+      if(hDiffs1.kind.ctor == DUType.NewValue) {
+        let children = {};
+        for(let k in hDiffs1.children) {
+          children[k] = applyHorizontalDiffs(diffs, hDiffs1.children[k]);
+        }
+        results.push(DReuse(children));
+      } else if(hDiffs1.kind.ctor == DUType.Reuse && (hDiffs1.path.up === 0 || typeof hDiffs1.path.down != "undefined")) {
+        let [targetDiffs, context] = walkPath(diffs, undefined, hDiffs1.path, /*diffs=*/true);
+        results.push(...targetDiffs);
+      } else {
+        console.log(uneval_(hDiffs1, ""));
+        throw "Unsupported horizontal diffs (only clones and news are supported). See console"
       }
-      return DDReuse(children);
-    } else if(hDiffs1.kind.ctor == DUType.Reuse && (hDiffs1.path.up === 0 || typeof hDiffs1.path.down != "undefined")) {
-      let [targetDiffs, context] = walkPath(diffs, undefined, hDiffs1.path, /*diffs=*/true);
-      return targetDiffs;
-    } else {
-      console.log(uneval_(hDiffs1, ""));
-      throw "Unsupported horizontal diffs (only clones and news are supported). See console"
+    } else { // Merge of several diffs
+      let dds = hDiffs1.diffs;
+      let acc = applyHorizontalDiffs(diffs, dds[0]);
+      for(let i = 1; i < dds.length; i++) {
+        acc = mergeDiffs(acc, applyHorizontalDiffs(diffs, dds[i]));
+      }
+      results.push(...acc);
     }
-  } else { // Merge of several diffs
-    let dds = hDiffs1.diffs;
-    let acc = applyHorizontalDiffs(diffs, dds[0]);
-    for(let i = 1; i < dds.length; i++) {
-      acc = mergeDiffs(acc, applyHorizontalDiffs(diffs, dds[i]));
-    }
-    return acc;
   }
+  return results;
 }
 
 // Given an object-only model with {__clone__: ...} references to the object,
