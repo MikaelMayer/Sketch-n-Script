@@ -70,14 +70,13 @@ assertEqual(
   let subProg = {a: [2, 2], c: 1, d: [2, 2]};
   assertEqual(applyDiffs1(prog, model), subProg);
   assertEqual(reverseDiffs(prog, model), reverseModelExpected);
-  /*let uSubProg = {a: [3, 2], c: 4, d: [2, 5]};
+  let uSubProg = {a: [3, 2], c: 4, d: [2, 5]};
   let uSubDiffs = DDReuse({a: DDReuse({0: DDNewValue(3)}), c: DDNewValue(4), d: DDReuse({1: DDNewValue(5)})});
   let expectedProg = {a: { b: 4}, c: [3, 5], d: 3}
-  let expectedDiffs = DDReuse({a: DDReuse({b: DDNewValue(4)}), c: DDReuse({0: DDNewValue(3), 1: DDNewValue(5)})})
-  assertEqual(applyHorizontalDiffs(uSubProg, uSubDiffs, reverseModelExpected),
-    [[expectedProg, expectedDiffs]]);
-  */
-  // TODO: With the reverseModelExpected, there is no such thing as DDSame(), it will think that d should be overriden
+  let expectedDiffs = DDReuse({c: DDReuse({0: DDNewValue(3), 1: DDNewValue(5)}), a: DDReuse({b: DDNewValue(4)}), });
+  assertEqual(
+    applyHorizontalDiffs(uSubDiffs, reverseModelExpected),
+    expectedDiffs);
 })()
 //*/
 

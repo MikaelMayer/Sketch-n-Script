@@ -727,8 +727,30 @@ function reverseDiffs(obj: any, diffs: Diffs, context: List<any> = undefined): D
   return defaultModels;
 }
 
-function applyHorizontalDiffs(obj: any, diffs: Diffs, horizontalReverseDiffs: Diffs): [any, Diffs][] {
-  return undefined;
+function applyHorizontalDiffs(diffs: Diffs, hDiffs: Diffs): Diffs {
+  let hDiffs1 = hDiffs[0];
+  if(hDiffs1.ctor == DType.Update) {
+    if(hDiffs1.kind.ctor == DUType.NewValue) {
+      let children = {};
+      for(let k in hDiffs1.children) {
+        children[k] = applyHorizontalDiffs(diffs, hDiffs1.children[k]);
+      }
+      return DDReuse(children);
+    } else if(hDiffs1.kind.ctor == DUType.Reuse && (hDiffs1.path.up === 0 || typeof hDiffs1.path.down != "undefined")) {
+      let [targetDiffs, context] = walkPath(diffs, undefined, hDiffs1.path, /*diffs=*/true);
+      return targetDiffs;
+    } else {
+      console.log(uneval_(hDiffs1, ""));
+      throw "Unsupported horizontal diffs (only clones and news are supported). See console"
+    }
+  } else { // Merge of several diffs
+    let dds = hDiffs1.diffs;
+    let acc = applyHorizontalDiffs(diffs, dds[0]);
+    for(let i = 1; i < dds.length; i++) {
+      acc = mergeDiffs(acc, applyHorizontalDiffs(diffs, dds[i]));
+    }
+    return acc;
+  }
 }
 
 // Given an object-only model with {__clone__: ...} references to the object,

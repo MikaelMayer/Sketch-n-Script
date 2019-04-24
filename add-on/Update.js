@@ -310,7 +310,7 @@ function insertionCompatible(diffs) {
 }
 // Merges two diffs made on the same object.
 function mergeDiffs(diffs1, diffs2) {
-    //console.log("mergeDiffs(\n" + uneval_(diffs1, "") + ",\n " + uneval_(diffs2, "") + ")")
+    console.log("mergeDiffs(\n" + uneval_(diffs1, "") + ",\n " + uneval_(diffs2, "") + ")");
     if (isDDSame(diffs1))
         return diffs2;
     if (isDDSame(diffs2))
@@ -705,8 +705,33 @@ function reverseDiffs(obj, diffs, context) {
     aux(diff);
     return defaultModels;
 }
-function applyHorizontalDiffs(obj, diffs, horizontalReverseDiffs) {
-    return undefined;
+function applyHorizontalDiffs(diffs, hDiffs) {
+    var hDiffs1 = hDiffs[0];
+    if (hDiffs1.ctor == DType.Update) {
+        if (hDiffs1.kind.ctor == DUType.NewValue) {
+            var children = {};
+            for (var k in hDiffs1.children) {
+                children[k] = applyHorizontalDiffs(diffs, hDiffs1.children[k]);
+            }
+            return DDReuse(children);
+        }
+        else if (hDiffs1.kind.ctor == DUType.Reuse && (hDiffs1.path.up === 0 || typeof hDiffs1.path.down != "undefined")) {
+            var _a = walkPath(diffs, undefined, hDiffs1.path, /*diffs=*/ true), targetDiffs = _a[0], context = _a[1];
+            return targetDiffs;
+        }
+        else {
+            console.log(uneval_(hDiffs1, ""));
+            throw "Unsupported horizontal diffs (only clones and news are supported). See console";
+        }
+    }
+    else { // Merge of several diffs
+        var dds = hDiffs1.diffs;
+        var acc = applyHorizontalDiffs(diffs, dds[0]);
+        for (var i = 1; i < dds.length; i++) {
+            acc = mergeDiffs(acc, applyHorizontalDiffs(diffs, dds[i]));
+        }
+        return acc;
+    }
 }
 // Given an object-only model with {__clone__: ...} references to the object,
 // and the diffs of the new object, builds the value and the diffs associated to the model
