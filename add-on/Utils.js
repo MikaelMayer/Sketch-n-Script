@@ -503,6 +503,7 @@ function testReconcile() {
   Logger.log(uneval_(reconcileAsMuchAsPossible_(["p", {}, ["hallo"]], ["paragraph", {blah: 1}, "hello"])))
   Logger.log(uneval_(reconcileAsMuchAsPossible_(["table", {}, [["hallo"]]], ["TABLE", {blah: 1}, "hello"])))
   Logger.log(uneval_(reconcileAsMuchAsPossible_(["img", {}, []], ["image", {src: "blah"}, ["unused"]])))
+  Logger.log(uneval_(reconcileAsMuchAsPossible_(["p", {}, [["img", {}, []]]], ["p", {}, [["image", {src: "blah"}, ["unused"]]]])))
 }
 
 // Here oldValues is an expression as simple as possible.

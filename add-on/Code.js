@@ -8,7 +8,9 @@ function doIt() {
   var x1 = parser.parse("var x = 1;\n(function(y) { return 1 + y })(x)");
   ts.push(Date.now());
   */
-  Logger.log(uneval_(Object.create(a)));
+  //Logger.log(uneval_(Object.create(a)));
+  mlakdjfmqsdlkfjqsmdlfkjqmdlfkj = 1;
+  Logger.log(Object.keys(this));
 }
 
 // https://developers.google.com/gsuite/add-ons/how-tos/publish-for-domains#before_you_publish
@@ -934,7 +936,7 @@ function extractExprs_(doc, maybeFinalExpr) {
     var newOutput = "";
     var numOfElements = 0;
     function addToOutput(newValue) {
-      if(numOfElements == 1 && !Array.isArray(newOutput) || (!isRichText_(newOutput) && !isElement_(newOutput))) {
+      if(numOfElements == 1 && (!Array.isArray(newOutput) || isRichText_(newOutput) || isElement_(newOutput))) {
         newOutput = [newOutput]; // Force a list of elements.
       }
       if(numOfElements >= 1) {
@@ -1054,7 +1056,8 @@ function updateNamedRanges_(doc, env, exprs) {
     var to = typeof expr.newOutput
     if(typeof expr.oldOutput !== "undefined" &&
        areDifferentValues_(expr.oldOutput, expr.newOutput)) {
-      changed = ((expr.name === LAST_NAME ? undefined : expr.name) || expr.source) + " changed to " + uneval_(expr.newOutput);
+      changed = ((expr.name === LAST_NAME ? undefined : expr.name) || expr.source) + " changed from\n" + uneval_(expr.oldOutput, "") +
+          "\n to\n" + uneval_(expr.newOutput, "");
       return changed;
     }
   });

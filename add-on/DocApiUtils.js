@@ -274,10 +274,10 @@ function getFormulaOnMultipleParagraphs_(txt, start) {
         txt = txt.getNextSibling();
       } else {
         uncle = txt.getParent().getNextSibling();
-        cousin = uncle && uncle.getChild(0);
-        while(!cousin || cousin.getType() != DocumentApp.ElementType.TEXT) {
+        cousin = uncle && uncle.getNumChildren() && uncle.getChild(0);
+        while(uncle && (!cousin || cousin.getType() != DocumentApp.ElementType.TEXT)) {
           uncle = uncle.getNextSibling();
-          cousin = uncle && uncle.getChild(0);
+          cousin = uncle && uncle.getNumChildren() && uncle.getChild(0);
         }
         if(cousin) {
           txt = cousin;
