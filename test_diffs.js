@@ -58,6 +58,7 @@ assertEqual(
 
 */
 
+/*
 (function () {
   let prog = {a: { b: 1}, c: [2, 2], d: 3}
   let model = DDReuse(
@@ -79,6 +80,25 @@ assertEqual(
     expectedDiffs);
 })()
 //*/
+
+(function() {
+  let diff1 = DDNewValue(1);
+  let diff2 = DDNewObject({a: DDSame()}, {a: undefined});
+  let d1d2 = composeDiffs(diff1, diff2);
+  let d2d1 = composeDiffs(diff2, diff1);
+  assertEqual(applyDiffs1(2, diff1), 1);
+  assertEqual(applyDiffs1(1, diff2), {a: 1}); 
+  assertEqual(applyDiffs1(2, d1d2), {a: 1});
+  assertEqual(d1d2, DDNewObject({a: DDNewValue(1)}, {a: undefined}), "d1d2");
+  assertEqual(d2d1, diff1, "d2d1");
+  let diff3 = DDReuse({b: DDNewValue(1)}, {up: 0, down: cons_("a", undefined)});
+  let diff4 = DDReuse({a: DDNewObject({c: DDSame()}, {b: 2, c: undefined})});
+  let d3d4 = composeDiffs(diff3, diff4);
+  let d4d3 = composeDiffs(diff4, diff3);
+  assertEqual(d3d4,
+    DDReuse({b: DDNewValue(1), a: DDNewObject({c: DDSame()}, {b: 2, c: undefined})}, {up: 0, down: cons_("a", undefined)}), "d3d4");
+  assertEqual(d4d3, DDNewObject({c: DDSame(), b: DDNewValue(1)}, {b: undefined, c: undefined}), "d4d3")
+})()
 
 console.log(testsPassed + "/" + tests + " passed");
 if(testsPassed !== tests) {

@@ -741,6 +741,64 @@ function applyHorizontalDiffs(diffs, hDiffs) {
     }
     return results;
 }
+// Composes two Diffs into a single Diffs. Diffs cannot be merge diffs for now.
+function composeDiffs(diffs1, diffs2) {
+    if (isDDSame(diffs1))
+        return diffs2;
+    if (isDDSame(diffs2))
+        return diffs1;
+    var aux = function (diffs1, diffs1context, diffs2) {
+        var targetDiffs1 = diffs1;
+        var targetDiffs1Context = diffs1context;
+        var diff2 = diffs2[0];
+        if (diff2.path.up !== 0 || typeof diff2.path.down !== "undefined") {
+            var _a = walkPath(diffs1, diffs1context, diff2.path, /*diffs=*/ true), targetDiffs1_1 = _a[0], targetDiffs1Context_1 = _a[1];
+        }
+        if (diff2.kind.ctor == DUType.Reuse) {
+            var diff1 = targetDiffs1[0];
+            var ctor = diff1.ctor; // If the first diff was a Reuse or a NewValue, it stays the same.
+            var composedDiffs = {};
+            var model = diff1.kind.ctor === DUType.NewValue ? copy(diff1.kind.model) : {};
+            for (var k in diff2.children) {
+                var sub2diff = diff2.children[k];
+                if (k in diff1.children) {
+                    composedDiffs[k] = aux(diff1.children[k], cons_(targetDiffs1, targetDiffs1Context), diff2.children[k]);
+                    model[k] = undefined;
+                }
+                else if (diff1.kind.ctor === DUType.NewValue) {
+                    if (typeof diff1.kind.model == "object" && (k in diff1.kind.model)) {
+                        composedDiffs[k] = aux(DDNewObject({}, diff1.kind.model[k]), cons_(targetDiffs1, targetDiffs1Context), diff2.children[k]);
+                        model[k] = undefined;
+                    }
+                    else { // The key that diff2 references is not valid.
+                        console.log(uneval_(diffs1, "") + "\ncannot be composed with\n" + uneval_(diffs2, ""));
+                        console.log("The second diffs refers to field '" + k + "' which is not present in the old DNewValue.");
+                        throw "Diff Composition error -- See console.";
+                    }
+                }
+                else if (diff1.kind.ctor === DUType.Reuse) { // then k is composed with identity
+                    composedDiffs[k] = diff2.children[k];
+                }
+            }
+            if (diff2.kind.ctor == DUType.Reuse && diff1.kind.ctor == DUType.NewValue && typeof diff1.kind.model === "object") {
+                for (var k in diff1.kind.model) {
+                    if (!(k in model))
+                        model[k] = diff1.kind.model[k];
+                }
+            }
+            var kind = diff1.kind.ctor == DUType.Reuse ? diff1.kind : { ctor: DUType.NewValue, model: model };
+            return [{ ctor: ctor, path: diff1.path, kind: kind, children: composedDiffs }];
+        }
+        else { // New value overrides the previous one.
+            var newChildren = {};
+            for (var k in diff2.children) {
+                newChildren[k] = aux(targetDiffs1, targetDiffs1Context, diff2.children[k]);
+            }
+            return [copy(diff2, { children: { __with__: newChildren } }, { __reuse__: true })];
+        }
+    };
+    return aux(diffs1, undefined, diffs2);
+}
 // Given an object-only model with {__clone__: ...} references to the object,
 // and the diffs of the new object, builds the value and the diffs associated to the model
 function DDRewrite(model, obj, diffs) {
