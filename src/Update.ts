@@ -205,19 +205,20 @@ enum DUType {
 };
 type DKindNew = 
   {ctor: DUType.NewValue, model: any};
-type DKind =
-  {ctor: DUType.Reuse} | DKindNew;
+type Path = { up: number, down: List<string> };
+type DUKindReuse = 
+  {ctor: DUType.Reuse, path: Path}
+type DKind = DUKindReuse | DKindNew;
 interface ChildDiffs {
   [key: string]: Diffs
 }
-type Path = { up: number, down: List<string> };
-type DUpdate = { ctor: DType.Update, path: Path, kind: DKind, children: ChildDiffs };
+type DUpdate = { ctor: DType.Update, kind: DKind, children: ChildDiffs };
 type DMerge = { ctor: DType.Merge, diffs: Diffs[] }
 type Diff = DUpdate | DMerge
 
 // Specializations of diffs
-type DUpdateReuse = { ctor: DType.Update, path: Path, kind: {ctor: DUType.Reuse}, children: ChildDiffs };
-type DClone       = { ctor: DType.Update, path: Path, kind: {ctor: DUType.Reuse}, children: ChildDiffs };
+type DUpdateReuse = { ctor: DType.Update, kind: DUKindReuse, children: ChildDiffs };
+type DClone       = DUpdateReuse;
 type Diffs = Diff[];
 var idPath: Path = { up: 0, down: undefined};
 
@@ -249,8 +250,7 @@ function DReuse(childDiffs: ChildDiffs, path: Path = idPath): DUpdate {
   // Do some filtering on childDiffs, remove DDSame
   return {
     ctor: DType.Update,
-    path: path,
-    kind: {ctor: DUType.Reuse },
+    kind: {path: path, ctor: DUType.Reuse },
     children: filteredChildDiffs
   };
 }
@@ -923,12 +923,13 @@ function processUpdateAction(
 }
 
 // TODO: Incorporate custom path map.
-function processClone(prog: Prog, newVal: any, oldVal: any, diff: DUpdate, callback?: UpdateCallback): UpdateAction {
+function processClone(prog: Prog, newVal: any, oldVal: any, diff: DUpdateReuse, callback?: UpdateCallback): UpdateAction {
+  // TODO: Process a diff for that instead of hard-coding.
   var Syntax = syntax.Syntax || esprima.Syntax;
   var Node = typeof Node == "undefined" ? esprima.Node : Node;
-  if(diff.path.up <= prog.context.length) {
-    let oldNode = (prog.stack.computations.head as ComputationNode).node;
-    var toClone: AnyNode = diff.path.up == 0 ? oldNode : prog.context[diff.path.up - 1];
+  let oldNode = (prog.stack.computations.head as ComputationNode).node;
+  if(diff.kind.path.up <= prog.context.length) {
+    var toClone: AnyNode = diff.kind.path.up == 0 ? oldNode : prog.context[diff.path.up - 1];
     var nodePathDown = List.builder();
     let downPath = diff.path.down;
     while(typeof downPath !== "undefined") {  // We map down path elems to AST
@@ -949,7 +950,7 @@ function processClone(prog: Prog, newVal: any, oldVal: any, diff: DUpdate, callb
     } else {
       return UpdateContinue(
         copy(prog, {stack: { computations: { head: { node: {__with__: copy(toClone)}}}}}, {__reuse__: true})
-        , {newVal: newVal, oldVal: oldVal, diffs: [{ctor: DType.Update, path: idPath, kind: diff.kind, children: diff.children}]},
+        , {newVal: newVal, oldVal: oldVal, diffs: [{ctor: DType.Update, kind: {kind: diff.kind, path: idPath}, children: diff.children}]},
         callback || UpdateResult);
     }
   } else {
@@ -995,8 +996,8 @@ function filterDiffsNoClonesDown(diffs: Diffs): Diffs {
       newDiffs.push(diff);
       continue;
     }
-    if(!isIdPath(diff.path)) {
-      if(diff.path.up != 0)
+    if(diff.ctor == DUType.Reuse && !isIdPath(diff.kind.path)) {
+      if(diff.kind.path.up != 0)
         newDiffs.push(diff);
       continue;
     }
@@ -1021,7 +1022,7 @@ function processClones(prog: Prog, updateData: UpdateData,
     if(diff.ctor === DType.Merge) {
       return UpdateFail("Cannot process clones if diff is DMerge");
     }
-    if(!isIdPath(diff.path)) {
+    if(diff.kind.ctor === DUType.Reuse && !isIdPath(diff.kind.path)) {
       return processClone(prog, updateData.newVal, updateData.oldVal, diff);
     } else if(diff.kind.ctor === DUType.NewValue) {
       let model = diff.kind.model;
@@ -1612,7 +1613,7 @@ function getUpdateAction(prog: Prog, updateData: UpdateData): UpdateAction {
       if(typeof updateData.newVal == "string" || typeof updateData.newVal == "number") {
         // Check the diff: Maybe it's a cloned value, e.g. unwrapped?
         return UpdateAlternative(...updateData.diffs.map( function(diff) {
-          if(diff.ctor === DType.Update && !isIdPath(diff.path)) {
+          if(diff.ctor === DType.Update && diff.kind.ctor == DUType.Reuse && !isIdPath(diff.kind.path)) {
             return processClone(prog, updateData.newVal, updateData.oldVal, diff);
           } else {
             let newNode = new Node.Literal(oldNode.wsBefore, updateData.newVal, uneval_(updateData.newVal)); // TODO: What about string diffs?
@@ -1690,7 +1691,7 @@ function isElement_(value: any) {
 }
 
 function isSimpleChildClone(d: Diff): boolean {
-  return d.ctor == DType.Update && d.path.up === 0 && List.length(d.path.down) == 1;
+  return d.ctor == DType.Update && d.kind.ctor == DUType.Reuse && d.kind.path.up === 0 && List.length(d.kind.path.down) == 1;
 }
 
 // Later, we could include the context while computing diffs to recover up clones.
@@ -1722,10 +1723,10 @@ function computeDiffs_(oldVal: any, newVal: any): Diffs {
               // TODO: For deletions and insertions, compute an offset to change this key.
               let nKey = parseInt(key);
               (cd as DClone[]).sort(function(d1, d2) {
-                return Math.abs(parseInt(d1.path.down[0] + "") - nKey - lastClosestOffset) -
-                       Math.abs(parseInt(d2.path.down[0] + "") - nKey - lastClosestOffset);
+                return Math.abs(parseInt(d1.kind.path.down[0] + "") - nKey - lastClosestOffset) -
+                       Math.abs(parseInt(d2.kind.path.down[0] + "") - nKey - lastClosestOffset);
               });
-              lastClosestOffset = parseInt((cd[0] as DClone).path.down[0] + "") - nKey;
+              lastClosestOffset = parseInt((cd[0] as DClone).kind.path.down[0] + "") - nKey;
             };
             //cd.length = 1;
           }
