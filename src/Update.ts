@@ -765,12 +765,8 @@ function composeDiffs(diffs1: Diffs, diffs2: Diffs): Diffs {
   if(isDDSame(diffs1)) return diffs2;
   if(isDDSame(diffs2)) return diffs1;
   let aux = function(diffs1: Diffs, diffs1context: List<Diffs>, diffs2: Diffs): Diffs {
-    let targetDiffs1 = diffs1;
-    let targetDiffs1Context = diffs1context;
     let diff2 = diffs2[0] as DUpdate;
-    if(diff2.path.up !== 0 || typeof diff2.path.down !== "undefined") {
-      let [targetDiffs1, targetDiffs1Context] = walkPath(diffs1, diffs1context, diff2.path, /*diffs=*/true);
-    }
+    let [targetDiffs1, targetDiffs1Context] = diff2.kind.ctor == DUType.Reuse ? walkPath(diffs1, diffs1context, diff2.kind.path, /*diffs=*/true) : [diffs1, diffs1context];
     if(diff2.kind.ctor == DUType.Reuse) {
       let diff1 = targetDiffs1[0] as DUpdate;
       let ctor = diff1.ctor; // If the first diff was a Reuse or a NewValue, it stays the same.
@@ -800,7 +796,7 @@ function composeDiffs(diffs1: Diffs, diffs2: Diffs): Diffs {
         }
       }
       let kind: DKind = diff1.kind.ctor == DUType.Reuse ? diff1.kind : {ctor: DUType.NewValue, model: model};
-      return [{ctor: ctor, path: diff1.path, kind: kind, children: composedDiffs}]
+      return [{ctor: ctor, kind: kind, children: composedDiffs}]
     } else { // New value overrides the previous one.
       let newChildren = {};
       for(let k in diff2.children) {
@@ -929,9 +925,9 @@ function processClone(prog: Prog, newVal: any, oldVal: any, diff: DUpdateReuse, 
   var Node = typeof Node == "undefined" ? esprima.Node : Node;
   let oldNode = (prog.stack.computations.head as ComputationNode).node;
   if(diff.kind.path.up <= prog.context.length) {
-    var toClone: AnyNode = diff.kind.path.up == 0 ? oldNode : prog.context[diff.path.up - 1];
+    var toClone: AnyNode = diff.kind.path.up == 0 ? oldNode : prog.context[diff.kind.path.up - 1];
     var nodePathDown = List.builder();
-    let downPath = diff.path.down;
+    let downPath = diff.kind.path.down;
     while(typeof downPath !== "undefined") {  // We map down path elems to AST
       let downpathelem = downPath.head;
       if(toClone && toClone.type == Syntax.ArrayExpression && typeof (toClone as Node.ArrayExpression).elements[downpathelem] != "undefined") {
@@ -946,11 +942,11 @@ function processClone(prog: Prog, newVal: any, oldVal: any, diff: DUpdateReuse, 
       return UpdateResult(
         copy(prog, { stack: { computations: { head: { node: {__with__:
         copy(toClone)}}}}}, {__reuse__: true}),
-        DDChild(["stack", "computations", "head", "node"], DDClone({up: diff.path.up, down: nodePathDown.build() as List<string>})), prog, callback)
+        DDChild(["stack", "computations", "head", "node"], DDClone({up: diff.kind.path.up, down: nodePathDown.build() as List<string>})), prog, callback)
     } else {
       return UpdateContinue(
         copy(prog, {stack: { computations: { head: { node: {__with__: copy(toClone)}}}}}, {__reuse__: true})
-        , {newVal: newVal, oldVal: oldVal, diffs: [{ctor: DType.Update, kind: {kind: diff.kind, path: idPath}, children: diff.children}]},
+        , {newVal: newVal, oldVal: oldVal, diffs: [{ctor: DType.Update, kind: {ctor: DUType.Reuse, path: idPath}, children: diff.children}]},
         callback || UpdateResult);
     }
   } else {
@@ -996,7 +992,7 @@ function filterDiffsNoClonesDown(diffs: Diffs): Diffs {
       newDiffs.push(diff);
       continue;
     }
-    if(diff.ctor == DUType.Reuse && !isIdPath(diff.kind.path)) {
+    if(diff.kind.ctor == DUType.Reuse && !isIdPath(diff.kind.path)) {
       if(diff.kind.path.up != 0)
         newDiffs.push(diff);
       continue;
@@ -1023,7 +1019,7 @@ function processClones(prog: Prog, updateData: UpdateData,
       return UpdateFail("Cannot process clones if diff is DMerge");
     }
     if(diff.kind.ctor === DUType.Reuse && !isIdPath(diff.kind.path)) {
-      return processClone(prog, updateData.newVal, updateData.oldVal, diff);
+      return processClone(prog, updateData.newVal, updateData.oldVal, diff as DUpdateReuse);
     } else if(diff.kind.ctor === DUType.NewValue) {
       let model = diff.kind.model;
       if((typeof model == "number" ||
@@ -1612,9 +1608,9 @@ function getUpdateAction(prog: Prog, updateData: UpdateData): UpdateAction {
       // For now let's suppose they don't.
       if(typeof updateData.newVal == "string" || typeof updateData.newVal == "number") {
         // Check the diff: Maybe it's a cloned value, e.g. unwrapped?
-        return UpdateAlternative(...updateData.diffs.map( function(diff) {
+        return UpdateAlternative(...updateData.diffs.map( function(diff: Diff) {
           if(diff.ctor === DType.Update && diff.kind.ctor == DUType.Reuse && !isIdPath(diff.kind.path)) {
-            return processClone(prog, updateData.newVal, updateData.oldVal, diff);
+            return processClone(prog, updateData.newVal, updateData.oldVal, diff as DUpdateReuse);
           } else {
             let newNode = new Node.Literal(oldNode.wsBefore, updateData.newVal, uneval_(updateData.newVal)); // TODO: What about string diffs?
             return UpdateResult(copy(prog,

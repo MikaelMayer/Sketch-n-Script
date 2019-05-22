@@ -749,12 +749,8 @@ function composeDiffs(diffs1, diffs2) {
     if (isDDSame(diffs2))
         return diffs1;
     var aux = function (diffs1, diffs1context, diffs2) {
-        var targetDiffs1 = diffs1;
-        var targetDiffs1Context = diffs1context;
         var diff2 = diffs2[0];
-        if (diff2.path.up !== 0 || typeof diff2.path.down !== "undefined") {
-            var _a = walkPath(diffs1, diffs1context, diff2.path, /*diffs=*/ true), targetDiffs1_1 = _a[0], targetDiffs1Context_1 = _a[1];
-        }
+        var _a = diff2.kind.ctor == DUType.Reuse ? walkPath(diffs1, diffs1context, diff2.kind.path, /*diffs=*/ true) : [diffs1, diffs1context], targetDiffs1 = _a[0], targetDiffs1Context = _a[1];
         if (diff2.kind.ctor == DUType.Reuse) {
             var diff1 = targetDiffs1[0];
             var ctor = diff1.ctor; // If the first diff was a Reuse or a NewValue, it stays the same.
@@ -788,7 +784,7 @@ function composeDiffs(diffs1, diffs2) {
                 }
             }
             var kind = diff1.kind.ctor == DUType.Reuse ? diff1.kind : { ctor: DUType.NewValue, model: model };
-            return [{ ctor: ctor, path: diff1.path, kind: kind, children: composedDiffs }];
+            return [{ ctor: ctor, kind: kind, children: composedDiffs }];
         }
         else { // New value overrides the previous one.
             var newChildren = {};
@@ -913,13 +909,14 @@ function processUpdateAction(action, callbacks, forks) {
 }
 // TODO: Incorporate custom path map.
 function processClone(prog, newVal, oldVal, diff, callback) {
+    // TODO: Process a diff for that instead of hard-coding.
     var Syntax = syntax.Syntax || esprima.Syntax;
     var Node = typeof Node == "undefined" ? esprima.Node : Node;
-    if (diff.path.up <= prog.context.length) {
-        var oldNode = prog.stack.computations.head.node;
-        var toClone = diff.path.up == 0 ? oldNode : prog.context[diff.path.up - 1];
+    var oldNode = prog.stack.computations.head.node;
+    if (diff.kind.path.up <= prog.context.length) {
+        var toClone = diff.kind.path.up == 0 ? oldNode : prog.context[diff.kind.path.up - 1];
         var nodePathDown = List.builder();
-        var downPath = diff.path.down;
+        var downPath = diff.kind.path.down;
         while (typeof downPath !== "undefined") { // We map down path elems to AST
             var downpathelem = downPath.head;
             if (toClone && toClone.type == Syntax.ArrayExpression && typeof toClone.elements[downpathelem] != "undefined") {
@@ -932,10 +929,10 @@ function processClone(prog, newVal, oldVal, diff, callback) {
             downPath = downPath.tail;
         }
         if (Object.keys(diff.children).length == 0 && diff.kind.ctor == DUType.Reuse) {
-            return UpdateResult(copy(prog, { stack: { computations: { head: { node: { __with__: copy(toClone) } } } } }, { __reuse__: true }), DDChild(["stack", "computations", "head", "node"], DDClone({ up: diff.path.up, down: nodePathDown.build() })), prog, callback);
+            return UpdateResult(copy(prog, { stack: { computations: { head: { node: { __with__: copy(toClone) } } } } }, { __reuse__: true }), DDChild(["stack", "computations", "head", "node"], DDClone({ up: diff.kind.path.up, down: nodePathDown.build() })), prog, callback);
         }
         else {
-            return UpdateContinue(copy(prog, { stack: { computations: { head: { node: { __with__: copy(toClone) } } } } }, { __reuse__: true }), { newVal: newVal, oldVal: oldVal, diffs: [{ ctor: DType.Update, path: idPath, kind: diff.kind, children: diff.children }] }, callback || UpdateResult);
+            return UpdateContinue(copy(prog, { stack: { computations: { head: { node: { __with__: copy(toClone) } } } } }, { __reuse__: true }), { newVal: newVal, oldVal: oldVal, diffs: [{ ctor: DType.Update, kind: { ctor: DUType.Reuse, path: idPath }, children: diff.children }] }, callback || UpdateResult);
         }
     }
     else {
@@ -980,7 +977,7 @@ function filterDiffsNoClonesDown(diffs) {
             newDiffs.push(diff);
             continue;
         }
-        if (diff.ctor == DUType.Reuse && !isIdPath(diff.kind.path)) {
+        if (diff.kind.ctor == DUType.Reuse && !isIdPath(diff.kind.path)) {
             if (diff.kind.path.up != 0)
                 newDiffs.push(diff);
             continue;
