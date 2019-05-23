@@ -91,9 +91,10 @@ List = { reverse: function reverse(x, acc) {
   }
 }
 flatMap = function(array, fun) {
-  result = [];
+  let result = [];
   for(let x of array) {
-    Array.prototype.push.apply(result, fun(x));
+    let intermediate = fun(x);
+    Array.prototype.push.apply(result, intermediate);
   }
   return result;
 }
@@ -108,9 +109,6 @@ function composeRelativePaths(p1, p2) {
       down: p2.down}
   }
 }
-HSame = DSame = { ctor: DType.Update, kind: { ctor: DUType.Reuse, path: idPath}, childDiffs: {}};
-
-DDSame = [DSame]
 
 function debugLog(msg, value) {
   console.log(msg);
@@ -143,6 +141,7 @@ diffToString = function(depth, options) {
     }
     if(this.kind.ctor === "Reuse") {
       if(noChildDiffs(this)) {// Pure clones
+        if(isIdPath(this.kind.path)) return "DSame";
         return ("DClone(" +
           (this.kind.path.up === 0 ?
           List.join(",", List.map(x => util.inspect(x, {depth: undefined, colors: false}), this.kind.path.down)) :
@@ -155,8 +154,9 @@ diffToString = function(depth, options) {
             : typeof this.kind.path.down === "undefined" ?
               "" :
               typeof this.kind.path.down.tl === "undefined" ? 
-                ", " + util.inspect(this.kind.path.down.head) :
+                ", " + util.inspect(this.kind.path.down.hd) :
                 ", " + util.inspect(List.toArray(this.kind.path.down), {depth: undefined});
+
         let prefix  = "DUpdate({ ";
         let padding = "          ";
         return (prefix +  children().replace(/\n/g, `\n${padding}`)
@@ -185,6 +185,10 @@ DDClone = function(path) {
   return [DClone(path)];
 }
 
+HSame = DSame = DClone(idPath);
+
+DDSame = [DSame]
+
 isIdPath = function(path) {
   return path.up === 0 && path.down === undefined;
 }
@@ -200,7 +204,8 @@ isDSame = function(diff) {
 HUpdate = DUpdate = function(childDiffs, path) {
   let cd = {};
   for(let k in childDiffs) {
-    if(!isDSame(childDiffs[k])) {
+    if(!isDSame(childDiffs[k]) && (!Array.isArray(childDiffs[k]) || childDiffs[k].length != 1 ||
+      !isDSame(childDiffs[k][0]))) {
       cd[k] = childDiffs[k]
     }
   }
@@ -450,18 +455,25 @@ function magicFunction(hDiff, resultDiffs, hDiffContext, hDiffPathStack, resultP
     inspect(hDiffPathStack);
     inspect(resultPath);
   }
+  let postProcess = function(result) {
+    // Recreate the hDiffPathStack above it.
+    let x = hDiffPathStack;
+    while(x) {
+      result = DDUpdate({[x.hd]: result});
+      x = x.tl;
+    }
+    return result;
+  }
   if(hDiff.kind.ctor === DUType.Reuse) {
     if(!isIdPath(hDiff.kind.path)) { // Process the clone first
       // TODO: Reverse paths by default?
       let absolutePath = composeRelativePaths({up: 0, down: List.reverse(hDiffPathStack)}, hDiff.kind.path);
       let rPathDown = List.reverse(absolutePath.down);
       if(debugMagicFunction) {
-        console.log("magicFunction clone hDiffs")
+        console.log("magicFunction clone hDiffs", rPathDown)
       }
-      let result = DDUpdate(
-        {[rPathDown.hd]: magicFunction(HUpdate(hDiff.childDiffs, {up: 0, down: List.reverse(rPathDown.tl)}),
-        resultDiffs, hDiffContext, hDiffPathStack, resultPath)
-      });
+      let result = magicFunction(HUpdate(hDiff.childDiffs),
+        resultDiffs, hDiffContext, rPathDown, resultPath);
       if(debugMagicFunction) {
         console.log("returning 1")
         inspect(result);
@@ -472,7 +484,7 @@ function magicFunction(hDiff, resultDiffs, hDiffContext, hDiffPathStack, resultP
         console.log("returning 2")
         inspect(resultDiffs);
       }
-      return resultDiffs; // No change, it's the identity
+      return postProcess(resultDiffs); // No change, it's the identity
     }
     // No clone but children, we can destructure.
   }
@@ -488,7 +500,7 @@ function magicFunction(hDiff, resultDiffs, hDiffContext, hDiffPathStack, resultP
           afterClonePath = composeRelativePaths({up: 0, down: List.reverse(hDiffPathStack)}, hDiff.kind.path);
           if(debugMagicFunction) {
             console.log("afterClonePath");
-            inspect(List.toArray(afterClonePath));
+            inspect({up: afterClonePath.up, down: List.toArray(afterClonePath.down)});
           }
           hDiff = DUpdate(hDiff.childDiffs, idPath); // the path in hDiff was taken into account.
         } else { // New
@@ -557,6 +569,7 @@ function shouldEqual(a, b, msg) {
 }
 
 debugMagicFunction = false;
+
 shouldEqual(magicFunction(
    HClone("b"),
     DDNew(3)),
@@ -571,6 +584,7 @@ shouldEqual(magicFunction(
    HUpdate({d: HClone(1, "c"), e: HClone(1, "c")}),
     DDUpdate({d: DDNew(3), e: DDNew(5)})),
   DDUpdate({c: DDNew(4)}));
+
 
 shouldEqual(magicFunction(
    HUpdate({a: HClone(1, "b")}),
@@ -607,8 +621,6 @@ shouldEqual(magicFunction(
     DDUpdate({a: DDNew(2)})),
   DDNew(2));
 
-debugMagicFunction = true;
-
 shouldEqual(magicFunction(
    HUpdate({
      b: HClone(2, "c")
@@ -619,6 +631,9 @@ shouldEqual(magicFunction(
   DDUpdate({
     c: DDNew(3)
   }));
+debugMagicFunction = true;
+/*
+//*/
 
 /*shouldEqual(magicFunction(
    HUpdate({
