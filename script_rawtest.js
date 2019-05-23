@@ -1,8 +1,12 @@
+var util = require('util');
+
+var uneval = x => util.inspect(x, {depth: undefined, colors: true});
+
 const inspect = function(what) {
-  console.dir(what, {depth: undefined});
+  console.log(uneval(what));
+  //console.dir(what, {depth: undefined});
 }
 
-var uneval = (util => x => util.inspect(x, {depth: undefined}))(require('util'));
 
 /*
 type Prog = {[key: string]: Prog}
@@ -59,6 +63,31 @@ List = { reverse: function reverse(x, acc) {
   drop: function drop(n, x) {
     if(n <= 0 || typeof x === "undefined") return x;
     return drop(n - 1, x.tl);
+  },
+  fromArray: function(x) {
+    let result = undefined;
+    for(let i = x.length - 1; i >= 0; i--) {
+      result = cons(x[i], result);
+    }
+    return result;
+  },
+  toArray: function(x) {
+    let result = [];
+    while(x) {
+      result.push(x.hd); x = x.tl;
+    }
+    return result;
+  },
+  map: function map(f, x) {
+    if(typeof x === "undefined") return undefined;
+    return cons(f(x.hd), map(f, x.tl));
+  },
+  join: function(sep, x) {
+    if(typeof x === "undefined") return "";
+    result = x.hd;
+    tl = x.tl;
+    while(tl) { result += sep + tl.hd; tl = tl.tl}
+    return result;
   }
 }
 flatMap = function(array, fun) {
@@ -83,8 +112,73 @@ HSame = DSame = { ctor: DType.Update, kind: { ctor: DUType.Reuse, path: idPath},
 
 DDSame = [DSame]
 
+function debugLog(msg, value) {
+  console.log(msg);
+  inspect(value);
+  return value;
+}
+function normalizePath(path, args) {
+  return typeof path === "string" ?
+       {up: 0, down: cons(path)} : 
+       Array.isArray(path) ?
+       {up: 0, down: List.fromArray(path)} :
+       typeof path === "object" && typeof path.down === "string" ?
+       {up: path.up || 0, down: cons(path.down)} :
+       typeof path === "object" && typeof path.hd === "string" ?
+       {up: 0, down: path} :
+       typeof path === "number" && typeof args === "object" ? {up: path, down: List.drop(1, List.fromArray(args))} :
+       path || idPath;
+}
+
+diffToString = function(depth, options) {
+  if(this.ctor === DType.Update) {
+    let children = () => {
+      let childrenStr = "";
+      for(let k in this.childDiffs) {
+        childrenStr += (childrenStr.length == 0 ? "" : ",\n") + k + ": " +
+          util.inspect(this.childDiffs[k]).replace(/\n/g, `\n${' '.repeat(k.length + 2)}`);
+      }
+      childrenStr += " }";
+      return childrenStr;
+    }
+    if(this.kind.ctor === "Reuse") {
+      if(noChildDiffs(this)) {// Pure clones
+        return ("DClone(" +
+          (this.kind.path.up === 0 ?
+          List.join(",", List.map(x => util.inspect(x, {depth: undefined, colors: false}), this.kind.path.down)) :
+          List.join(", ", cons(this.kind.path.up + "", List.map(x => util.inspect(x, {depth: undefined, colors: false}), this.kind.path.down))))
+        +")");
+      } else {
+        let pathStr =
+          this.kind.path.up !== 0 ?
+            ", " + util.inspect(this.kind.path, {depth: undefined})
+            : typeof this.kind.path.down === "undefined" ?
+              "" :
+              typeof this.kind.path.down.tl === "undefined" ? 
+                ", " + util.inspect(this.kind.path.down.head) :
+                ", " + util.inspect(List.toArray(this.kind.path.down), {depth: undefined});
+        let prefix  = "DUpdate({ ";
+        let padding = "          ";
+        return (prefix +  children().replace(/\n/g, `\n${padding}`)
+          + pathStr + ")");
+      }
+    } else { // New
+      let str =     "DNew(";
+      let padding = "     ";
+      str += util.inspect(this.kind.model).replace(/\n/g, `\n${padding}`)
+      if(!noChildDiffs(this)) {
+        str += ",\n" + padding + children();
+      }
+      str += ")";
+      return str;
+    }
+  }
+  return "Update";
+}
+
 HClone = DClone = function(path) {
-  return { ctor: DType.Update, kind: { ctor: DUType.Reuse, path: path || idPath}, childDiffs: {}};
+  return { ctor: DType.Update, kind: { ctor: DUType.Reuse, path: normalizePath(path, arguments)}, childDiffs: {},
+  [util.inspect.custom]: diffToString};
 }
 
 DDClone = function(path) {
@@ -110,7 +204,8 @@ HUpdate = DUpdate = function(childDiffs, path) {
       cd[k] = childDiffs[k]
     }
   }
-  return { ctor: DType.Update, kind: { ctor: DUType.Reuse, path: path || idPath}, childDiffs: cd};
+  return { ctor: DType.Update, kind: { ctor: DUType.Reuse, path: normalizePath(path)}, childDiffs: cd,
+  [util.inspect.custom]: diffToString }
 }
 
 DDUpdate = function(childDiffs, path) {
@@ -118,7 +213,8 @@ DDUpdate = function(childDiffs, path) {
 }
 
 HNew= DNew = function(model, childDiffs) {
-  return {ctor: DType.Update, kind: {ctor: DUType.New, model: model}, childDiffs: childDiffs || {}};
+  return {ctor: DType.Update, kind: {ctor: DUType.New, model: model}, childDiffs: childDiffs || {},
+  [util.inspect.custom]: diffToString};
 }
 
 DDNew = RDNew = function(model, childDiffs) {
@@ -228,7 +324,7 @@ function applyDDiffs(dDiff, prog, last) {
     }
     return o;
   }
-  return aux(dDiff, prog, undefined);
+  return aux(last ? dDiff[dDiff.length - 1] : dDiff[0], prog, undefined);
 }
 
 // Returns RDiffs.
@@ -390,8 +486,10 @@ function magicFunction(hDiff, resultDiffs, hDiffContext, hDiffPathStack, resultP
         let afterClonePath = idPath;
         if(hDiff.kind.ctor == DUType.Reuse) {
           afterClonePath = composeRelativePaths({up: 0, down: List.reverse(hDiffPathStack)}, hDiff.kind.path);
-          if(debugMagicFunction) console.log("afterClonePath");
-          inspect(afterClonePath);
+          if(debugMagicFunction) {
+            console.log("afterClonePath");
+            inspect(List.toArray(afterClonePath));
+          }
           hDiff = DUpdate(hDiff.childDiffs, idPath); // the path in hDiff was taken into account.
         } else { // New
           console.log("TODO: New here")
@@ -459,28 +557,146 @@ function shouldEqual(a, b, msg) {
 }
 
 debugMagicFunction = false;
-shouldEqual(magicFunction(HClone({up: 0, down: cons("b")}), DDNew(3)), DDUpdate({b: DDNew(3)}), "Clone new");
+shouldEqual(magicFunction(
+   HClone("b"),
+    DDNew(3)),
+  DDUpdate({b: DDNew(3)}), "Clone new");
 
-shouldEqual(magicFunction(HUpdate({d: HClone({up: 1, down: cons("c")})}, {up: 0, down: cons("b")}), DDUpdate({d: DDNew(3)})), DDUpdate({b: DDUpdate({c: DDNew(3)})}))
+shouldEqual(magicFunction(
+   HUpdate({d: HClone(1, "c")}, "b"),
+    DDUpdate({d: DDNew(3)})),
+  DDUpdate({b: DDUpdate({c: DDNew(3)})}))
 
-shouldEqual(magicFunction(HUpdate({d: HClone({up: 1, down: cons("c")}), e: HClone({up: 1, down: cons("c")})}), DDUpdate({d: DDNew(3), e: DDNew(5)})), DDUpdate({c: DDNew(4)}));
+shouldEqual(magicFunction(
+   HUpdate({d: HClone(1, "c"), e: HClone(1, "c")}),
+    DDUpdate({d: DDNew(3), e: DDNew(5)})),
+  DDUpdate({c: DDNew(4)}));
 
-shouldEqual(magicFunction(HUpdate({a: HClone({up: 1, down: cons("b")})}), DDClone({up: 0, down: cons("a")})), DDClone({up: 0, down: cons("b")}))
+shouldEqual(magicFunction(
+   HUpdate({a: HClone(1, "b")}),
+    DDClone("a")),
+  DDClone("b"))
+
+shouldEqual(magicFunction(
+   HNew({}, {a: HClone("b"), b: HClone("b")}),
+    DDClone("a")),
+  DDClone("b"));
+
+shouldEqual(magicFunction(
+   HUpdate({a: HClone(1, "b")}),
+    DDClone("b")),
+  DDClone("b"));
+
+shouldEqual(magicFunction(
+   HUpdate({a: HClone(1, "b"), b: HClone(1, "a")}),
+    DDClone("b")),
+  DDClone("a"));
+
+shouldEqual(magicFunction(
+   HUpdate({a: HClone(1, "b")}),
+    DDUpdate({a: DDNew(3)})),
+  DDUpdate({b: DDNew(3)}));
+
+shouldEqual(magicFunction(
+   HNew({}, {d: HClone("a"), c: HClone("a"), b: HClone("b")}),
+    DDUpdate({d: DDNew(3), c: DDNew(5)})),
+  DDUpdate({a: DDNew(4)}));
+
+shouldEqual(magicFunction(
+   HNew({}, {a: HSame, b: HSame}),
+    DDUpdate({a: DDNew(2)})),
+  DDNew(2));
 
 debugMagicFunction = true;
 
-shouldEqual(magicFunction(HNew({}, {a: HClone({up: 0, down: cons("b")}), b: HClone({up: 0, down: cons("b")})}), DDClone({up: 0, down: cons("a")})), DDClone({up: 0, down: cons("b")}))
+shouldEqual(magicFunction(
+   HUpdate({
+     b: HClone(2, "c")
+   }, ["a"]),
+    DDUpdate({
+      b: DDNew(3)
+    })),
+  DDUpdate({
+    c: DDNew(3)
+  }));
+
+/*shouldEqual(magicFunction(
+   HUpdate({
+      body: HUpdate({
+        app: HUpdate({
+          arg: HClone(5, "arg")
+        }),
+        arg: HClone(4, "arg")
+      })
+      }, {up: 0, down: cons("app", cons("body"))}),
+    DDUpdate({body: DDUpdate({app: DDClone("app")}).concat(DDClone("app"))})),
+  DDUpdate({
+    app: DDUpdate({
+      body: DDUpdate({
+         body: DDUpdate({app: DDClone("app")}).concat(DDClone("app"))
+       })
+      })
+    })
+  );*/
 
 console.log(passedtests + "/" + ntests + " tests succeeded")
 process.exit()
 
+
+function doTest(testObject) {
+  for(let testcase of testObject.testcases) {
+    prog1 = testcase.prog1
+    step1 = testObject.smallStep(prog1);
+    console.log("\n\n-------\nFor program")
+    inspect(prog1);
+    console.log("Transformed through")
+    inspect(step1);
+    prog2 = applyHDiffs(step1, prog1);
+    inspect(prog2);
+
+    //let reverseStep1 = reverseHDiffs(prog1, step1);
+
+    for(let prog2Diff of testcase.prog2diffs) {
+      console.log("\nIf we change")
+      inspect(prog2)
+      console.log("by")
+      inspect(prog2Diff);
+      console.log("to")
+      inspect(applyDDiffs(prog2Diff, prog2));
+      console.log("then we change")
+      inspect(prog1);
+      let prog1Diff = magicFunction(step1, prog2Diff);
+      console.log("by")
+      inspect(prog1Diff);
+      console.log("to")
+      inspect(applyDDiffs(prog1Diff, prog1));
+    }
+  }
+}
+
 //--------------- Test with Rewrite lambda calculus ---------//
 
-test1 = {
+rewrite_lambda_calculus = {
   // Prog = string
   //      | {lambda: name, body: Prog} 
   //      | {app: Prog, arg: Prog}
-  prog1: {app: {lambda: "x", body: {lambda: "y", body: {app: {app: "y", arg: "x"}, arg: "x" } }}, arg: "z"},
+  testcases: [
+    {prog1: {app: {lambda: "x", body: {lambda: "y", body: {app: {app: "y", arg: "x"}, arg: "x" } }}, arg: "z"},
+      prog2diffs: [
+        // Remove first argument, or remove second argument.
+        DDUpdate({body: DDUpdate({app: DDClone("app")}).concat(DDClone("app"))}),
+        // Replace second argument by w
+        DDUpdate({body: DDUpdate({arg: DDNew("w")})}),
+        // Replace First argument by w
+        DDUpdate({body: DDUpdate({app: DDUpdate({arg: DDNew("w")})})}),
+        // Copy function to overwrite second argument
+        DDUpdate({body: DDUpdate({arg: DDClone(1, "app", "app")})}),
+        // Add a third argument
+        // Clone the second argument to a third argument z (should be x at the end) or add an unrelated third argument z (should stay z at the end)
+        DDUpdate({body: DDNew({}, {app: DDSame, arg: DDClone("arg").concat(DDNew("z"))})})
+      ]
+    }
+  ],
   smallStep(prog) {
     // Returns the hdiff to perform.
     if(typeof prog.lambda !== "undefined" || typeof prog === "string") {
@@ -489,26 +705,26 @@ test1 = {
     } else { // app.
       if(typeof prog.app.body != "undefined") {
         let name = prog.app.lambda;
-        let evalHDiff = function(depth, bodyExp, cloneFrom) {
+        let evalHDiff = function(upDepth, bodyExp, cloneFrom) {
           if(bodyExp === name) { // Clone of argument
-            return HClone({up: depth, down: cons("arg")});
+            return HClone(upDepth, "arg");
           }
           if(typeof bodyExp === "string" || bodyExp.lambda === name) { // Other name or shadowing: don't touch
             return HClone(cloneFrom);
           }
           if(typeof bodyExp.lambda !== "undefined") {
             return HUpdate({
-              body: evalHDiff(depth + 1, bodyExp.body)
+              body: evalHDiff(upDepth + 1, bodyExp.body)
             }, cloneFrom);
           }
           if(typeof bodyExp.app !== "undefined") {
             return HUpdate({
-              app: evalHDiff(depth + 1, bodyExp.app),
-              arg: evalHDiff(depth + 1, bodyExp.arg)
+              app: evalHDiff(upDepth + 1, bodyExp.app),
+              arg: evalHDiff(upDepth + 1, bodyExp.arg)
             }, cloneFrom);
           }
         }
-        let childDiffs = evalHDiff(2, prog.app.body, {up: 0, down: cons("app", cons("body"))});
+        let childDiffs = evalHDiff(2, prog.app.body, cons("app", cons("body")));
         return childDiffs;
       } else {
         return HUpdate({app: smallStep(prog.app)});
@@ -516,40 +732,7 @@ test1 = {
     }
   }
 }
-
-prog1 = test1.prog1
-step1 = test1.smallStep(prog1);
-//inspect(step1);
-prog2 = applyHDiffs(step1, prog1);
-inspect(prog2);
-
-prog2diffs = [].concat([]);
-
-// Remove first argument, or remove second argument.
-prog2diffs.push(DDUpdate({body: DDUpdate({app: DDClone({up: 0, down: cons("app")})}).concat(DDClone({up: 0, down: cons("app")}))}));
-// Replace second argument by w
-prog2diffs.push(DDUpdate({body: DDUpdate({arg: DDNew("w")})}));
-// Replace First argument by w
-prog2diffs.push(DDUpdate({body: DDUpdate({app: DDUpdate({arg: DDNew("w")})})}));
-// Copy function to overwrite second argument
-prog2diffs.push(DDUpdate({body: DDUpdate({arg: DDClone({up: 1, down: cons("app", cons("app"))})})}));
-// Add a third argument
-// Clone the second argument to a third argument z (should be x at the end) or add an unrelated third argument z (should stay z at the end)
-prog2diffs.push(DDUpdate({body: DDNew({}, {app: DDSame, arg: DDClone({up: 0, down: cons("arg")}).concat(DDNew("z"))})}));
-
-//let reverseStep1 = reverseHDiffs(prog1, step1);
-
-var i = 0;
-for(let p of prog2diffs) {
-  console.log("\nIf we change")
-  inspect(prog2)
-  console.log("to")
-  inspect(applyDDiffs(p[0], prog2));
-  console.log("then we change")
-  inspect(prog1);
-  console.log("to")
-  inspect(applyDDiffs(magicFunction(step1, p), prog1));
-}
+doTest(rewrite_lambda_calculus);
 
 //--------------- Test with Env-based CBN lambda calculus -------//
 
