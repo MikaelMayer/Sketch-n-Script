@@ -109,6 +109,18 @@ function composeRelativePaths(p1, p2) {
       down: p2.down}
   }
 }
+function composeStackPath(absoluteStack, relativePath) {
+  let u = relativePath.up;
+  while(u) {
+    absoluteStack = absoluteStack.tl;
+  }
+  let d = relativePath.down;
+  while(d) {
+    absoluteStack = cons(d.hd, absoluteStack);
+    d = d.tl;
+  }
+  return absoluteStack;
+}
 
 function debugLog(msg, value) {
   console.log(msg);
@@ -117,16 +129,21 @@ function debugLog(msg, value) {
 }
 function normalizePath(path, args) {
   return typeof path === "string" ?
-       {up: 0, down: cons(path)} : 
+       {up: 0, down: cons(path, List.drop(1, List.fromArray(args)))} : 
        Array.isArray(path) ?
        {up: 0, down: List.fromArray(path)} :
        typeof path === "object" && typeof path.down === "string" ?
        {up: path.up || 0, down: cons(path.down)} :
        typeof path === "object" && typeof path.hd === "string" ?
        {up: 0, down: path} :
-       typeof path === "number" && typeof args === "object" ? {up: path, down: List.drop(1, List.fromArray(args))} :
+       typeof path === "number" && typeof args === "object" ?
+         Array.isArray(args[1]) ? {up: path, down: List.fromArray(args[1])} : 
+           {up: path, down: List.drop(1, List.fromArray(args))} :
        path || idPath;
 }
+// path(), path("field"), path("field", "subfield"), path(2), path(2, "field", "subfield"), path(["field", "subfield"]),
+// path(2, ["field", "subfield"])
+path = function(p) { return normalizePath(p, arguments); }
 
 diffToString = function(depth, options) {
   if(this.ctor === DType.Update) {
@@ -176,18 +193,6 @@ diffToString = function(depth, options) {
   return "Update";
 }
 
-HClone = DClone = function(path) {
-  return { ctor: DType.Update, kind: { ctor: DUType.Reuse, path: normalizePath(path, arguments)}, childDiffs: {},
-  [util.inspect.custom]: diffToString};
-}
-
-DDClone = function(path) {
-  return [DClone(path)];
-}
-
-HSame = DSame = DClone(idPath);
-
-DDSame = [DSame]
 
 isIdPath = function(path) {
   return path.up === 0 && path.down === undefined;
@@ -203,23 +208,57 @@ isDSame = function(diff) {
 
 HUpdate = DUpdate = function(childDiffs, path) {
   let cd = {};
+  let outsideLevel = path.up;
   for(let k in childDiffs) {
-    if(!isDSame(childDiffs[k]) && (!Array.isArray(childDiffs[k]) || childDiffs[k].length != 1 ||
-      !isDSame(childDiffs[k][0]))) {
-      cd[k] = childDiffs[k]
+    let child = childDiffs[k]
+    if(Array.isArray(child)) {
+      if(child.length != 1 || !isDSame(child[0])) {
+        cd[k] = child;
+        for(let c of child) {
+          outsideLevel = Math.max((c.outsideLevel || 0) - 1, outsideLevel)
+        }
+      }
+    } else {
+      if(!isDSame(child)) {
+        cd[k] = child;
+        outsideLevel = Math.max((child.outsideLevel || 0) - 1, outsideLevel);
+      }
     }
   }
   return { ctor: DType.Update, kind: { ctor: DUType.Reuse, path: normalizePath(path)}, childDiffs: cd,
-  [util.inspect.custom]: diffToString }
+    [util.inspect.custom]: diffToString, outsideLevel: outsideLevel
+  };
 }
+
+HClone = DClone = function(path) { return DUpdate({}, normalizePath(path, arguments)); }
+
+HCloneUpdate = DCloneUpdate = function(path, childDiffs) { return DUpdate(childDiffs, path); }
+
+DDClone = function(path) {
+  return [DClone(path)];
+}
+
+HSame = DSame = DClone(idPath);
+DDSame = [DSame]
 
 DDUpdate = function(childDiffs, path) {
-  return [HUpdate(childDiffs, path)];
+  return [DUpdate(childDiffs, path)];
 }
 
-HNew= DNew = function(model, childDiffs) {
+HNew = DNew = function(model, childDiffs) {
+  let outsideLevel = 0;
+  for(let k in childDiffs) {
+    let child = childDiffs[k];
+    if(Array.isArray(child)) {
+      for(let c of child) {
+        outsideLevel = Math.max((c.outsideLevel || 0), outsideLevel);
+      }
+    } else {
+      outsideLevel = Math.max(child.outsideLevel || 0, outsideLevel);
+    }
+  }
   return {ctor: DType.Update, kind: {ctor: DUType.New, model: model}, childDiffs: childDiffs || {},
-  [util.inspect.custom]: diffToString};
+  [util.inspect.custom]: diffToString, outsideLevel};
 }
 
 DDNew = RDNew = function(model, childDiffs) {
@@ -404,9 +443,9 @@ function merge2DDiffs(dDiff1, dDiff2) {
     inspect(dDiff2)
   }
   let result = [];
-  for(let diff1 of dDiff1) {
-    for(let diff2 of dDiff2) {
-      if(diff1.kind.ctor == DUType.New && diff1.kind.ctor == DUType.New) {
+  for(let diff1 of !Array.isArray(dDiff1) ? [dDiff1] : dDiff1) {
+    for(let diff2 of !Array.isArray(dDiff2) ? [dDiff2] : dDiff2) {
+      if(diff1.kind.ctor == DUType.New && diff2.kind.ctor == DUType.New) {
         if(typeof diff1.kind.model === "number" && typeof diff2.kind.model === "number") {
           result.push(DNew((diff1.kind.model + diff2.kind.model) / 2));
           continue;
@@ -433,6 +472,17 @@ function merge2DDiffs(dDiff1, dDiff2) {
       }
     }
   }
+  if(!Array.isArray(dDiff1) && !Array.isArray(dDiff2)) {
+    if(result.length >= 1) {
+      return result[0];
+    } else {
+      console.log("Problem merging two Diff, got empty result")
+      inspect(dDiff1)
+      inspect(dDiff2)
+      console.log("returning second only")
+      return dDiff2;
+    }
+  }
   return result;
 }
 function mergeDDiffs(dDiffs) {
@@ -444,6 +494,263 @@ function mergeDDiffs(dDiffs) {
   return result;
 }
 
+function andThen(dDiff1, dDiff2) {
+  let result = [];
+  for(let d1 of dDiff1) {
+    for(let d2 of dDiff2) {
+      if(d1.kind.ctor === DUType.Reuse && noChildDiffs(d1)) {
+        if(d2.kind.ctor === DUType.Reuse && isIdPath(d2.kind.path)) {
+          result.push(DUpdate(d2.childDiff, d1.kind.path));
+        }
+      }
+    }
+  }
+  return result;
+}
+
+function foreach(obj, callback) {
+  let result = [];
+  for(let k in obj) {
+    result.push(callback(k, obj[k]));
+  }
+  return result;
+}
+
+// Transforms a conjunction of disjunctions of conjunctions to a disjunction of conjunctions.
+function cdc_to_dc(listListList) {
+  if(listListList.length === 0) return [[]];
+  if(listListList.length === 1) return listListList[0];
+  let firstDc = listListList[0];
+  let seconDc = cdc_to_dc(listListList.slice(1));
+  // Let's distribute!
+  let resultDc = [];
+  for(let c1 of firstDc) {
+    for(let c2 of seconDc) {
+      resultDc.push(c1.concat(c2));
+    }
+  }
+  return resultDc;
+}
+
+/*function clabeldc_to_dclabel(listLabelListList) {
+  if(listLabelListList.length === 0) return [[]];
+  if(listLabelListList.length === 1) return listLabelListList[0];
+  let {label: firstlabelDc = listLabelListList[0];
+  let seconlabelDc = clabeldc_to_label_dc(listLabelListList.slice(1));
+  // Let's distribute!
+  let resultDc = [];
+  for(let c1 of firstlabelDc) {
+    
+    for(let c2 of seconlabelDc) {
+      resultDc.push(c1.concat(c2));
+    }
+  }
+  return resultDc;
+}*/
+
+// Finds where this abslute path come from in the original source tree.
+// If it did not exist or is a New of something, return {error: msg}
+function followStackPath(hDiff, stackPath) {
+  let hPathStack = undefined;
+  let path = List.reverse(stackPath);
+  while(path) {
+    let hd = path.hd;
+    if(hDiff.kind.ctor === DUType.Reuse) {
+      let p = hDiff.kind.path;
+      hPathStack = cons(hd, composeStackPath(hPathStack, p));
+      hDiff = hDiff.childDiffs[hd];
+      if(typeof hDiff === undefined) hDiff = HSame;
+    } else {
+      hDiff = hDiff.childDiffs[hd];
+      if(typeof hDiff === undefined) return {error: "Can't go down a HNew that does not reference '" + hd + "'"};
+    }
+    path = path.tl;
+  }
+  return hPathStack;
+}
+
+// Like followStackPath but returns {ctor: "Just", _0: ...} if there is an original pathStack in hDiff
+// which ends with no hDiffs at all. Else, return { ctor: "Nothing" }
+function isDirectStackPath(hDiff, stackPath) {
+  let hPathStack = undefined;
+  let path = List.reverse(stackPath);
+  while(path) {
+    let hd = path.hd;
+    if(hDiff.kind.ctor === DUType.Reuse) {
+      let p = hDiff.kind.path;
+      hPathStack = cons(hd, composeStackPath(hPathStack, p));
+      hDiff = hDiff.childDiffs[hd];
+      if(typeof hDiff === undefined) {
+        return {ctor: "Just", _0: List.reverse(path.tl, hPathStack)}
+      }
+    } else {
+      hDiff = hDiff.childDiffs[hd];
+      if(typeof hDiff === undefined) return {ctor: "Nothing"};
+    }
+    path = path.tl;
+  }
+  return { ctor: "Nothing" };
+}
+
+function makeRelative(stackPath, stackPath2) {
+  let absPath = List.reverse(stackPath), absPath2 = List.reverse(stackPath2);
+  while(typeof absPath !== "undefined" && typeof absPath2 !== "undefined" && absPath.hd === absPath2.hd) {
+    absPath = absPath.tl;
+    absPath2 = absPath2.tl;
+  }
+  return {up: List.length(absPath), down: absPath2};
+}
+
+function DUpdatePath(stackPath, diff) {
+  while(stackPath) {
+    diff = DUpdate({[stackPath.hd]: diff});
+    stackPath = stackPath.tl;
+  }
+  return diff;
+}
+
+function DDUpdatePath(stackPath, ddiff) {
+  while(stackPath) {
+    ddiff = [DDUpdate({[stackPath.hd]: ddiff})];
+    stackPath = stackPath.tl;
+  }
+  return ddiff;
+}
+
+// Given a Diff, extracts any subdiff starting with the path in its own diff;
+// if path = prefixPath + x, return an afterSourcePath of DUpdatePath(x, Clone | New), else return the diff as outsideSourcePath
+// Return [relative diffs, absolute diffs];
+function partitionAndMakeRelative(path, diff) {
+  if(typeof path === "undefined") {
+    return [diff, DSame]; // Everything is relative, but no need to relativize.
+  }
+  let head = path.hd;
+  let tail = path.tl;
+ 
+  if(diff.kind.ctor === DUType.Reuse && isIdPath(diff.kind.path)) {
+    let absoluteChildDiffs = {};
+    let rcd = DSame;
+    let acd = DSame;
+    for(let k in diff.childDiffs) {
+      let c = diff.childDiffs[k];
+      [rcd, acd] = k === head ?
+          partitionAndMakeRelative(tail, c)
+          : [rcd, c];
+      if(!isDSame(acd)) {
+        absoluteChildDiffs[k] = osp;
+      }
+    }
+    return [rcd, DUpdate(absoluteChildDiffs)];
+  } else {
+    return [DSame, diff];
+  }
+}
+
+function partitionAndMakeRelative2(path, diffs, stackPath) {
+  function one(diff) {
+    if(diff.kind.ctor === DUType.Reuse && isIdPath(diff.kind.path)) {
+      return foreach(diff.childDiffs)((k, d) =>
+        k === path.hd ?
+          partitionAndMakeRelative2(path.tail, d, cons(k, stackPath)) :
+          [[], DUpdatePath(stackPath, d)])
+    }
+  }
+}
+
+function flatten(arrayOfArrays) {
+  let result = [];
+  for(let elems of arrayOfArrays) result.push(...elems);
+  return result;
+}
+
+// A stack path is like a path but in reverse, which makes it easier to add new path elements.
+
+// Returns a Diff
+function magicFunctionAux(hDiff, dDiff, dStackPath) {
+  // START: Optimization for closed diffs.
+  if(dDiff.outsideLevel === 0) {
+    let res = isDirectStackPath(hDiff, dStackPath);
+    if(res.ctor === "Just") { // It's at the leaf of an HDiff.
+      return DUpdatePath(res._0, dDiff);
+    }
+  }
+  // END: Optimization for closed diffs.
+  let childDiffs = dDiffs.childDiffs;
+  if(dDiff.kind.ctor === DUType.Reuse) {
+    let relPath = dDiff.kind.path;
+    if(isIdPath(relPath))
+      return mergeDDiffs(foreach(childDiffs)((k, d) => magicFunctionAux(hDiff, d, cons(k, dStackPath))));
+    // On the output, at the current location pointed by dStackPath (the workplace),
+    // we replace the existing element by a clone of a tree element present elsewhere in the output (the source).
+    // The workplace's stack path is dStackPath
+    let sourceStackPath      = composeStackPath(dStackPath, relPath); // The source's stack path is dStackPath + relPath.
+    // By following the output's stack paths in the hDiff, we can recover the paths they come from in the input.
+    let dPathOriginal        = followStackPath(hDiff, dStackPath); // Path where the workplace came from in the input.
+    let dSourcePathOriginal  = followStackPath(hDiff, sourceStackPath); // Path where the source came from in the input.
+    let clonePath            = makeRelative(dPathOriginal, sourcePathOriginal); // Relative path between input's workplace and input's source.
+    // We recover all children diffs globally as if they were done on the source's path.
+    let diffsFromChildren = mergeDDiffs(foreach(childDiffs)((k, d) =>
+      magicFunctionAux(hDiff, d, cons(k, sourceStackPath))));
+    // We now have a list of global differences made on the original input;
+    // If these differences consists of updates whose path contains the prefix "dSourcePathOriginal", we assume that they happen on the workplace in the input and were cloned from the source in the input.
+    let [relDiff, absDiff] = partitionAndMakeRelative(List.reverse(dSourcePathOriginal), diffsFromChildren);
+    return merge2DDiffs(DUpdatePath(dPathOriginal, DCloneUpdate(clonePath, relDiff)), absDiff);
+  } else {
+    let dPathOriginal        = followStackPath(hDiff, dStackPath); // Path where the workplace came from in the input.
+    if(noChildDiffs(dDiff))
+      return DUpdatePath(dPathOriginal, dDiff);
+    let newChildDiffs = {};
+    // We collect absolute differences (outisde of the original path were we apply differences)
+    let diffsFromChildren = mergeDDiffs(foreach(childDiffs)((k, d) => {
+      let cd = magicFunctionAux(hDiff, d, dStackPath);
+      let [relDiff, absDiff] = partitionAndMakeRelative(List.reverse(dPathORiginal), cd);
+      newChildDiffs[k] = relDiff;
+      return absDiff;
+    }));
+    return merge2DDiffs(DUpdatePath(dPathOriginal, DNew(dDiff.kind.model, newChildDiffs)), diffsFromChildren);
+  }    
+}
+
+// Returns a (disjunction) list of (conjunction) list of diffs, where each second level should be merged to get a single diff.
+function magicFunctionAux2(hDiff, dDiffs, dPath) {
+  return flatMap(dDiffs)(dDiff => {
+    let childDiffs = dDiffs.childDiffs;
+    if(dDiff.kind.ctor === DUType.Reuse) {
+      let path = dDiff.kind.path;
+      if(isIdPath(path))
+        return cdc_to_dc(foreach(childDiffs)((k, d) =>
+           magicFunctionAux2(hDiff, d, cons(k, dPath))));
+      // let's compute where we are cloning from
+      let sourceStackPath = composeStackPath(dPath, path);
+      let dPathOriginal = followStackPath(hDiff, dPath);
+      let dSourcePathOriginal = followStackPath(hDiff, sourceStackPath);
+      let clonePath = makeRelative(dPathOriginal, sourcePathOriginal);
+      let newChildDiffsToMerge = cdc_to_dc(foreach(childDiffs)((k, d) =>
+        magicFunctionAux2(hDiff, d, cons(k, sourceStackPath))));
+      return newChildDiffsToMerge.map(c => {
+        let [afterSourcePath, outsideSourcePath] = partitionAndMakeRelative2(List.reverse(sourceStackPath), c);
+        return
+          [DUpdatePath(dPathOriginal, DClone(clonePath, mergeDDiffs(afterSourcePath)))].concat(
+            outsideSourcePath
+          );
+      })
+    } else { // dDiff.kind.ctor === DUType.New
+      let dPathOriginal = followStackPath(hDiff, dPath);
+      if(noChildDiffs(dDiffs))
+        return [DDUpdatePath(dPathOriginal, DDNew(dDiff.kind.model))];
+      console.log("unsafe zone, crashes will occur. Try to clone, not create from scratch for now");
+      let newChildDiffsToMerge = clabeldc_to_dclabel(foreach (childDiffs)((k, d) =>
+         ({label: k, result: magicFunctionAux2(hDiff, d, dPath)})));
+      // : Conjunction of {label: String, result: Disjunction of Conjunction}; // cdc_to_dc()
+      return newChildDiffsToMerge.map(c => {
+        let [labelAfterSourcePath, outsideSourcePathDiffs] =
+              partitionAndMakeRelativeLabel(dPath, c); // Careful, c elements contain a label.
+        return [DUpdatePath(dPathOriginal, DDNew(model, mergeLabelDiffs(labelAfterSourcePath)))].concat(outsideSourcePathDiffs)
+      })
+    }
+  });
+}
+
 debugMagicFunction = true;
 // Returns progDiffs
 function magicFunction(hDiff, resultDiffs, hDiffContext, hDiffPathStack, resultPath) {
@@ -451,9 +758,9 @@ function magicFunction(hDiff, resultDiffs, hDiffContext, hDiffPathStack, resultP
     console.log("magicFunction")
     inspect(hDiff);
     inspect(resultDiffs);
-    inspect(hDiffContext);
-    inspect(hDiffPathStack);
-    inspect(resultPath);
+    inspect(List.toArray(hDiffContext));
+    inspect(List.toArray(List.reverse(hDiffPathStack)));
+    inspect(List.toArray(resultPath));
   }
   let postProcess = function(result) {
     // Recreate the hDiffPathStack above it.
@@ -467,13 +774,12 @@ function magicFunction(hDiff, resultDiffs, hDiffContext, hDiffPathStack, resultP
   if(hDiff.kind.ctor === DUType.Reuse) {
     if(!isIdPath(hDiff.kind.path)) { // Process the clone first
       // TODO: Reverse paths by default?
-      let absolutePath = composeRelativePaths({up: 0, down: List.reverse(hDiffPathStack)}, hDiff.kind.path);
-      let rPathDown = List.reverse(absolutePath.down);
+      let newHDiffPathStack = composeStackPath(hDiffPathStack, hDiff.kind.path)
       if(debugMagicFunction) {
-        console.log("magicFunction clone hDiffs", rPathDown)
+        console.log("magicFunction clone hDiffs", newHDiffPathStack)
       }
       let result = magicFunction(HUpdate(hDiff.childDiffs),
-        resultDiffs, hDiffContext, rPathDown, resultPath);
+        resultDiffs, hDiffContext, newHDiffPathStack, resultPath);
       if(debugMagicFunction) {
         console.log("returning 1")
         inspect(result);
@@ -491,13 +797,16 @@ function magicFunction(hDiff, resultDiffs, hDiffContext, hDiffPathStack, resultP
   let oneResultDiff = function(resultDiff) {
     if(resultDiff.kind.ctor === DUType.Reuse)  {
       if(!isIdPath(resultDiff.kind.path)) {
-        let pathInHDiffs = composeRelativePaths({up: 0, down: resultPath}, resultDiff.kind.path);
+        let pathInHDiffs = resultDiff.kind.path;
+        /*composeRelativePaths({up: 0, down: resultPath}, 
+        resultDiff.kind.path);*/
         [hDiff, hDiffPathStack, hDiffContext] = walkHDiff(pathInHDiffs, hDiff, hDiffPathStack, hDiffContext);
         // The resulting hDiff tells where this resultDiff will be applied on the original element.
-        if(debugMagicFunction) console.log("clone DDiffs");
-        let afterClonePath = idPath;
+        if(debugMagicFunction) console.log("clone DDiffs", hDiff);
+         /*let afterClonePath = idPath;
         if(hDiff.kind.ctor == DUType.Reuse) {
           afterClonePath = composeRelativePaths({up: 0, down: List.reverse(hDiffPathStack)}, hDiff.kind.path);
+            hDiff.kind.path;
           if(debugMagicFunction) {
             console.log("afterClonePath");
             inspect({up: afterClonePath.up, down: List.toArray(afterClonePath.down)});
@@ -505,9 +814,9 @@ function magicFunction(hDiff, resultDiffs, hDiffContext, hDiffPathStack, resultP
           hDiff = DUpdate(hDiff.childDiffs, idPath); // the path in hDiff was taken into account.
         } else { // New
           console.log("TODO: New here")
-        }
-        let result = magicFunction(hDiff, DDUpdate(resultDiff.childDiffs, idPath), hDiffContext, hDiffPathStack, resultPath);
-        if(!isIdPath(afterClonePath)) {
+        }*/
+        let result = magicFunction(hDiff, DDUpdate(resultDiff.childDiffs), hDiffContext, hDiffPathStack, resultPath);
+        /*if(!isIdPath(afterClonePath)) {
           if(debugMagicFunction) {
             console.log("returning after DDClone -- before adding path")
             inspect(result);
@@ -515,7 +824,9 @@ function magicFunction(hDiff, resultDiffs, hDiffContext, hDiffPathStack, resultP
           result = result.map(d =>
             DUpdate(d.childDiffs, composeRelativePaths(afterClonePath, d.kind.path))
           )
-        }
+        }*/
+        result = andThen(DDClone(resultDiff.kind.path), result)
+        
         if(debugMagicFunction) {
           console.log("returning after DDClone")
           inspect(result);
@@ -569,7 +880,7 @@ function shouldEqual(a, b, msg) {
 }
 
 debugMagicFunction = false;
-
+/*
 shouldEqual(magicFunction(
    HClone("b"),
     DDNew(3)),
@@ -631,11 +942,9 @@ shouldEqual(magicFunction(
   DDUpdate({
     c: DDNew(3)
   }));
-debugMagicFunction = true;
-/*
-//*/
 
-/*shouldEqual(magicFunction(
+debugMagicFunction = true;
+shouldEqual(magicFunction(
    HUpdate({
       body: HUpdate({
         app: HUpdate({
@@ -652,7 +961,13 @@ debugMagicFunction = true;
        })
       })
     })
-  );*/
+  );
+*/
+  
+//debugMagicFunction = true;
+/*
+//*/
+//*/
 
 console.log(passedtests + "/" + ntests + " tests succeeded")
 process.exit()
@@ -661,7 +976,7 @@ process.exit()
 function doTest(testObject) {
   for(let testcase of testObject.testcases) {
     prog1 = testcase.prog1
-    step1 = testObject.smallStep(prog1);
+    step1 = testObject.hEvaluate(prog1);
     console.log("\n\n-------\nFor program")
     inspect(prog1);
     console.log("Transformed through")
@@ -691,7 +1006,7 @@ function doTest(testObject) {
 
 //--------------- Test with Rewrite lambda calculus ---------//
 
-rewrite_lambda_calculus = {
+cbn_lambda_calculus = {
   // Prog = string
   //      | {lambda: name, body: Prog} 
   //      | {app: Prog, arg: Prog}
@@ -712,60 +1027,368 @@ rewrite_lambda_calculus = {
       ]
     }
   ],
-  smallStep(prog) {
+  hEvaluate(prog) {
     // Returns the hdiff to perform.
-    if(typeof prog.lambda !== "undefined" || typeof prog === "string") {
-      console;log(prog);
-      throw "no small step available"
-    } else { // app.
-      if(typeof prog.app.body != "undefined") {
-        let name = prog.app.lambda;
-        let evalHDiff = function(upDepth, bodyExp, cloneFrom) {
-          if(bodyExp === name) { // Clone of argument
-            return HClone(upDepth, "arg");
-          }
-          if(typeof bodyExp === "string" || bodyExp.lambda === name) { // Other name or shadowing: don't touch
-            return HClone(cloneFrom);
-          }
-          if(typeof bodyExp.lambda !== "undefined") {
-            return HUpdate({
-              body: evalHDiff(upDepth + 1, bodyExp.body)
-            }, cloneFrom);
-          }
-          if(typeof bodyExp.app !== "undefined") {
-            return HUpdate({
-              app: evalHDiff(upDepth + 1, bodyExp.app),
-              arg: evalHDiff(upDepth + 1, bodyExp.arg)
-            }, cloneFrom);
-          }
-        }
-        let childDiffs = evalHDiff(2, prog.app.body, cons("app", cons("body")));
-        return childDiffs;
-      } else {
-        return HUpdate({app: smallStep(prog.app)});
+    if(typeof prog.lambda !== "undefined") return HSame;
+    if(typeof prog === "string") return HSame;
+    if(typeof prog.app.lambda === "undefined") // The function is not yet a lambda
+      return HUpdate({app: hEvaluate(prog.app)});
+    let name = prog.app.lambda;
+    let evalHDiff = function(upDepth, bodyExp, cloneFrom) { // Replacement.
+      if(bodyExp === name)            return HClone(upDepth, "arg"); // Clone of argument
+      if(typeof bodyExp === "string") return HClone(cloneFrom); // Other name
+      if(bodyExp.lambda === name)     return HClone(cloneFrom); //shadowing: don't touch
+      if(typeof bodyExp.lambda !== "undefined") // Lambda with different name.
+        return HUpdate({body: evalHDiff(upDepth+1, bodyExp.body)}, cloneFrom);
+      //if(typeof bodyExp.app !== "undefined") {
+      return HUpdate({
+        app: evalHDiff(upDepth + 1, bodyExp.app),
+        arg: evalHDiff(upDepth + 1, bodyExp.arg)
+        }, cloneFrom);
+    }
+    return evalHDiff(2, prog.app.body, cons("app", cons("body")));
+  }
+}
+doTest(cbn_lambda_calculus);
+
+cbv_lambda_calculus = {
+  // Prog = string
+  //      | {lambda: name, body: Prog} 
+  //      | {app: Prog, arg: Prog}
+  testcases: [
+    {prog1: {app: {lambda: "x", body: {lambda: "y", body: {app: {app: "y", arg: "x"}, arg: "x" } }}, arg: "z"},
+      prog2diffs: [
+        // Remove first argument, or remove second argument.
+        DDUpdate({body: DDUpdate({app: DDClone("app")}).concat(DDClone("app"))}),
+        // Replace second argument by w
+        DDUpdate({body: DDUpdate({arg: DDNew("w")})}),
+        // Replace First argument by w
+        DDUpdate({body: DDUpdate({app: DDUpdate({arg: DDNew("w")})})}),
+        // Copy function to overwrite second argument
+        DDUpdate({body: DDUpdate({arg: DDClone(1, "app", "app")})}),
+        // Add a third argument
+        // Clone the second argument to a third argument z (should be x at the end) or add an unrelated third argument z (should stay z at the end)
+        DDUpdate({body: DDNew({}, {app: DDSame, arg: DDClone("arg").concat(DDNew("z"))})})
+      ]
+    }
+  ],
+  hEvaluate(prog) {
+    // Returns the hdiff to perform.
+    if(typeof prog.lambda !== "undefined") return HSame;
+    if(typeof prog === "string") return HSame;
+    
+    if(typeof prog.app.lambda === "undefined") // The function is not yet a lambda
+        return HUpdate({app: hEvaluate(prog.app)});
+    if(typeof prog.arg.lambda === "undefined") // The argument is not yet a lambda
+        return HUpdate({arg: hEvaluate(prog.arg)});
+
+    let name = prog.app.lambda;
+    if(typeof prog.arg.lambda != "undefined") { // The argument is also a lambda now
+      let evalHDiff = function(upDepth, bodyExp, cloneFrom) {
+        if(bodyExp === name)            return HClone(upDepth, "arg"); // Clone of argument
+        if(typeof bodyExp === "string") return HClone(cloneFrom) // Other variable
+        if(bodyExp.lambda === name)     return HClone(cloneFrom); // Shadowing: don't touch
+        if(typeof bodyExp.lambda !== "undefined")
+          return HUpdate({
+            body: evalHDiff(upDepth + 1, bodyExp.body)
+          }, cloneFrom);
+        //if(typeof bodyExp.app !== "undefined") {
+        return HUpdate({
+          app: evalHDiff(upDepth + 1, bodyExp.app),
+          arg: evalHDiff(upDepth + 1, bodyExp.arg)
+        }, cloneFrom);
       }
+      return evalHDiff(2, prog.app.body, cons("app", cons("body")));
     }
   }
 }
-doTest(rewrite_lambda_calculus);
+
+/*
+cbneed_lambda_calculus = {
+  // ProgState = {prog: Prog, indexCache: number, cache: {[key: number]: {lambda: name, body: Prog}}
+  // Prog = {name: string}
+  //      | {lambda: name, body: Prog}
+  //      | {app: Prog, arg: Prog, computed?: number}
+  testcases: [
+    {prog1: {app: {lambda: "x", body: {lambda: "y", body: {app: {app: "y", arg: "x"}, arg: "x" } }}, arg: "z"},
+      prog2diffs: [
+        // Remove first argument, or remove second argument.
+        DDUpdate({body: DDUpdate({app: DDClone("app")}).concat(DDClone("app"))}),
+        // Replace second argument by w
+        DDUpdate({body: DDUpdate({arg: DDNew("w")})}),
+        // Replace First argument by w
+        DDUpdate({body: DDUpdate({app: DDUpdate({arg: DDNew("w")})})}),
+        // Copy function to overwrite second argument
+        DDUpdate({body: DDUpdate({arg: DDClone(1, "app", "app")})}),
+        // Add a third argument
+        // Clone the second argument to a third argument z (should be x at the end) or add an unrelated third argument z (should stay z at the end)
+        DDUpdate({body: DDNew({}, {app: DDSame, arg: DDClone("arg").concat(DDNew("z"))})})
+      ]
+    }
+  ],
+  hEvaluate(progState) {
+    let prog = progState.prog;
+    let cache = progState.cache;
+    if(typeof prog.lambda !== "undefined") return HSame;
+    if(typeof prog.name === "string") return HSame;
+    if(typeof prog.computed !== "undefined") {
+      let cached = cache[prog.computed];
+      if(typeof cached !== "undefined") {
+        return HUpdate({
+          prog: HClone(1, "cache", prog.computed)})
+      }
+    }
+    if(typeof prog.app.lambda === "undefined") { // The function is not yet a lambda
+      let sub = hEvaluate({prog: prog.app, indexCache: progState.indexCache, cache: cache})
+      
+      HUpdate({prog: HUpdate({app: hEvaluate(prog.app)}));
+
+    let name = prog.app.lambda;
+    if(typeof prog.arg.lambda != "undefined") { // The argument is also a lambda now
+      let evalHDiff = function(upDepth, bodyExp, cloneFrom) {
+        if(bodyExp === name)            return HClone(upDepth, "arg"); // Clone of argument
+        if(typeof bodyExp === "string") return HClone(cloneFrom) // Other variable
+        if(bodyExp.lambda === name)     return HClone(cloneFrom); // Shadowing: don't touch
+        if(typeof bodyExp.lambda !== "undefined")
+          return HUpdate({
+            body: evalHDiff(upDepth + 1, bodyExp.body)
+          }, cloneFrom);
+        //if(typeof bodyExp.app !== "undefined") {
+        return HUpdate({
+          app: evalHDiff(upDepth + 1, bodyExp.app),
+          arg: evalHDiff(upDepth + 1, bodyExp.arg)
+        }, cloneFrom);
+      }
+      return evalHDiff(2, prog.app.body, cons("app", cons("body")));
+    }
+  }
+}
+*/
 
 //--------------- Test with Env-based CBN lambda calculus -------//
 
-test2 = {
-  // Prog = {env: Env, exp: Exp}
-  // Exp =  {name: string}
-  //      | {lambda: name, body: Exp} 
+env_cbn_lambda_calculus = {
+  // ProgState = {prog: Compute | Return, continuations: List {}}
+  // Compute =      {ctor: "Compute", data: {env: Env, exp: Exp}}
+  // Exp =  string
+  //      | {lambda: string, body: Exp}
   //      | {app: Exp, arg: Exp}
-  // Env = {name: String, value: Exp, tail: Env} | {}
+  // Env = {name: String, value: {env: Env, exp: Exp}, tail: Env} | {}
+  // Return = {ctor: "Return", data: {env: Env, exp: {lambda: string, body: Exp}}}
+  continuations: {
+    applyArg: function(progState) { // First element of continuations is an applyArg
+      let val = progState.prog.data;
+      let cont = progState.continuations.hd;
+      return {prog:
+          {ctor: "Compute",
+            env: {name: val.exp.lambda, value: cont.data, tail: val.env},
+            exp: val.exp.body},
+        continuations: progState.continuations.tl}
+    }
+  },
+  
+  // Ground truth
+  evaluate(progState) {
+    let prog = progState.prog;
+    if(prog.ctor === "Return") {
+      if(typeof progState.continuations !== "undefined") {
+        return continuations[progState.continuations.hd.ctor](progState);
+      } else {
+        return prog; // Final value.
+      }
+    }
+    if(typeof prog.data.exp === "string") {
+      let env = prog.data.env;
+      while(env && env.name !== exp) env = env.tail;
+      if(!env) { console.log(env); throw exp + " not found"; }
+      return evaluate({prog: {ctor: "Compute", data: env.value}, // Replace data with env's data
+                       continuations: progState.continuations});
+    }
+    if(typeof prog.data.exp.lambda === "string") {
+      return evaluate({prog: {ctor: "Return", data: prog.data}, // Compute => Return
+                       continuations: progState.continuations});
+    }
+    if(typeof prog.data.exp.app !== "undefined") {
+      // Replace exp with exp.app
+      // Add a continuations
+      return evaluate({prog: {ctor: "Compute", data: {env: env, exp: prog.data.exp.app}},
+                       continuations: cons({kind: "applyArg", data: {env: env, exp: prog.exp.arg}}, progState.continuations)});
+    }
+  },
+  
+  hContinuations: {
+    applyArg(progState) { // First element of continuations is an applyArg. It used to be a Return
+      return HUpdate({
+        prog: HUpdate({
+          ctor: HNew("Compute"),
+          data: HUpdate({
+            env: HNew({}, {
+              name: HClone(1, "exp", "lambda"),
+              value: HClone(3, "continuations", "hd", "data"),
+              tail: HSame}),
+            exp: HClone("body")})}),
+        continuations: HClone("tl")
+      })
+    }
+  },
+  
+  hEvaluate(progState) {
+    let prog = progState.prog;
+    if(prog.ctor === "Return")
+      return typeof progState.continuations !== "undefined" ?
+        hContinuations[progState.continuations.hd.ctor](progState)
+        : HSame; // Final value.
+    if(typeof prog.data.exp === "string") {
+      let env = prog.data.env;
+      let downStack = cons("value");
+      while(env && env.name !== exp) {
+        env = env.tail;
+        downStack = cons("tail", downStack)
+      }
+      if(!env) { console.log(env); throw exp + " not found"; }
+      return HUpdate({prog: HUpdate({data: HClone(cons("env", downStack))})});
+    }
+    if(typeof prog.data.exp.lambda === "string") {
+      return HUpdate({prog: HUpdate({ctor: HNew("Return")})});
+    }
+    // if(typeof prog.data.exp.app !== "undefined") {
+      // Replace exp with exp.app
+      // Add a continuations
+    return HUpdate({
+      prog: HUpdate({
+        data: HUpdate({
+          exp: HClone("app")})}),
+      continuations: HNew({}, {
+        hd: HNew({kind: "applyArg"}, {
+         data: HClone(1, "prog", "data")}),
+        tl: HSame
+      })});
+  }
 }
 
 //--------------- Test with Env-based CBV lambda calculus -------//
 
-test3 = {
-  // Prog = {env: Env, exp: Exp}
-  // Exp =  {name: string}
-  //      | {lambda: name, body: Exp} 
+env_cbv_lambda_calculus = {
+  // ProgState = {prog: Compute | Return, continuations: List {}}
+  // Compute =      {ctor: "Compute", data: {env: Env, exp: Exp}}
+  // Exp =  string
+  //      | {lambda: string, body: Exp}
   //      | {app: Exp, arg: Exp}
-  // Env = {name: String, value: {lambda: ...}, tail: Env} | {}
+  // Env = {name: String, value: {env: Env, exp: Exp}, tail: Env} | {}
+  // Return = {ctor: "Return", data: {env: Env, exp: {lambda: string, body: Exp}}}
+  continuations: {
+    computeArg(progState) { // First element of continuations is an computeArg, program is a Return.
+      let computedFun = progState.prog.data;
+      let argCompute = progState.continuations.hd; // The continuation is how to compute the argument
+      return {
+        prog:
+          {ctor: "Compute",
+           data: argCompute},
+        continuations: {hd: {
+          ctor: "applyFun", // Store the env/exp lambda for later.
+          data: computedFun
+        }, tl: progState.continuations.tl}}
+    },
+    applyFun(progState) { // First element of continuations is an applyFun, program is a Return (the argument).
+      let computedFun = progState.continuations.hd.data;
+      let argVal = progState.prog.data;
+      return {
+        prog:
+          { ctor: "Compute",
+            data: {
+              exp: computedFun.exp.body,
+              env: {name: computedFun.exp.lambda, value: argVal, tail: computedFun.env}
+            }
+          },
+        continuations: progState.continuations.tl}
+    }
+  },
+  
+  evaluate: function evaluate(progState) {
+    let prog = progState.prog;
+    if(prog.ctor === "Return") {
+      if(typeof progState.continuations !== "undefined") {
+        return continuations[progState.continuations.hd.ctor](progState);
+      } else {
+        return prog; // Final value.
+      }
+    }
+    if(typeof prog.data.exp === "string") {
+      let env = prog.data.env;
+      while(env && env.name !== exp) env = env.tail;
+      if(!env) { console.log(env); throw exp + " not found"; }
+      return evaluate({prog: {ctor: "Return", data: env.value}, // For CBV, data is a value=>"Return" instead of "Compute"
+                       continuations: progState.continuations});
+    }
+    if(typeof prog.data.exp.lambda === "string") {
+      return evaluate({prog: {ctor: "Return", data: prog.data}, // Compute => Return
+                       continuations: progState.continuations});
+    }
+    if(typeof prog.data.exp.app !== "undefined") {
+      // Replace exp with exp.app
+      // Add a continuations
+      return evaluate({prog: {ctor: "Compute", data: {env: env, exp: prog.data.exp.app}},
+        continuations: cons({kind: "computeArg", data: {env: env, exp: prog.data.exp.arg}}, progState.continuations)});
+    }
+  },
+  
+  hContinuations: {
+    computeArg(progState) { // First element of continuations is a computeArg, program is a Return.
+      return HUpdate({
+        prog: HUpdate({
+          ctor: HNew("Compute"),
+          data: HClone(2, "continuations", "hd")}),
+        continuations: HNew({}, {
+          hd: HNew({ctor: "applyFun"}, {
+            data: HClone(1, "prog", "data")}),
+          tl: HSame})});
+    },
+    applyFun(progState) { // First element of continuations is an applyFun, program is a Return (the argument).
+      return HUpdate({
+        prog: HUpdate({
+          ctor: HNew("Compute"),
+          data: HNew({}, {
+            exp: HClone(2, "continuations", "hd", "data", "exp", "body"),
+            env: HNew({}, {
+              name: HClone(2, "continuations", "hd", "data", "exp", "lambda"),
+              value: HSame})})}),
+        continuations: HClone("tl")})
+    }
+  },
+  
+  hEvaluate(progState) {
+    let prog = progState.prog;
+    if(prog.ctor === "Return") {
+      if(typeof progState.continuations !== "undefined") {
+        return hContinuations[progState.continuations.hd.ctor](progState);
+      } else {
+        return HSame; // Final value, no change possible.
+      }
+    }
+    if(typeof prog.data.exp === "string") {
+      let env = prog.data.env;
+      let downpath = cons("value");
+      while(env && env.name !== exp) {
+        env = env.tail;
+        downpath = cons("tail", downpath)
+      }
+      if(!env) { console.log(env); throw exp + " not found"; }
+      return HUpdate({
+        prog: HUpdate({
+          ctor: HNew("Return"), // For CBV, data is a value=>"Return" instead of "Compute"
+          data: HClone(cons("env", downpath))})});
+    }
+    if(typeof prog.data.exp.lambda === "string") {
+      return HUpdate({prog: HUpdate({ctor: HNew("Return")})}); // Compute => Return
+    }
+    if(typeof prog.data.exp.app !== "undefined") {
+      // Replace exp with exp.app
+      // Add a continuations
+      return HUpdate({
+        prog: HUpdate({data: HUpdate({exp: HClone("app")})}),
+        continuations: HNew({}, {
+          hd: HNew({kind: "computeArg", data: HCloneUpdate({up: 1, down: cons("prog", cons("data"))}, { exp: HClone("arg")})}),
+          tl: HSame})});
+    }
+  }
 }
-
