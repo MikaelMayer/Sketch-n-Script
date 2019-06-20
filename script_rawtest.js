@@ -4,7 +4,13 @@ var uneval = x => util.inspect(x, {depth: undefined, colors: true});
 
 const inspect = function(what) {
   console.log(uneval(what));
+  return what;
   //console.dir(what, {depth: undefined});
+}
+
+const inspectReturn = function(what) {
+  console.log("return" + uneval(what));
+  return what;
 }
 
 
@@ -113,6 +119,7 @@ function composeStackPath(absoluteStack, relativePath) {
   let u = relativePath.up;
   while(u) {
     absoluteStack = absoluteStack.tl;
+    u--;
   }
   let d = relativePath.down;
   while(d) {
@@ -208,6 +215,7 @@ isDSame = function(diff) {
 
 HUpdate = DUpdate = function(childDiffs, path) {
   let cd = {};
+  path = normalizePath(path);
   let outsideLevel = path.up;
   for(let k in childDiffs) {
     let child = childDiffs[k]
@@ -225,7 +233,7 @@ HUpdate = DUpdate = function(childDiffs, path) {
       }
     }
   }
-  return { ctor: DType.Update, kind: { ctor: DUType.Reuse, path: normalizePath(path)}, childDiffs: cd,
+  return { ctor: DType.Update, kind: { ctor: DUType.Reuse, path: path}, childDiffs: cd,
     [util.inspect.custom]: diffToString, outsideLevel: outsideLevel
   };
 }
@@ -485,8 +493,8 @@ function merge2DDiffs(dDiff1, dDiff2) {
   }
   return result;
 }
-function mergeDDiffs(dDiffs) {
-  if(dDiffs.length === 0) return [];
+function mergeDDiffs(dDiffs, single) {
+  if(dDiffs.length === 0) return single ? DSame : DDSame;
   let result = dDiffs[0];
   for(let i = 1; i < dDiffs.length; i++) {
     result = merge2DDiffs(result, dDiffs[i]);
@@ -494,26 +502,35 @@ function mergeDDiffs(dDiffs) {
   return result;
 }
 
+// Special case when the first one is a pure clone
+// TODO: General case.
 function andThen(dDiff1, dDiff2) {
   let result = [];
-  for(let d1 of dDiff1) {
-    for(let d2 of dDiff2) {
+  for(let d1 of Array.isArray(dDiff1) ? dDiff1 : [dDiff1]) {
+    for(let d2 of Array.isArray(dDiff2) ? dDiff2 : [dDiff2]) {
       if(d1.kind.ctor === DUType.Reuse && noChildDiffs(d1)) {
-        if(d2.kind.ctor === DUType.Reuse && isIdPath(d2.kind.path)) {
-          result.push(DUpdate(d2.childDiff, d1.kind.path));
+        if(d2.kind.ctor === DUType.Reuse) {
+          result.push(DUpdate(d2.childDiffs, composeRelativePaths(d1.kind.path, d2.kind.path)));
+        } else {
+          let newChildDiffs = {};
+          for(let k of d2.childDiffs) {
+            newChildDiffs[k] = andThen(d1, d2.childDiffs[k]);
+          }
+          result.push(DNew(d2.kind.model, newChildDiffs));
         }
       }
     }
   }
-  return result;
+  return !Array.isArray(dDiff1) && !Array.isArray(dDiff2) ? result[0] : result;
 }
 
-function foreach(obj, callback) {
-  let result = [];
-  for(let k in obj) {
-    result.push(callback(k, obj[k]));
+function foreach(obj) { return callback => {
+    let result = [];
+    for(let k in obj) {
+      result.push(callback(k, obj[k]));
+    }
+    return result;
   }
-  return result;
 }
 
 // Transforms a conjunction of disjunctions of conjunctions to a disjunction of conjunctions.
@@ -548,7 +565,7 @@ function cdc_to_dc(listListList) {
   return resultDc;
 }*/
 
-// Finds where this abslute path come from in the original source tree.
+// Returns a stackPath matching where this stack path comes from in the original source tree.
 // If it did not exist or is a New of something, return {error: msg}
 function followStackPath(hDiff, stackPath) {
   let hPathStack = undefined;
@@ -559,14 +576,16 @@ function followStackPath(hDiff, stackPath) {
       let p = hDiff.kind.path;
       hPathStack = cons(hd, composeStackPath(hPathStack, p));
       hDiff = hDiff.childDiffs[hd];
-      if(typeof hDiff === undefined) hDiff = HSame;
+      if(typeof hDiff === "undefined") hDiff = HSame;
     } else {
       hDiff = hDiff.childDiffs[hd];
-      if(typeof hDiff === undefined) return {error: "Can't go down a HNew that does not reference '" + hd + "'"};
+      if(typeof hDiff === "undefined") return {error: "Can't go down a HNew that does not reference '" + hd + "'"};
     }
     path = path.tl;
   }
-  return hPathStack;
+  return hDiff && hDiff.kind.ctor === DUType.Reuse ?
+     composeStackPath(hPathStack, hDiff.kind.path) :
+     hPathStack;
 }
 
 // Like followStackPath but returns {ctor: "Just", _0: ...} if there is an original pathStack in hDiff
@@ -580,12 +599,12 @@ function isDirectStackPath(hDiff, stackPath) {
       let p = hDiff.kind.path;
       hPathStack = cons(hd, composeStackPath(hPathStack, p));
       hDiff = hDiff.childDiffs[hd];
-      if(typeof hDiff === undefined) {
+      if(typeof hDiff === "undefined") {
         return {ctor: "Just", _0: List.reverse(path.tl, hPathStack)}
       }
     } else {
       hDiff = hDiff.childDiffs[hd];
-      if(typeof hDiff === undefined) return {ctor: "Nothing"};
+      if(typeof hDiff === "undefined") return {ctor: "Nothing"};
     }
     path = path.tl;
   }
@@ -621,8 +640,11 @@ function DDUpdatePath(stackPath, ddiff) {
 // if path = prefixPath + x, return an afterSourcePath of DUpdatePath(x, Clone | New), else return the diff as outsideSourcePath
 // Return [relative diffs, absolute diffs];
 function partitionAndMakeRelative(path, diff) {
+  console.log("partitionAndMakeRelative");
+  inspect(path);
+  inspect(diff);
   if(typeof path === "undefined") {
-    return [diff, DSame]; // Everything is relative, but no need to relativize.
+    return inspect([diff, DSame]); // Everything is relative, but no need to relativize.
   }
   let head = path.hd;
   let tail = path.tl;
@@ -640,9 +662,9 @@ function partitionAndMakeRelative(path, diff) {
         absoluteChildDiffs[k] = osp;
       }
     }
-    return [rcd, DUpdate(absoluteChildDiffs)];
+    return inspect([rcd, DUpdate(absoluteChildDiffs)])  ;
   } else {
-    return [DSame, diff];
+    return inspect([DSame, diff]);
   }
 }
 
@@ -667,19 +689,23 @@ function flatten(arrayOfArrays) {
 
 // Returns a Diff
 function magicFunctionAux(hDiff, dDiff, dStackPath) {
+  console.log("magicFunctionAux")
+  inspect(hDiff)
+  inspect(dDiff)
+  inspect(List.toArray(dStackPath));
   // START: Optimization for closed diffs.
   if(dDiff.outsideLevel === 0) {
     let res = isDirectStackPath(hDiff, dStackPath);
     if(res.ctor === "Just") { // It's at the leaf of an HDiff.
-      return DUpdatePath(res._0, dDiff);
+      return inspectReturn(DUpdatePath(res._0, dDiff));
     }
   }
   // END: Optimization for closed diffs.
-  let childDiffs = dDiffs.childDiffs;
+  let childDiffs = dDiff.childDiffs;
   if(dDiff.kind.ctor === DUType.Reuse) {
     let relPath = dDiff.kind.path;
     if(isIdPath(relPath))
-      return mergeDDiffs(foreach(childDiffs)((k, d) => magicFunctionAux(hDiff, d, cons(k, dStackPath))));
+      return inspectReturn(mergeDDiffs(foreach(childDiffs)((k, d) => magicFunctionAux(hDiff, d, cons(k, dStackPath)))));
     // On the output, at the current location pointed by dStackPath (the workplace),
     // we replace the existing element by a clone of a tree element present elsewhere in the output (the source).
     // The workplace's stack path is dStackPath
@@ -687,14 +713,36 @@ function magicFunctionAux(hDiff, dDiff, dStackPath) {
     // By following the output's stack paths in the hDiff, we can recover the paths they come from in the input.
     let dPathOriginal        = followStackPath(hDiff, dStackPath); // Path where the workplace came from in the input.
     let dSourcePathOriginal  = followStackPath(hDiff, sourceStackPath); // Path where the source came from in the input.
-    let clonePath            = makeRelative(dPathOriginal, sourcePathOriginal); // Relative path between input's workplace and input's source.
+    let clonePath            = makeRelative(dPathOriginal, dSourcePathOriginal); // Relative path between input's workplace and input's source.
+    console.log("revworkplace-output")
+    inspect(dStackPath)
+    console.log("revsource   -output")
+    inspect(sourceStackPath)
+    console.log("revworkplace-input (dPathOriginal)")
+    inspect(dPathOriginal)
+    console.log("revsource   -input (dSourcePathOriginal)")
+    inspect(dSourcePathOriginal)
+    console.log("clonePath indicating source from workplace in input")
+    inspect(clonePath);
+    
     // We recover all children diffs globally as if they were done on the source's path.
     let diffsFromChildren = mergeDDiffs(foreach(childDiffs)((k, d) =>
-      magicFunctionAux(hDiff, d, cons(k, sourceStackPath))));
+      magicFunctionAux(hDiff, d, cons(k, sourceStackPath))), "single");
+    console.log("diffsFromChildren");
+    inspect(diffsFromChildren);
     // We now have a list of global differences made on the original input;
     // If these differences consists of updates whose path contains the prefix "dSourcePathOriginal", we assume that they happen on the workplace in the input and were cloned from the source in the input.
+    console.log("dSourcePathOriginal - reminder");
+    inspect(dSourcePathOriginal);
     let [relDiff, absDiff] = partitionAndMakeRelative(List.reverse(dSourcePathOriginal), diffsFromChildren);
-    return merge2DDiffs(DUpdatePath(dPathOriginal, DCloneUpdate(clonePath, relDiff)), absDiff);
+    console.log("[relDiff, absDiff]");
+    inspect([relDiff, absDiff]);
+    
+    let cloneAndDiff = andThen(DCloneUpdate(clonePath), relDiff);
+    console.log("cloneAndDiff")
+    inspect(cloneAndDiff)
+    
+    return inspectReturn(merge2DDiffs(DUpdatePath(dPathOriginal, cloneAndDiff), absDiff));
   } else {
     let dPathOriginal        = followStackPath(hDiff, dStackPath); // Path where the workplace came from in the input.
     if(noChildDiffs(dDiff))
@@ -707,7 +755,7 @@ function magicFunctionAux(hDiff, dDiff, dStackPath) {
       newChildDiffs[k] = relDiff;
       return absDiff;
     }));
-    return merge2DDiffs(DUpdatePath(dPathOriginal, DNew(dDiff.kind.model, newChildDiffs)), diffsFromChildren);
+    return inspectReturn(merge2DDiffs(DUpdatePath(dPathOriginal, DNew(dDiff.kind.model, newChildDiffs)), diffsFromChildren));
   }    
 }
 
@@ -964,10 +1012,17 @@ shouldEqual(magicFunction(
   );
 */
   
-//debugMagicFunction = true;
+debugMagicFunction = true;
 /*
 //*/
-//*/
+
+shouldEqual(magicFunctionAux(
+  HNew({}, {a: HNew({}, {b: HCloneUpdate({up: 0, down: cons("c")}, {d: HClone(2, "f")}) })}),
+  DUpdate({a: DUpdate({b: DUpdate({d: DCloneUpdate({up: 1, down: cons("e")}, {p: DClone(2, "d")}), e: DClone(1, "d")})})})),
+  DUpdate(
+    {f: DCloneUpdate({up: 1, down: cons("c", cons("e"))}, {p: DClone(3, "f")}),
+     c: DUpdate({e: DClone(2, "f")})
+    }));
 
 console.log(passedtests + "/" + ntests + " tests succeeded")
 process.exit()
