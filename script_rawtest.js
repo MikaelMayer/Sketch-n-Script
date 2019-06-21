@@ -705,7 +705,7 @@ function magicFunctionAux(hDiff, dDiff, dStackPath) {
   if(dDiff.kind.ctor === DUType.Reuse) {
     let relPath = dDiff.kind.path;
     if(isIdPath(relPath))
-      return mergeDDiffs(foreach(childDiffs)((k, d) => magicFunctionAux(hDiff, d, cons(k, dStackPath))));
+      return mergeDDiffs(foreach(childDiffs)((k, d) => magicFunctionAux(hDiff, d, cons(k, dStackPath))), "single");
     // On the output, at the current location pointed by dStackPath (the workplace),
     // we replace the existing element by a clone of a tree element present elsewhere in the output (the source).
     // The workplace's stack path is dStackPath
@@ -751,10 +751,10 @@ function magicFunctionAux(hDiff, dDiff, dStackPath) {
     // We collect absolute differences (outisde of the original path were we apply differences)
     let diffsFromChildren = mergeDDiffs(foreach(childDiffs)((k, d) => {
       let cd = magicFunctionAux(hDiff, d, dStackPath);
-      let [relDiff, absDiff] = partitionAndMakeRelative(List.reverse(dPathORiginal), cd);
+      let [relDiff, absDiff] = partitionAndMakeRelative(List.reverse(dPathOriginal), cd);
       newChildDiffs[k] = relDiff;
       return absDiff;
-    }));
+    }), "single");
     return merge2DDiffs(DUpdatePath(dPathOriginal, DNew(dDiff.kind.model, newChildDiffs)), diffsFromChildren);
   }    
 }
@@ -1023,6 +1023,11 @@ shouldEqual(magicFunctionAux(
     {f: DCloneUpdate({up: 1, down: cons("c", cons("e"))}, {p: DClone(3, "f")}),
      c: DUpdate({e: DClone(2, "f")})
     }));
+
+shouldEqual(magicFunctionAux(
+  HUpdate({a: HNew({}, {k: HClone(1, "b", "c"), p: HClone(1, "b", "d")}), b: HClone(1, "a", "m")}),
+  DUpdate({b: DNew({}, {u: DSame, o: DClone(1, "a", "k"), t: DClone(1, "a", "p")})})),
+ DUpdate({a: DUpdate({m: DNew({}, {u: DSame, o: DClone(2, "b", "c"), t: DClone(2, "b", "d")})})}));
 
 console.log(passedtests + "/" + ntests + " tests succeeded")
 process.exit()
