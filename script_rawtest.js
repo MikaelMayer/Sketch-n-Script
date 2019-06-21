@@ -42,7 +42,7 @@ But the result' is not back-propagated, only resultDiffs and result are.
 Indeed, for now there is only one result', but in the process we might back-propagate several programs.
 
 Given the diffs for result, we now want to obtain the diffs for program.
-progDiffs = magicFunction(hDiffs, resultDiffs)
+progDiffs = outputDiffsToInputDiffs(hDiffs, resultDiffs)
 
 To do this, one idea is to
 1) Derive a rDiffs from prog and hDiffs "how to build the program if given the result"
@@ -136,7 +136,7 @@ function debugLog(msg, value) {
 }
 function normalizePath(path, args) {
   return typeof path === "string" ?
-       {up: 0, down: cons(path, List.drop(1, List.fromArray(args)))} : 
+       {up: 0, down: cons(path, args ? List.drop(1, List.fromArray([...args])) : undefined)} : 
        Array.isArray(path) ?
        {up: 0, down: List.fromArray(path)} :
        typeof path === "object" && typeof path.down === "string" ?
@@ -191,7 +191,7 @@ diffToString = function(depth, options) {
       let padding = "     ";
       str += util.inspect(this.kind.model).replace(/\n/g, `\n${padding}`)
       if(!noChildDiffs(this)) {
-        str += ",\n" + padding + children();
+        str += ",{\n" + padding + children();
       }
       str += ")";
       return str;
@@ -212,6 +212,7 @@ isDSame = function(diff) {
   }
   return false;
 }
+isDDSame = function(diffs) { return diffs.length === 0 || diffs.length === 1 && isDSame(diffs[0]); }
 
 HUpdate = DUpdate = function(childDiffs, path) {
   let cd = {};
@@ -242,9 +243,7 @@ HClone = DClone = function(path) { return DUpdate({}, normalizePath(path, argume
 
 HCloneUpdate = DCloneUpdate = function(path, childDiffs) { return DUpdate(childDiffs, path); }
 
-DDClone = function(path) {
-  return [DClone(path)];
-}
+DDClone = function(path) { return DDUpdate({}, normalizePath(path, arguments)); }
 
 HSame = DSame = DClone(idPath);
 DDSame = [DSame]
@@ -252,6 +251,7 @@ DDSame = [DSame]
 DDUpdate = function(childDiffs, path) {
   return [DUpdate(childDiffs, path)];
 }
+DDCloneUpdate = function(path, childDiffs) { return DDUpdate(childDiffs, path); }
 
 HNew = DNew = function(model, childDiffs) {
   let outsideLevel = 0;
@@ -269,9 +269,26 @@ HNew = DNew = function(model, childDiffs) {
   [util.inspect.custom]: diffToString, outsideLevel};
 }
 
-DDNew = RDNew = function(model, childDiffs) {
+DDNew = function(model, childDiffs) {
   return [HNew(model, childDiffs)];
 }
+
+function DUpdatePath(stackPath, diff) {
+  while(stackPath) {
+    diff = DUpdate({[stackPath.hd]: diff});
+    stackPath = stackPath.tl;
+  }
+  return diff;
+}
+
+function DDUpdatePath(stackPath, ddiff) {
+  while(stackPath) {
+    ddiff = DDUpdate({[stackPath.hd]: ddiff});
+    stackPath = stackPath.tl;
+  }
+  return ddiff;
+}
+
 
 function walk(path, prog, ctx) {
   let n = path.up;
@@ -352,7 +369,7 @@ function applyHDiffs(hDiff, prog) {
 
 // Applies the dDiffs to the given program, taking the first diff into account if there are multiple
 // If "last" is provided, it will fetch the last diff instead
-function applyDDiffs(dDiff, prog, last) {
+function applyDDiff1(dDiffs, prog, last) {
   function aux(dDiff, prog, ctx) {
     //console.log("aux"); inspect(dDiff); inspect(prog);
     let kind = dDiff.kind;
@@ -376,66 +393,66 @@ function applyDDiffs(dDiff, prog, last) {
     }
     return o;
   }
-  return aux(last ? dDiff[dDiff.length - 1] : dDiff[0], prog, undefined);
+  return aux(last ? dDiffs[dDiff.length - 1] : dDiffs[0], prog, undefined);
 }
 
-// Returns RDiffs.
-function reverseHDiffs(prog, hDiff) {
-  function aux(prog, ctx, hDiff) {
-    if(hDiff.kind.ctor == DUType.Reuse) {
-      // If there is no cloning path, in reverse, it's also going to be a reuse.
-      if(!isIdPath(hDiff.kind.path)) {
-        [prog, ctx] = walk(hDiff.kind.path, prog, ctx);
-      }
-        
-        // Here we need to rebuild the program.
-      // Only difference is that un
-    } else {
-      
-    }
-  }
-  return aux(prog, undefined, hDiff);
-}
-
-// Returns new dDiffs
-function applyRDiffs(hDiff, rDiff, dDiffs) {
-  function aux(rDiff, dDiffs, ctx) {
-    let kind = rDiff.kind;
-    let isNew = kind.ctor === DUType.New;
-    // elements in model are actually unchanged from the beginning.
-    // elements in chilDiffs are actually updates.
-    
+// Applies the dDiffs to the given program, returns a VSA of all possible programs.
+function applyDDiffsVSA(dDiffs, prog, ctx) {
+  return dDiffs.map(dDiff => {
     //console.log("aux"); inspect(dDiff); inspect(prog);
-    function oneDiff(dDiff, ctx) {
-      if(dDiff.kind.ctor == DUType.Reuse) {
-        if(Object.keys(dDiff.childDiffs).length === 0) { // pure clone
-          let path = dDiff.kind.path;
-          // We look for where this path would be cloned in the rDiff.
-          
-        }
-      }
-      if(!isNew) {
-        [prog, ctx] = walk(kind.path, prog, ctx);
-      }
-      let model = isNew ? kind.model : prog;
-      let childDiffs = dDiff.childDiffs;
-      if(Object.keys(childDiffs).length == 0) {
-        return model;
-      }
-      let o = Array.isArray(model) ? [] : {};
-      for(let k in model) {
-        o[k] = model[k];
-      }
-      for(let k in childDiffs) {
-        o[k] = aux(last ? childDiffs[k][childDiffs[k].length - 1]: childDiffs[k][0],
-           isNew ? prog : prog[k],
-           isNew ? ctx : cons(prog, ctx));
-      }
-      return o;
+    let kind = dDiff.kind;
+    let isNew = kind.ctor === DUType.New;
+    if(!isNew) {
+      [prog, ctx] = walk(kind.path, prog, ctx);
     }
-    return oneDiff(dDiffs[0], ctx);
-  }
-  return aux(rDiffs, dDiffs, undefined);
+    let model = isNew ? kind.model : prog;
+    let childDiffs = dDiff.childDiffs;
+    if(Object.keys(childDiffs).length == 0) {
+      return model;
+    }
+    let o = Array.isArray(model) ? [] : {};
+    for(let k in model) {
+      o[k] = model[k];
+    }
+    for(let k in childDiffs) {
+      o[k] = applyDDiffs(childDiffs[k],
+         isNew ? prog : prog[k],
+         isNew ? ctx : cons(prog, ctx));
+    }
+    return o;
+  });
+}
+
+
+// Applies the dDiffs to the given program, returns all possible programs.
+function applyDDiffs(dDiffs, prog, ctx) {
+  return flatMap(dDiffs, dDiff => {
+    //console.log("aux"); inspect(dDiff); inspect(prog);
+    let kind = dDiff.kind;
+    let isNew = kind.ctor === DUType.New;
+    if(!isNew) {
+      [prog, ctx] = walk(kind.path, prog, ctx);
+    }
+    let model = isNew ? kind.model : prog;
+    let childDiffs = dDiff.childDiffs;
+    if(Object.keys(childDiffs).length == 0) {
+      return [model];
+    }
+    let o = Array.isArray(model) ? [] : {};
+    for(let k in model) {
+      o[k] = model[k];
+    }
+    let os = [o];
+    for(let k in childDiffs) {
+      let cds = applyDDiffs(childDiffs[k],
+         isNew ? prog : prog[k],
+         isNew ? ctx : cons(prog, ctx))
+      os = flatMap(cds, cd =>
+        os.map(o => ({...o, [k]: cd}))
+      );
+    }
+    return os;
+  });
 }
 
 function noChildDiffs(diff) {
@@ -459,7 +476,9 @@ function merge2DDiffs(dDiff1, dDiff2) {
           continue;
         }
       }
-      if(diff1.kind.ctor == DUType.Reuse && isIdPath(diff1.kind.path)) {
+      if(isDSame(diff1)) result.push(diff2);
+      else if(isDSame(diff2)) result.push(diff1);
+      else if(diff1.kind.ctor == DUType.Reuse && isIdPath(diff1.kind.path)) {
         if(diff2.kind.ctor == DUType.Reuse && isIdPath(diff2.kind.path)) {
           let finalChildDiffs = {};
           for(let k in diff1.childDiffs) {
@@ -524,6 +543,7 @@ function andThen(dDiff1, dDiff2) {
   return !Array.isArray(dDiff1) && !Array.isArray(dDiff2) ? result[0] : result;
 }
 
+// Iterate key/values of an object
 function foreach(obj) { return callback => {
     let result = [];
     for(let k in obj) {
@@ -532,38 +552,6 @@ function foreach(obj) { return callback => {
     return result;
   }
 }
-
-// Transforms a conjunction of disjunctions of conjunctions to a disjunction of conjunctions.
-function cdc_to_dc(listListList) {
-  if(listListList.length === 0) return [[]];
-  if(listListList.length === 1) return listListList[0];
-  let firstDc = listListList[0];
-  let seconDc = cdc_to_dc(listListList.slice(1));
-  // Let's distribute!
-  let resultDc = [];
-  for(let c1 of firstDc) {
-    for(let c2 of seconDc) {
-      resultDc.push(c1.concat(c2));
-    }
-  }
-  return resultDc;
-}
-
-/*function clabeldc_to_dclabel(listLabelListList) {
-  if(listLabelListList.length === 0) return [[]];
-  if(listLabelListList.length === 1) return listLabelListList[0];
-  let {label: firstlabelDc = listLabelListList[0];
-  let seconlabelDc = clabeldc_to_label_dc(listLabelListList.slice(1));
-  // Let's distribute!
-  let resultDc = [];
-  for(let c1 of firstlabelDc) {
-    
-    for(let c2 of seconlabelDc) {
-      resultDc.push(c1.concat(c2));
-    }
-  }
-  return resultDc;
-}*/
 
 // Returns a stackPath matching where this stack path comes from in the original source tree.
 // If it did not exist or is a New of something, return {error: msg}
@@ -620,25 +608,9 @@ function makeRelative(stackPath, stackPath2) {
   return {up: List.length(absPath), down: absPath2};
 }
 
-function DUpdatePath(stackPath, diff) {
-  while(stackPath) {
-    diff = DUpdate({[stackPath.hd]: diff});
-    stackPath = stackPath.tl;
-  }
-  return diff;
-}
-
-function DDUpdatePath(stackPath, ddiff) {
-  while(stackPath) {
-    ddiff = [DDUpdate({[stackPath.hd]: ddiff})];
-    stackPath = stackPath.tl;
-  }
-  return ddiff;
-}
-
 // Given a Diff, extracts any subdiff starting with the path in its own diff;
 // if path = prefixPath + x, return an afterSourcePath of DUpdatePath(x, Clone | New), else return the diff as outsideSourcePath
-// Return [relative diffs, absolute diffs];
+// Return [relative diff, absolute diff];
 function partitionAndMakeRelative(path, diff) {
   /*console.log("partitionAndMakeRelative");
   inspect(path);
@@ -659,7 +631,7 @@ function partitionAndMakeRelative(path, diff) {
           partitionAndMakeRelative(tail, c)
           : [rcd, c];
       if(!isDSame(acd)) {
-        absoluteChildDiffs[k] = osp;
+        absoluteChildDiffs[k] = acd;
       }
     }
     return [rcd, DUpdate(absoluteChildDiffs)];
@@ -668,28 +640,45 @@ function partitionAndMakeRelative(path, diff) {
   }
 }
 
+// Returns a disjunctive array of [relative diffs, absolute diffs]
 function partitionAndMakeRelative2(path, diffs, stackPath) {
-  function one(diff) {
-    if(diff.kind.ctor === DUType.Reuse && isIdPath(diff.kind.path)) {
-      return foreach(diff.childDiffs)((k, d) =>
-        k === path.hd ?
-          partitionAndMakeRelative2(path.tail, d, cons(k, stackPath)) :
-          [[], DUpdatePath(stackPath, d)])
-    }
+  /*console.log("partitionAndMakeRelative2");
+  inspect(path);
+  inspect(diffs);*/
+  if(typeof path === "undefined") {
+    return [[diffs, DDSame]]; // Everything is relative, but no need to relativize.
   }
-}
-
-function flatten(arrayOfArrays) {
-  let result = [];
-  for(let elems of arrayOfArrays) result.push(...elems);
-  return result;
+  return flatMap(diffs, diff => {
+    let head = path.hd;
+    let tail = path.tl;
+    if(diff.kind.ctor === DUType.Reuse && isIdPath(diff.kind.path)) {
+      if(head in diff.childDiffs) {
+        let baseAbsoluteChildDiffs = {}; // Contains descendants not in need to be relativized.
+        for(let k in diff.childDiffs) {
+          if(k === head) continue;
+          baseAbsoluteChildDiffs[k] = diff.childDiffs[k];
+        }
+        let relative_absolutes_for_head =
+          partitionAndMakeRelative2(tail, diff.childDiffs[head]);
+        return relative_absolutes_for_head.map(([relativeDiffs, absoluteHeadDiffs]) => 
+            [relativeDiffs,
+              isDDSame(absoluteHeadDiffs) ?
+                DDUpdate(baseAbsoluteChildDiffs)
+              : DDUpdate({...baseAbsoluteChildDiffs, [head]: absoluteHeadDiffs})]
+        );
+      } else {
+        return [ [DDSame, DDUpdate(diff.childDiffs)] ]
+      }
+    } else {
+      return [ [DSame, diff] ];
+    }
+  })
 }
 
 // A stack path is like a path but in reverse, which makes it easier to add new path elements.
-
-// Returns a Diff
-function magicFunctionAux(hDiff, dDiff, dStackPath) {
-  /*console.log("magicFunctionAux")
+// dDiff is a single Diff (no VSA) and returns a Diff
+function outputDiffToInputDiff(hDiff, dDiff, dStackPath) {
+  /*console.log("outputDiffToInputDiff")
   inspect(hDiff)
   inspect(dDiff)
   inspect(List.toArray(dStackPath));*/
@@ -705,7 +694,7 @@ function magicFunctionAux(hDiff, dDiff, dStackPath) {
   if(dDiff.kind.ctor === DUType.Reuse) {
     let relPath = dDiff.kind.path;
     if(isIdPath(relPath))
-      return mergeDDiffs(foreach(childDiffs)((k, d) => magicFunctionAux(hDiff, d, cons(k, dStackPath))), "single");
+      return mergeDDiffs(foreach(childDiffs)((k, d) => outputDiffToInputDiff(hDiff, d, cons(k, dStackPath))), "single");
     // On the output, at the current location pointed by dStackPath (the workplace),
     // we replace the existing element by a clone of a tree element present elsewhere in the output (the source).
     // The workplace's stack path is dStackPath
@@ -727,7 +716,7 @@ function magicFunctionAux(hDiff, dDiff, dStackPath) {
     
     // We recover all children diffs globally as if they were done on the source's path.
     let diffsFromChildren = mergeDDiffs(foreach(childDiffs)((k, d) =>
-      magicFunctionAux(hDiff, d, cons(k, sourceStackPath))), "single");
+      outputDiffToInputDiff(hDiff, d, cons(k, sourceStackPath))), "single");
     /*console.log("diffsFromChildren");
     inspect(diffsFromChildren);*/
     // We now have a list of global differences made on the original input;
@@ -750,7 +739,7 @@ function magicFunctionAux(hDiff, dDiff, dStackPath) {
     let newChildDiffs = {};
     // We collect absolute differences (outisde of the original path were we apply differences)
     let diffsFromChildren = mergeDDiffs(foreach(childDiffs)((k, d) => {
-      let cd = magicFunctionAux(hDiff, d, dStackPath);
+      let cd = outputDiffToInputDiff(hDiff, d, dStackPath);
       let [relDiff, absDiff] = partitionAndMakeRelative(List.reverse(dPathOriginal), cd);
       newChildDiffs[k] = relDiff;
       return absDiff;
@@ -759,158 +748,92 @@ function magicFunctionAux(hDiff, dDiff, dStackPath) {
   }    
 }
 
-// Returns a (disjunction) list of (conjunction) list of diffs, where each second level should be merged to get a single diff.
-function magicFunctionAux2(hDiff, dDiffs, dPath) {
-  return flatMap(dDiffs)(dDiff => {
-    let childDiffs = dDiffs.childDiffs;
+
+// Returns a Diffs
+function outputDiffsToInputDiffs(hDiff, dDiffs, dStackPath) {
+  /*console.log("outputDiffsToInputDiffs")
+  inspect(hDiff)
+  inspect(dDiffs)
+  inspect(List.toArray(dStackPath));*/
+  // START: Optimization for closed diffs.
+  return flatMap(dDiffs, dDiff => {
+    if(dDiff.outsideLevel === 0) {
+      let res = isDirectStackPath(hDiff, dStackPath);
+      if(res.ctor === "Just") { // It's at the leaf of an HDiff.
+        return DDUpdatePath(res._0, [dDiff]);
+      }
+    }
+    // END: Optimization for closed diffs.
+    let childDiffs = dDiff.childDiffs;
     if(dDiff.kind.ctor === DUType.Reuse) {
-      let path = dDiff.kind.path;
-      if(isIdPath(path))
-        return cdc_to_dc(foreach(childDiffs)((k, d) =>
-           magicFunctionAux2(hDiff, d, cons(k, dPath))));
-      // let's compute where we are cloning from
-      let sourceStackPath = composeStackPath(dPath, path);
-      let dPathOriginal = followStackPath(hDiff, dPath);
-      let dSourcePathOriginal = followStackPath(hDiff, sourceStackPath);
-      let clonePath = makeRelative(dPathOriginal, sourcePathOriginal);
-      let newChildDiffsToMerge = cdc_to_dc(foreach(childDiffs)((k, d) =>
-        magicFunctionAux2(hDiff, d, cons(k, sourceStackPath))));
-      return newChildDiffsToMerge.map(c => {
-        let [afterSourcePath, outsideSourcePath] = partitionAndMakeRelative2(List.reverse(sourceStackPath), c);
-        return
-          [DUpdatePath(dPathOriginal, DClone(clonePath, mergeDDiffs(afterSourcePath)))].concat(
-            outsideSourcePath
-          );
-      })
-    } else { // dDiff.kind.ctor === DUType.New
-      let dPathOriginal = followStackPath(hDiff, dPath);
-      if(noChildDiffs(dDiffs))
-        return [DDUpdatePath(dPathOriginal, DDNew(dDiff.kind.model))];
-      console.log("unsafe zone, crashes will occur. Try to clone, not create from scratch for now");
-      let newChildDiffsToMerge = clabeldc_to_dclabel(foreach (childDiffs)((k, d) =>
-         ({label: k, result: magicFunctionAux2(hDiff, d, dPath)})));
-      // : Conjunction of {label: String, result: Disjunction of Conjunction}; // cdc_to_dc()
-      return newChildDiffsToMerge.map(c => {
-        let [labelAfterSourcePath, outsideSourcePathDiffs] =
-              partitionAndMakeRelativeLabel(dPath, c); // Careful, c elements contain a label.
-        return [DUpdatePath(dPathOriginal, DDNew(model, mergeLabelDiffs(labelAfterSourcePath)))].concat(outsideSourcePathDiffs)
-      })
+      let relPath = dDiff.kind.path;
+      if(isIdPath(relPath))
+        return mergeDDiffs(foreach(childDiffs)((k, ds) => outputDiffsToInputDiffs(hDiff, ds, cons(k, dStackPath))));
+      // On the output, at the current location pointed by dStackPath (the workplace),
+      // we replace the existing element by a clone of a tree element present elsewhere in the output (the source).
+      // The workplace's stack path is dStackPath
+      let sourceStackPath      = composeStackPath(dStackPath, relPath); // The source's stack path is dStackPath + relPath.
+      // By following the output's stack paths in the hDiff, we can recover the paths they come from in the input.
+      let dPathOriginal        = followStackPath(hDiff, dStackPath); // Path where the workplace came from in the input.
+      let dSourcePathOriginal  = followStackPath(hDiff, sourceStackPath); // Path where the source came from in the input.
+      let clonePath            = makeRelative(dPathOriginal, dSourcePathOriginal); // Relative path between input's workplace and input's source.
+      /*console.log("revworkplace-output")
+      inspect(dStackPath)
+      console.log("revsource   -output")
+      inspect(sourceStackPath)
+      console.log("revworkplace-input (dPathOriginal)")
+      inspect(dPathOriginal)
+      console.log("revsource   -input (dSourcePathOriginal)")
+      inspect(dSourcePathOriginal)
+      console.log("clonePath indicating source from workplace in input")
+      inspect(clonePath);*/
+      
+      // We recover all children diffs globally as if they were done on the source's path.
+      let diffsFromChildren = mergeDDiffs(foreach(childDiffs)((k, ds) =>
+        outputDiffsToInputDiffs(hDiff, ds, cons(k, sourceStackPath))));
+      /*console.log("diffsFromChildren");
+      inspect(diffsFromChildren);*/
+      // We now have a list of global differences made on the original input;
+      // If these differences consists of updates whose path contains the prefix "dSourcePathOriginal", we assume that they happen on the workplace in the input and were cloned from the source in the input.
+      /*console.log("dSourcePathOriginal - reminder");
+      inspect(dSourcePathOriginal);*/
+      return flatMap(
+        partitionAndMakeRelative2(List.reverse(dSourcePathOriginal), diffsFromChildren),
+        ([relDiffs, absDiffs]) => {
+          /*console.log("[relDiffs, absDiffs]");
+          inspect([relDiffs, absDiffs]);*/
+          
+          let cloneAndDiffs = andThen(DDCloneUpdate(clonePath), relDiffs);
+          /*console.log("cloneAndDiffs")
+          inspect(cloneAndDiffs)*/
+                    
+          return merge2DDiffs(DDUpdatePath(dPathOriginal, cloneAndDiffs), absDiffs);
+        });
+    } else {
+      let dPathOriginal        = followStackPath(hDiff, dStackPath); // Path where the workplace came from in the input.
+      if(noChildDiffs(dDiff)) return DDUpdatePath(dPathOriginal, [dDiff]);
+      // We collect absolute differences (outside of the original path where we apply differences)
+      let subresults = foreach(childDiffs)((k, ds) => {
+        let cds = outputDiffsToInputDiffs(hDiff, ds, dStackPath);
+        return [k, partitionAndMakeRelative2(List.reverse(dPathOriginal), cds)];
+      });
+      let newChildDiffs_absDiffs = [ [{}, DDSame] ];
+      /*console.log("subresults")
+      inspect(subresults)*/
+      for(let [k, relative_absolutes_for_k] of subresults) {
+        newChildDiffs_absDiffs = flatMap(relative_absolutes_for_k, ([rds, abs]) =>
+          newChildDiffs_absDiffs.map(([oldRd, oldAbs]) =>
+            [{...oldRd, [k]: rds}, merge2DDiffs(oldAbs, abs)])
+        );
+      }
+      /*console.log("newChildDiffs_absDiffs")
+      inspect(newChildDiffs_absDiffs);*/
+      return flatMap(newChildDiffs_absDiffs, ([newChildDiffs, absDiffs]) =>
+        merge2DDiffs(
+          DDUpdatePath(dPathOriginal, DDNew(dDiff.kind.model, newChildDiffs)),
+          absDiffs));
     }
   });
-}
-
-debugMagicFunction = true;
-// Returns progDiffs
-function magicFunction(hDiff, resultDiffs, hDiffContext, hDiffPathStack, resultPath) {
-  if(debugMagicFunction) {
-    console.log("magicFunction")
-    inspect(hDiff);
-    inspect(resultDiffs);
-    inspect(List.toArray(hDiffContext));
-    inspect(List.toArray(List.reverse(hDiffPathStack)));
-    inspect(List.toArray(resultPath));
-  }
-  let postProcess = function(result) {
-    // Recreate the hDiffPathStack above it.
-    let x = hDiffPathStack;
-    while(x) {
-      result = DDUpdate({[x.hd]: result});
-      x = x.tl;
-    }
-    return result;
-  }
-  if(hDiff.kind.ctor === DUType.Reuse) {
-    if(!isIdPath(hDiff.kind.path)) { // Process the clone first
-      // TODO: Reverse paths by default?
-      let newHDiffPathStack = composeStackPath(hDiffPathStack, hDiff.kind.path)
-      if(debugMagicFunction) {
-        console.log("magicFunction clone hDiffs", newHDiffPathStack)
-      }
-      let result = magicFunction(HUpdate(hDiff.childDiffs),
-        resultDiffs, hDiffContext, newHDiffPathStack, resultPath);
-      if(debugMagicFunction) {
-        console.log("returning 1")
-        inspect(result);
-      }
-      return result;
-    } else if(noChildDiffs(hDiff)) { 
-      if(debugMagicFunction) {
-        console.log("returning 2")
-        inspect(resultDiffs);
-      }
-      return postProcess(resultDiffs); // No change, it's the identity
-    }
-    // No clone but children, we can destructure.
-  }
-  let oneResultDiff = function(resultDiff) {
-    if(resultDiff.kind.ctor === DUType.Reuse)  {
-      if(!isIdPath(resultDiff.kind.path)) {
-        let pathInHDiffs = resultDiff.kind.path;
-        /*composeRelativePaths({up: 0, down: resultPath}, 
-        resultDiff.kind.path);*/
-        [hDiff, hDiffPathStack, hDiffContext] = walkHDiff(pathInHDiffs, hDiff, hDiffPathStack, hDiffContext);
-        // The resulting hDiff tells where this resultDiff will be applied on the original element.
-        if(debugMagicFunction) console.log("clone DDiffs", hDiff);
-         /*let afterClonePath = idPath;
-        if(hDiff.kind.ctor == DUType.Reuse) {
-          afterClonePath = composeRelativePaths({up: 0, down: List.reverse(hDiffPathStack)}, hDiff.kind.path);
-            hDiff.kind.path;
-          if(debugMagicFunction) {
-            console.log("afterClonePath");
-            inspect({up: afterClonePath.up, down: List.toArray(afterClonePath.down)});
-          }
-          hDiff = DUpdate(hDiff.childDiffs, idPath); // the path in hDiff was taken into account.
-        } else { // New
-          console.log("TODO: New here")
-        }*/
-        let result = magicFunction(hDiff, DDUpdate(resultDiff.childDiffs), hDiffContext, hDiffPathStack, resultPath);
-        /*if(!isIdPath(afterClonePath)) {
-          if(debugMagicFunction) {
-            console.log("returning after DDClone -- before adding path")
-            inspect(result);
-          }
-          result = result.map(d =>
-            DUpdate(d.childDiffs, composeRelativePaths(afterClonePath, d.kind.path))
-          )
-        }*/
-        result = andThen(DDClone(resultDiff.kind.path), result)
-        
-        if(debugMagicFunction) {
-          console.log("returning after DDClone")
-          inspect(result);
-        }
-        return result;
-      } else if(noChildDiffs(resultDiff)) {
-        return DDSame;
-      } else { // Further children
-        let toMerge = [];
-        for(let k in resultDiff.childDiffs) {
-          [hDiff2, hDiffPathStack2, hDiffContext2] = walkHDiff({up: 0, down: cons(k)}, hDiff, hDiffPathStack, hDiffContext);
-          if(debugMagicFunction) console.log("childDiff")
-          let childDiff = magicFunction(hDiff2, resultDiff.childDiffs[k], hDiffContext2, hDiffPathStack2, List.reverse(cons(k, List.reverse(resultPath))));
-          toMerge.push(childDiff);
-        }
-        let result = mergeDDiffs(toMerge);
-        if(debugMagicFunction) {
-          console.log("returning " + toMerge.length + " merged solutions")
-          inspect(result);
-        }
-        return result;
-      }
-    } else {
-      
-    }
-    return [];
-  }
-  let result = flatMap(resultDiffs, oneResultDiff);
-  if(debugMagicFunction) {
-    console.log("returning 3")
-    inspect(result);
-  }
-  return result;
-  /*let rDiffs = reverseHDiffs(prog, hDiffs);
-  let progDiffs = applyRDiffs(rDiffs, resultDiffs);
-  return progDiffs;*/
 }
 
 ////// Tests
@@ -926,61 +849,59 @@ function shouldEqual(a, b, msg) {
     inspect(b);
   } else passedtests++;
 }
-
 debugMagicFunction = false;
-/*
-shouldEqual(magicFunction(
+
+shouldEqual(outputDiffsToInputDiffs(
    HClone("b"),
     DDNew(3)),
   DDUpdate({b: DDNew(3)}), "Clone new");
 
-shouldEqual(magicFunction(
+shouldEqual(outputDiffsToInputDiffs(
    HUpdate({d: HClone(1, "c")}, "b"),
     DDUpdate({d: DDNew(3)})),
   DDUpdate({b: DDUpdate({c: DDNew(3)})}))
 
-shouldEqual(magicFunction(
+shouldEqual(outputDiffsToInputDiffs(
    HUpdate({d: HClone(1, "c"), e: HClone(1, "c")}),
     DDUpdate({d: DDNew(3), e: DDNew(5)})),
   DDUpdate({c: DDNew(4)}));
 
-
-shouldEqual(magicFunction(
+shouldEqual(outputDiffsToInputDiffs(
    HUpdate({a: HClone(1, "b")}),
     DDClone("a")),
   DDClone("b"))
 
-shouldEqual(magicFunction(
+shouldEqual(outputDiffsToInputDiffs(
    HNew({}, {a: HClone("b"), b: HClone("b")}),
     DDClone("a")),
   DDClone("b"));
 
-shouldEqual(magicFunction(
+shouldEqual(outputDiffsToInputDiffs(
    HUpdate({a: HClone(1, "b")}),
     DDClone("b")),
   DDClone("b"));
 
-shouldEqual(magicFunction(
+shouldEqual(outputDiffsToInputDiffs(
    HUpdate({a: HClone(1, "b"), b: HClone(1, "a")}),
     DDClone("b")),
   DDClone("a"));
 
-shouldEqual(magicFunction(
+shouldEqual(outputDiffsToInputDiffs(
    HUpdate({a: HClone(1, "b")}),
     DDUpdate({a: DDNew(3)})),
   DDUpdate({b: DDNew(3)}));
 
-shouldEqual(magicFunction(
+shouldEqual(outputDiffsToInputDiffs(
    HNew({}, {d: HClone("a"), c: HClone("a"), b: HClone("b")}),
     DDUpdate({d: DDNew(3), c: DDNew(5)})),
   DDUpdate({a: DDNew(4)}));
 
-shouldEqual(magicFunction(
+shouldEqual(outputDiffsToInputDiffs(
    HNew({}, {a: HSame, b: HSame}),
     DDUpdate({a: DDNew(2)})),
   DDNew(2));
 
-shouldEqual(magicFunction(
+shouldEqual(outputDiffsToInputDiffs(
    HUpdate({
      b: HClone(2, "c")
    }, ["a"]),
@@ -991,8 +912,7 @@ shouldEqual(magicFunction(
     c: DDNew(3)
   }));
 
-debugMagicFunction = true;
-shouldEqual(magicFunction(
+shouldEqual(outputDiffsToInputDiffs(
    HUpdate({
       body: HUpdate({
         app: HUpdate({
@@ -1005,18 +925,21 @@ shouldEqual(magicFunction(
   DDUpdate({
     app: DDUpdate({
       body: DDUpdate({
-         body: DDUpdate({app: DDClone("app")}).concat(DDClone("app"))
+         body: DDUpdate({app: DDClone("app")})
+       })
+      })
+    }).concat(
+  DDUpdate({
+    app: DDUpdate({
+      body: DDUpdate({
+         body: DDClone("app")
        })
       })
     })
+  )
   );
-*/
-  
-debugMagicFunction = false;
-/*
-//*/
 
-shouldEqual(magicFunctionAux(
+shouldEqual(outputDiffToInputDiff(
   HNew({}, {a: HNew({}, {b: HCloneUpdate({up: 0, down: cons("c")}, {d: HClone(2, "f")}) })}),
   DUpdate({a: DUpdate({b: DUpdate({d: DCloneUpdate({up: 1, down: cons("e")}, {p: DClone(2, "d")}), e: DClone(1, "d")})})})),
   DUpdate(
@@ -1024,14 +947,38 @@ shouldEqual(magicFunctionAux(
      c: DUpdate({e: DClone(2, "f")})
     }));
 
-shouldEqual(magicFunctionAux(
+shouldEqual(outputDiffToInputDiff(
   HUpdate({a: HNew({}, {k: HClone(1, "b", "c"), p: HClone(1, "b", "d")}), b: HClone(1, "a", "m")}),
   DUpdate({b: DNew({}, {u: DSame, o: DClone(1, "a", "k"), t: DClone(1, "a", "p")})})),
  DUpdate({a: DUpdate({m: DNew({}, {u: DSame, o: DClone(2, "b", "c"), t: DClone(2, "b", "d")})})}));
 
+shouldEqual(outputDiffsToInputDiffs(
+  HNew({}, {a: HNew({}, {b: HCloneUpdate({up: 0, down: cons("c")}, {d: HClone(2, "f")}) })}),
+  DDUpdate({a: DDUpdate({b: DDUpdate({d: DDCloneUpdate({up: 1, down: cons("e")}, {p: DDClone(2, "d")}), e: DDClone(1, "d")})})})),
+  DDUpdate(
+    {f: DDCloneUpdate({up: 1, down: cons("c", cons("e"))}, {p: DDClone(3, "f")}),
+     c: DDUpdate({e: DDClone(2, "f")})
+    }));
+
+shouldEqual(outputDiffsToInputDiffs(
+  HUpdate({a: HNew({}, {k: HClone(1, "b", "c"), p: HClone(1, "b", "d")}), b: HClone(1, "a", "m")}),
+  DDUpdate({b: DDNew({}, {u: DDSame, o: DDClone(1, "a", "k"), t: DDClone(1, "a", "p")})})),
+ DDUpdate({a: DDUpdate({m: DDNew({}, {u: DDSame, o: DDClone(2, "b", "c"), t: DDClone(2, "b", "d")})})}));
+
+shouldEqual(outputDiffsToInputDiffs(
+  HCloneUpdate(["app", "body"], {arg: HClone(3, "arg")}),
+  DDUpdate({arg: DDClone(1, "app")})),
+  DDUpdate({arg: DDClone(1, "app", "body", "app")})
+)
+
+shouldEqual(outputDiffsToInputDiffs(
+  HCloneUpdate(["app", "body"], {arg: HClone(3, "arg")}),
+  DDNew({}, {app: DDClone("app"), arg: DDClone("app")})),
+  DDUpdate({app: DDUpdate({body: DDNew({}, {app: DDClone("app"), arg: DDClone("app")})})})
+)
+
 console.log(passedtests + "/" + ntests + " tests succeeded")
 process.exit()
-
 
 function doTest(testObject) {
   for(let testcase of testObject.testcases) {
@@ -1039,7 +986,7 @@ function doTest(testObject) {
     step1 = testObject.hEvaluate(prog1);
     console.log("\n\n-------\nFor program")
     inspect(prog1);
-    console.log("Transformed through")
+    console.log("Transformed through (computed step)")
     inspect(step1);
     prog2 = applyHDiffs(step1, prog1);
     inspect(prog2);
@@ -1055,7 +1002,7 @@ function doTest(testObject) {
       inspect(applyDDiffs(prog2Diff, prog2));
       console.log("then we change")
       inspect(prog1);
-      let prog1Diff = magicFunction(step1, prog2Diff);
+      let prog1Diff = outputDiffsToInputDiffs(step1, prog2Diff);
       console.log("by")
       inspect(prog1Diff);
       console.log("to")
@@ -1064,7 +1011,7 @@ function doTest(testObject) {
   }
 }
 
-//--------------- Test with Rewrite lambda calculus ---------//
+//--------------- Test with lazy substitution-based lambda calculus ---------//
 
 cbn_lambda_calculus = {
   // Prog = string
@@ -1110,6 +1057,9 @@ cbn_lambda_calculus = {
   }
 }
 doTest(cbn_lambda_calculus);
+
+
+//--------------- Test with substitution-based lambda calculus, computing argument first ---------//
 
 cbv_lambda_calculus = {
   // Prog = string
