@@ -468,13 +468,32 @@ function merge2DDiffs(dDiff1, dDiff2) {
     inspect(dDiff2)
   }
   let result = [];
-  for(let diff1 of !Array.isArray(dDiff1) ? [dDiff1] : dDiff1) {
-    for(let diff2 of !Array.isArray(dDiff2) ? [dDiff2] : dDiff2) {
+  let dDiff1Array = Array.isArray(dDiff1);
+  let dDiff2Array = Array.isArray(dDiff2);
+  for(let diff1 of !dDiff1Array ? [dDiff1] : dDiff1) {
+    for(let diff2 of !dDiff2Array ? [dDiff2] : dDiff2) {
       if(diff1.kind.ctor == DUType.New && diff2.kind.ctor == DUType.New) {
         if(typeof diff1.kind.model === "number" && typeof diff2.kind.model === "number") {
-          result.push(DNew((diff1.kind.model + diff2.kind.model) / 2));
+          if(!dDiff1Array && !dDiff2Array) {
+            result.push(DNew((diff1.kind.model + diff2.kind.model) / 2));
+          } else {
+            result.push(DNew(diff1.kind.model));
+            result.push(DNew(diff2.kind.model));
+          }
           continue;
         }
+        let nocd1 = noChildDiffs(diff1);
+        let nocd2 = noChildDiffs(diff2);
+        // If one of the results does not have a childDiffs, let it suppose it happens before the other one.
+        if(nocd1 && !nocd2) {
+          result.push(andThen(diff2, diff1));
+        } else if(!nocd1 && nocd2) {
+          result.push(andThen(diff1, diff2));
+        } else {
+          result.push(andThen(diff1, diff2));
+          result.push(andThen(diff2, diff1));
+        }
+        continue;
       }
       if(isDSame(diff1)) result.push(diff2);
       else if(isDSame(diff2)) result.push(diff1);
@@ -499,7 +518,7 @@ function merge2DDiffs(dDiff1, dDiff2) {
       }
     }
   }
-  if(!Array.isArray(dDiff1) && !Array.isArray(dDiff2)) {
+  if(!dDiff1Array && !dDiff2Array) {
     if(result.length >= 1) {
       return result[0];
     } else {
@@ -522,6 +541,7 @@ function mergeDDiffs(dDiffs, single) {
 }
 
 // Special case when the first one is a pure clone
+// The first diff is performed after the second diff
 // TODO: General case.
 function andThen(dDiff1, dDiff2) {
   let result = [];
@@ -530,15 +550,30 @@ function andThen(dDiff1, dDiff2) {
       if(d1.kind.ctor === DUType.Reuse && noChildDiffs(d1)) {
         if(d2.kind.ctor === DUType.Reuse) {
           result.push(DUpdate(d2.childDiffs, composeRelativePaths(d1.kind.path, d2.kind.path)));
-        } else {
+        } else { // It's a DNew.
           let newChildDiffs = {};
-          for(let k of d2.childDiffs) {
-            newChildDiffs[k] = andThen(d1, d2.childDiffs[k]);
-          }
+          foreach(d2.childDiffs)((k, d2s) => {
+            newChildDiffs[k] = andThen(d1, d2s);
+          });
           result.push(DNew(d2.kind.model, newChildDiffs));
         }
       }
+      if(d1.kind.ctor === DUType.New) {
+        if(noChildDiffs(d1)) {
+          result.push(d1);
+        } else {
+          let newChildDiffs = {};
+          foreach(d1.childDiffs)((k, d1s) => {
+            newChildDiffs[k] = andThen(d1s, d2);
+          });
+          result.push(DNew(d1.kind.model, newChildDiffs));
+        }
+      }
     }
+  }
+  if(result.length === 0) {
+    console.log("Unsupported case in andThen\n" + uneval(dDiff1) + "\n" + uneval(dDiff2));
+    result = Array.isArray(dDiff1) ? dDiff1 : [dDiff1];
   }
   return !Array.isArray(dDiff1) && !Array.isArray(dDiff2) ? result[0] : result;
 }
@@ -864,7 +899,7 @@ shouldEqual(outputDiffsToInputDiffs(
 shouldEqual(outputDiffsToInputDiffs(
    HUpdate({d: HClone(1, "c"), e: HClone(1, "c")}),
     DDUpdate({d: DDNew(3), e: DDNew(5)})),
-  DDUpdate({c: DDNew(4)}));
+  DDUpdate({c: DDNew(3).concat(DDNew(5))}));
 
 shouldEqual(outputDiffsToInputDiffs(
    HUpdate({a: HClone(1, "b")}),
@@ -894,7 +929,7 @@ shouldEqual(outputDiffsToInputDiffs(
 shouldEqual(outputDiffsToInputDiffs(
    HNew({}, {d: HClone("a"), c: HClone("a"), b: HClone("b")}),
     DDUpdate({d: DDNew(3), c: DDNew(5)})),
-  DDUpdate({a: DDNew(4)}));
+  DDUpdate({a: DDNew(3).concat(DDNew(5))}));
 
 shouldEqual(outputDiffsToInputDiffs(
    HNew({}, {a: HSame, b: HSame}),
@@ -976,6 +1011,12 @@ shouldEqual(outputDiffsToInputDiffs(
   DDNew({}, {app: DDClone("app"), arg: DDClone("app")})),
   DDUpdate({app: DDUpdate({body: DDNew({}, {app: DDClone("app"), arg: DDClone("app")})})})
 )
+
+shouldEqual(outputDiffsToInputDiffs(
+    HNew({}, {b: HClone(0, "a"), c: HClone(0, "a")}),
+    DDUpdate({b: DDNew(2), c: DDNew({}, {d: DDSame})})),
+    DDUpdate({a: DDNew({}, {d: DDNew(2)})})
+  )
 
 console.log(passedtests + "/" + ntests + " tests succeeded")
 process.exit()
